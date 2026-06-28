@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Sensible fallbacks (dark vault) for anything rendered before ThemeProvider hydrates. */
+  --vault-bg: #150f09;
+  --page-bg: #241a10;
+  --page-border: #b8923f;
+  --card-bg: #2e2014;
+  --card-border: #c9a227;
+  --card-glow: 0 0 8px rgba(201, 162, 39, 0.35);
+  --art-bg: #3a2a18;
+  --title: #e8c878;
+  --subtle: #b89968;
+  --good: #8fce6b;
+  --fair: #d9b35c;
+  --bad: #e08a6f;
+}
+
+body {
+  background-color: var(--vault-bg);
+  color: var(--title);
+}

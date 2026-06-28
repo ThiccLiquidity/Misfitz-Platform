@@ -1,0 +1,258 @@
+{
+  "collectionSlug": "misfitz",
+  "nftCount": 18,
+  "nfts": [
+    {
+      "launcherId": "misfitz-mock-0001",
+      "name": "Misfit #1",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Cosmic Purple" },
+        { "trait_type": "Body", "value": "Smooth" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Headphones" }
+      ],
+      "rarityRank": 38,
+      "currentOwnerAddress": "xch1mockaddress0001placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.78, "traitPremium": 1.19, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 4.67 }
+    },
+    {
+      "launcherId": "misfitz-mock-0002",
+      "name": "Misfit #2",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Burnt Orange" },
+        { "trait_type": "Body", "value": "Static" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Scarf" }
+      ],
+      "rarityRank": 75,
+      "currentOwnerAddress": "xch1mockaddress0002placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.56, "traitPremium": 1.1, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 4.36 }
+    },
+    {
+      "launcherId": "misfitz-mock-0003",
+      "name": "Misfit #3",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Static Static" },
+        { "trait_type": "Body", "value": "Cracked" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Bandana" }
+      ],
+      "rarityRank": 112,
+      "currentOwnerAddress": "xch1mockaddress0003placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.34, "traitPremium": 1, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 4.04 }
+    },
+    {
+      "launcherId": "misfitz-mock-0004",
+      "name": "Misfit #4",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Deep Blue" },
+        { "trait_type": "Body", "value": "Patched" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Crown" }
+      ],
+      "rarityRank": 149,
+      "currentOwnerAddress": "xch1mockaddress0004placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.11, "traitPremium": 0.91, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 3.72 }
+    },
+    {
+      "launcherId": "misfitz-mock-0005",
+      "name": "Misfit #5",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Acid Yellow" },
+        { "trait_type": "Body", "value": "Glitched" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "None" }
+      ],
+      "rarityRank": 186,
+      "currentOwnerAddress": "xch1mockaddress0005placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 1.89, "traitPremium": 0.81, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 3.4 }
+    },
+    {
+      "launcherId": "misfitz-mock-0006",
+      "name": "Misfit #6",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Slime Green" },
+        { "trait_type": "Body", "value": "Smooth" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Headphones" }
+      ],
+      "rarityRank": 223,
+      "currentOwnerAddress": "xch1mockaddress0006placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 1.67, "traitPremium": 0.71, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 3.08 }
+    },
+    {
+      "launcherId": "misfitz-mock-0007",
+      "name": "Misfit #7",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Cosmic Purple" },
+        { "trait_type": "Body", "value": "Static" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Scarf" }
+      ],
+      "rarityRank": 260,
+      "currentOwnerAddress": "xch1mockaddress0007placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 1.44, "traitPremium": 0.62, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 2.76 }
+    },
+    {
+      "launcherId": "misfitz-mock-0008",
+      "name": "Misfit #8",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Burnt Orange" },
+        { "trait_type": "Body", "value": "Cracked" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Bandana" }
+      ],
+      "rarityRank": 297,
+      "currentOwnerAddress": "xch1mockaddress0008placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 1.23, "traitPremium": 0.52, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 2.45 }
+    },
+    {
+      "launcherId": "misfitz-mock-0009",
+      "name": "Misfit #9",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Static Static" },
+        { "trait_type": "Body", "value": "Patched" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Crown" }
+      ],
+      "rarityRank": 334,
+      "currentOwnerAddress": "xch1mockaddress0009placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 1, "traitPremium": 0.43, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 2.13 }
+    },
+    {
+      "launcherId": "misfitz-mock-0010",
+      "name": "Misfit #10",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Deep Blue" },
+        { "trait_type": "Body", "value": "Glitched" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "None" }
+      ],
+      "rarityRank": 371,
+      "currentOwnerAddress": "xch1mockaddress0010placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 0.78, "traitPremium": 0.33, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 1.81 }
+    },
+    {
+      "launcherId": "misfitz-mock-0011",
+      "name": "Misfit #11",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Acid Yellow" },
+        { "trait_type": "Body", "value": "Smooth" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Headphones" }
+      ],
+      "rarityRank": 408,
+      "currentOwnerAddress": "xch1mockaddress0011placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 0.55, "traitPremium": 0.24, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 1.49 }
+    },
+    {
+      "launcherId": "misfitz-mock-0012",
+      "name": "Misfit #12",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Slime Green" },
+        { "trait_type": "Body", "value": "Static" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Scarf" }
+      ],
+      "rarityRank": 445,
+      "currentOwnerAddress": "xch1mockaddress0012placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 0.33, "traitPremium": 0.14, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 1.17 }
+    },
+    {
+      "launcherId": "misfitz-mock-0013",
+      "name": "Misfit #13",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Cosmic Purple" },
+        { "trait_type": "Body", "value": "Cracked" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Bandana" }
+      ],
+      "rarityRank": 482,
+      "currentOwnerAddress": "xch1mockaddress0013placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 0.11, "traitPremium": 0.04, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 0.85 }
+    },
+    {
+      "launcherId": "misfitz-mock-0014",
+      "name": "Misfit #14",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Burnt Orange" },
+        { "trait_type": "Body", "value": "Patched" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Crown" }
+      ],
+      "rarityRank": 19,
+      "currentOwnerAddress": "xch1mockaddress0014placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.9, "traitPremium": 1.24, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 4.84 }
+    },
+    {
+      "launcherId": "misfitz-mock-0015",
+      "name": "Misfit #15",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Static Static" },
+        { "trait_type": "Body", "value": "Glitched" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "None" }
+      ],
+      "rarityRank": 56,
+      "currentOwnerAddress": "xch1mockaddress0015placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.67, "traitPremium": 1.15, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 4.52 }
+    },
+    {
+      "launcherId": "misfitz-mock-0016",
+      "name": "Misfit #16",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Deep Blue" },
+        { "trait_type": "Body", "value": "Smooth" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Headphones" }
+      ],
+      "rarityRank": 93,
+      "currentOwnerAddress": "xch1mockaddress0016placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.45, "traitPremium": 1.05, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 4.2 }
+    },
+    {
+      "launcherId": "misfitz-mock-0017",
+      "name": "Misfit #17",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Acid Yellow" },
+        { "trait_type": "Body", "value": "Static" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Scarf" }
+      ],
+      "rarityRank": 130,
+      "currentOwnerAddress": "xch1mockaddress0017placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2.23, "traitPremium": 0.95, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 3.88 }
+    },
+    {
+      "launcherId": "misfitz-mock-0018",
+      "name": "Misfit #18",
+      "imageUrl": "/collections/misfitz/placeholder.svg",
+      "traits": [
+        { "trait_type": "Background", "value": "Slime Green" },
+        { "trait_type": "Body", "value": "Cracked" },
+        { "trait_type": "Eyes", "value": "Laser" },
+        { "trait_type": "Accessory", "value": "Bandana" }
+      ],
+      "rarityRank": 167,
+      "currentOwnerAddress": "xch1mockaddress0018placeholderxxxxxxxxxxxxxxxxxxxxxxxx",
+      "fairValue": { "floorValue": 0.7, "rarityPremium": 2, "traitPremium": 0.86, "historicalSalesPremium": null, "demandPremium": null, "rewardValue": null, "totalEstimate": 3.56 }
+    }
+  ]
+}
