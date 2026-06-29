@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { truncateAddress } from "@/lib/format";
 
 export interface WalletRow {
@@ -125,15 +126,23 @@ export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] })
               <div className="text-title truncate font-mono text-sm">{truncateAddress(w.address, 10, 6)}</div>
               {w.walletType && <div className="text-subtle text-xs capitalize">{w.walletType}</div>}
             </div>
-            {w.verifiedAt ? (
-              <span className="whitespace-nowrap rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
-                Verified
-              </span>
-            ) : (
-              <span className="text-subtle whitespace-nowrap rounded-full bg-white/5 px-2 py-0.5 text-xs">
-                Unverified
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/portfolio?address=${encodeURIComponent(w.address)}`}
+                className="text-subtle whitespace-nowrap text-xs underline-offset-2 hover:text-title hover:underline"
+              >
+                View value
+              </Link>
+              {w.verifiedAt ? (
+                <span className="whitespace-nowrap rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+                  Verified
+                </span>
+              ) : (
+                <span className="text-subtle whitespace-nowrap rounded-full bg-white/5 px-2 py-0.5 text-xs">
+                  Unverified
+                </span>
+              )}
+            </div>
           </li>
         ))}
       </ul>
