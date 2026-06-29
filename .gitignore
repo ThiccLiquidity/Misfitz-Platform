@@ -8,3 +8,8 @@ build
 *.db-journal
 .DS_Store
 next-env.d.ts
+
+# Raw bulk import dump (10,000 full-size images + metadata) — never committed to git.
+# Only the small subset actually copied into public/collections/<slug>/ is tracked.
+misfitz-import/
+__write_test__

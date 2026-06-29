@@ -36,19 +36,22 @@ const BASE_THEMES: Record<ThemeMode, ThemeTokens> = {
     bad: "#e08a6f",
   },
   light: {
-    vaultBg: "#f4e8cc",
-    pageBg: "#fff6e6",
-    pageBorder: "#e8ac3e",
+    // Sky-blue "bright collector's room" palette — vibrant and playful like the reference.
+    // Dark sidebars (FilterSidebar, CollectionSwitcher) are hardcoded and stay dark,
+    // creating the reference's contrast of dark-sidebar / light-content.
+    vaultBg: "#c8e8f8",   // sky blue page background
+    pageBg:  "#ffffff",   // white binder pages / panels
+    pageBorder: "#2980c8", // clear sky blue border
     cardBg: "#ffffff",
-    cardBorder: "#e8ac3e",
+    cardBorder: "#2980c8",
     glow: "none",
-    artBg: "#ffe6b0",
-    artIcon: "#c98a1f",
-    title: "#8a5a12",
-    sub: "#a87a3a",
-    good: "#3b8f2f",
-    fair: "#a8741a",
-    bad: "#b3402c",
+    artBg: "#daf0ff",
+    artIcon: "#1a6db5",
+    title: "#0a1e38",     // very dark navy
+    sub: "#2d5a8e",       // medium navy
+    good: "#1a7f3c",
+    fair: "#b86200",
+    bad: "#c42020",
   },
 };
 

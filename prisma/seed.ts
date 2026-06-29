@@ -38,6 +38,8 @@ async function main() {
         chainCollectionId: plugin.chainCollectionId,
         dataSourceKey: plugin.dataSourceKey,
         themeConfig: JSON.stringify(plugin.theme),
+        totalSupply: plugin.totalSupply,
+        tierConfig: plugin.rarityTiers ? JSON.stringify(plugin.rarityTiers) : null,
       },
       create: {
         slug: plugin.slug,
@@ -48,6 +50,8 @@ async function main() {
         chainCollectionId: plugin.chainCollectionId,
         dataSourceKey: plugin.dataSourceKey,
         themeConfig: JSON.stringify(plugin.theme),
+        totalSupply: plugin.totalSupply,
+        tierConfig: plugin.rarityTiers ? JSON.stringify(plugin.rarityTiers) : null,
       },
     });
 
@@ -85,10 +89,13 @@ async function main() {
         });
 
         if (nft.fairValue) {
+          // Strip computed/derived fields (totalEstimateUsd) — those are recalculated
+          // at query time in queries.ts and are not stored in the DB schema.
+          const { totalEstimateUsd: _usd, ...dbFairValue } = nft.fairValue;
           await prisma.fairValueEstimate.upsert({
             where: { nftId: row.id },
-            update: { ...nft.fairValue, estimatedAt: new Date() },
-            create: { ...nft.fairValue, estimatedAt: new Date(), nftId: row.id },
+            update: { ...dbFairValue, estimatedAt: new Date() },
+            create: { ...dbFairValue, estimatedAt: new Date(), nftId: row.id },
           });
         }
       }

@@ -1,7 +1,9 @@
-import { redirect } from "next/navigation";
+import { listCollections } from "@/lib/db/queries";
+import { LibraryView } from "@/components/library/LibraryView";
 
-// Milestone 1 has a single collection, so the root just opens straight into it. A real
-// marketing/landing page and a multi-collection directory are future additions, not a rewrite.
-export default function HomePage() {
-  redirect("/collections/misfitz");
+// Library / wallet home — shows all seeded collections as binder covers on a shelf.
+// A redirect to Misfitz was here during Milestone 1 (single-collection phase).
+export default async function HomePage() {
+  const collections = await listCollections();
+  return <LibraryView collections={collections} />;
 }

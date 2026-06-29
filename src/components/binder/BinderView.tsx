@@ -8,7 +8,7 @@ import { NftDetailModal } from "@/components/nft/NftDetailModal";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 import { getThemeTokens, themeTokensToCssVars } from "@/lib/theme/themes";
 
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 9;           // 3×3 grid per page — matches physical binder reference
 const FLIP_DURATION_MS = 700;
 
 interface BinderViewProps {
@@ -16,118 +16,327 @@ interface BinderViewProps {
   nfts: NftData[];
 }
 
-// The validated binder/flip mechanic (ARCHITECTURE.md §11), ported from the interactive
-// prototype: 9-card 3x3 pages, a real 3D page flip that reveals the next page underneath
-// (not a crossfade), trading-card proportions, and a center-open card detail with the binder
-// blurred behind it. Collection-agnostic — only `collection`/`nfts` are collection-specific.
+// Two-page spread binder with a CSS 3D page-flip mechanic (approved prototype §11).
+//
+// Visual slot diagram:
+//   ┌──────────────┬────┬──────────────────────────────────────────────┐
+//   │  LEFT PAGE   │    │              RIGHT AREA (z-2 → z-100)        │
+//   │  (static,    │    │  ┌────────────────────────────────────────┐  │
+//   │   z-1)       │    │  │ UNDERLAY (z-0, absolute)               │  │
+//   │              │    │  │  — pre-loaded next-right content       │  │
+//   │  pages       │    │  │  — shows through as flipper lifts      │  │
+//   │  [leftIdx]   │    │  ├────────────────────────────────────────┤  │
+//   │              │SPINE│  │ FLIPPER (z-1, preserve-3d)            │  │
+//   │              │(z-3)│  │  FRONT FACE: pages[frontIdx]          │  │
+//   │              │    │  │  BACK  FACE: pages[backIdx]            │  │
+//   └──────────────┴────┴──────────────────────────────────────────────┘
+//
+// Spread mapping (spread n): left = pages[n*2], right = pages[n*2+1]
+//
+// z-index: spine(3) > right-area(2) > flipper(1) > underlay(0)
+// During animation: right-area raised to z-100 so flipper passes OVER spine rings.
 export function BinderView({ collection, nfts }: BinderViewProps) {
   const { mode } = useThemeMode();
   const tokens = getThemeTokens(mode, collection.theme);
   const cssVars = themeTokensToCssVars(tokens);
 
+  // Chunk NFTs into pages of 9.
   const pages = useMemo(() => {
     const chunks: NftData[][] = [];
-    for (let i = 0; i < nfts.length; i += PAGE_SIZE) {
-      chunks.push(nfts.slice(i, i + PAGE_SIZE));
-    }
+    for (let i = 0; i < nfts.length; i += PAGE_SIZE) chunks.push(nfts.slice(i, i + PAGE_SIZE));
     return chunks.length > 0 ? chunks : [[]];
   }, [nfts]);
 
-  const [pageIndex, setPageIndex] = useState(0);
-  const [backPageIndex, setBackPageIndex] = useState(0);
-  const [animating, setAnimating] = useState(false);
+  const spreadCount = Math.ceil(pages.length / 2);
+
+  // Independent page-index for each visual slot. Decoupling them lets us pre-load
+  // back/underlay before the animation starts, then snap left/front after.
+  const [leftIdx,     setLeftIdx]     = useState(0);
+  const [frontIdx,    setFrontIdx]    = useState(1);
+  const [backIdx,     setBackIdx]     = useState(2);   // back face (pre-loaded next-left)
+  const [underlayIdx, setUnderlayIdx] = useState(3);   // underlay (pre-loaded next-right)
+
+  const [displaySpread, setDisplaySpread] = useState(0); // drives BinderPageControls text
+  const [animating,     setAnimating]     = useState(false);
   const [openLauncherId, setOpenLauncherId] = useState<string | null>(null);
 
-  const pageIndexRef = useRef(0);
+  const spreadRef    = useRef(0);          // shadow of displaySpread safe to read in closures
   const animatingRef = useRef(false);
-  const frontRef = useRef<HTMLDivElement | null>(null);
+  const flipperRef   = useRef<HTMLDivElement | null>(null);
+  const rightAreaRef = useRef<HTMLDivElement | null>(null);
   const touchStartXRef = useRef<number | null>(null);
 
-  function flipPage(direction: 1 | -1) {
-    if (animatingRef.current || pages.length < 2) return;
-    const front = frontRef.current;
-    if (!front) return;
+  function flipSpread(direction: 1 | -1) {
+    if (animatingRef.current) return;
+    const flipper   = flipperRef.current;
+    const rightArea = rightAreaRef.current;
+    if (!flipper || !rightArea) return;
+
+    const nextSpread = spreadRef.current + direction;
+    if (nextSpread < 0 || nextSpread >= spreadCount) return;
 
     animatingRef.current = true;
     setAnimating(true);
+    rightArea.style.zIndex = "100"; // raise above spine rings for the duration
 
-    const target = (pageIndexRef.current + direction + pages.length) % pages.length;
-    setBackPageIndex(target);
+    if (direction > 0) {
+      // ── FORWARD FLIP ───────────────────────────────────────────────────────
+      // Pre-load is already in place (set at end of last flip's cleanup).
+      // back = next-left, underlay = next-right → their content shows as the page lifts.
 
-    // Imperative, ref-driven transform/transition — kept out of React's style prop entirely so
-    // re-renders (content swaps) never fight with mid-flight animation state. See ARCHITECTURE.md
-    // §11 for why every wrapper in this chain needs transform-style: preserve-3d.
-    front.style.transformOrigin = direction > 0 ? "left center" : "right center";
-    front.style.transition = "transform 0.7s cubic-bezier(.45,0,.2,1)";
-    front.style.transform = `rotateY(${direction > 0 ? -180 : 180}deg)`;
+      flipper.style.transition = `transform ${FLIP_DURATION_MS}ms cubic-bezier(.4,0,.2,1)`;
+      flipper.style.transform  = "rotateY(-180deg)";
 
-    setTimeout(() => {
-      pageIndexRef.current = target;
-      setPageIndex(target);
-      front.style.transition = "none";
-      front.style.transform = "rotateY(0deg)";
-      // Force a synchronous reflow so the instant reset above is committed before we re-enable
-      // the transition below — otherwise the browser can coalesce the two and animate the reset.
-      void front.offsetHeight;
-      requestAnimationFrame(() => {
-        front.style.transition = "transform 0.7s cubic-bezier(.45,0,.2,1)";
-        animatingRef.current = false;
+      setTimeout(() => {
+        setLeftIdx(nextSpread * 2);       // left page = what back face just revealed
+        setFrontIdx(nextSpread * 2 + 1);  // front face = new right page
+
+        // Instant reset: no transition, no visible snap.
+        flipper.style.transition = "none";
+        flipper.style.transform  = "rotateY(0deg)";
+        void flipper.offsetHeight;        // force reflow before transition re-enables
+
+        // Pre-load for the NEXT forward flip.
+        const ns2 = nextSpread + 1;
+        setBackIdx(   ns2 < spreadCount ? ns2 * 2     : nextSpread * 2);
+        setUnderlayIdx(ns2 < spreadCount ? ns2 * 2 + 1 : nextSpread * 2 + 1);
+
+        spreadRef.current = nextSpread;
+        setDisplaySpread(nextSpread);
+        rightArea.style.zIndex = "2";
+        animatingRef.current   = false;
         setAnimating(false);
+      }, FLIP_DURATION_MS);
+
+    } else {
+      // ── BACKWARD FLIP ──────────────────────────────────────────────────────
+      // Back face will show the previous right page at -180 (the "incoming" page).
+      setBackIdx(   nextSpread * 2 + 1);
+      setUnderlayIdx(nextSpread * 2 + 1); // underlay matches so no content change is visible
+
+      // Left page updates immediately — it will be visible as the flipper sweeps right.
+      setLeftIdx(nextSpread * 2);
+
+      // Double RAF: let React flush setBackIdx / setLeftIdx re-renders BEFORE snapping
+      // the flipper to -180. Without this the back face briefly shows stale content.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Front face won't be visible at -180 (it's on the "away" side), so it's
+          // safe to set it now — it will be correct when the animation reaches 0.
+          setFrontIdx(nextSpread * 2 + 1);
+
+          // Snap flipper to -180 with no transition (back face now faces the user).
+          flipper.style.transition = "none";
+          flipper.style.transform  = "rotateY(-180deg)";
+          void flipper.offsetHeight;
+
+          // Animate to 0: back face sweeps out, front face emerges on the right.
+          flipper.style.transition = `transform ${FLIP_DURATION_MS}ms cubic-bezier(.4,0,.2,1)`;
+          flipper.style.transform  = "rotateY(0deg)";
+
+          setTimeout(() => {
+            // Pre-load for the next potential forward flip from this spread.
+            const ns2 = nextSpread + 1;
+            setBackIdx(   ns2 < spreadCount ? ns2 * 2     : nextSpread * 2);
+            setUnderlayIdx(ns2 < spreadCount ? ns2 * 2 + 1 : nextSpread * 2 + 1);
+
+            spreadRef.current = nextSpread;
+            setDisplaySpread(nextSpread);
+            rightArea.style.zIndex = "2";
+            animatingRef.current   = false;
+            setAnimating(false);
+          }, FLIP_DURATION_MS);
+        });
       });
-    }, FLIP_DURATION_MS);
+    }
   }
 
   function handleTouchStart(e: TouchEvent) {
     touchStartXRef.current = e.touches[0].clientX;
   }
-
   function handleTouchEnd(e: TouchEvent) {
     if (touchStartXRef.current === null) return;
     const dx = e.changedTouches[0].clientX - touchStartXRef.current;
-    if (Math.abs(dx) > 40) flipPage(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) > 40) flipSpread(dx < 0 ? 1 : -1);
     touchStartXRef.current = null;
   }
 
-  const openNft = openLauncherId ? nfts.find((n) => n.launcherId === openLauncherId) ?? null : null;
+  const openNft = openLauncherId
+    ? nfts.find((n) => n.launcherId === openLauncherId) ?? null
+    : null;
 
   return (
-    <div
-      style={cssVars as CSSProperties}
-      className="rounded-2xl bg-vault-bg p-4 md:p-8"
-    >
+    <div>
+    <div style={cssVars as CSSProperties} className="tcg-binder-shell rounded-2xl p-2 md:p-3">
       <div className={openNft ? "blur-sm transition" : "transition"}>
+
+        {/* ── SPREAD ──────────────────────────────────────────────────────────── */}
         <div
-          className="relative mx-auto w-full max-w-2xl"
-          style={{ perspective: "1400px" }}
+          className="relative w-full"
+          style={{ perspective: "1100px" }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="relative" style={{ transformStyle: "preserve-3d" }}>
-            <div
-              className="absolute inset-0 z-[1] rounded-xl border-2 border-page-border bg-page-bg"
-            >
-              <BinderPage nfts={pages[backPageIndex] ?? []} onOpen={setOpenLauncherId} />
+          <div className="flex items-stretch" style={{ height: "clamp(480px, 72vh, 860px)" }}>
+
+            {/* LEFT PAGE — static, not part of the 3D rig; hidden on mobile */}
+            <div className="hidden md:flex flex-1 min-w-0 relative z-[1]">
+              <BinderPage
+                nfts={pages[leftIdx] ?? []}
+                collectionName={collection.name}
+                onOpen={setOpenLauncherId}
+                totalSupply={collection.totalSupply}
+                rarityTiers={collection.rarityTiers}
+                side="left"
+              />
             </div>
+
+            {/* SPINE — 4 metallic binder rings. z-3 so pages sit below at rest (z-2) but
+                the flipper, riding in right-area at z-100, passes over during animation. */}
             <div
-              ref={frontRef}
-              className="relative z-[2] h-full rounded-xl border-2 border-page-border bg-page-bg"
-              style={{ transformStyle: "preserve-3d", backfaceVisibility: "hidden" }}
+              className="hidden md:flex w-12 flex-col justify-evenly items-center flex-shrink-0 relative z-[3]"
+              style={mode === "light" ? {
+                background: "linear-gradient(90deg, #0a2040 0%, #1a3f70 25%, #102e58 50%, #1a3f70 75%, #0a2040 100%)",
+                boxShadow:
+                  "inset 4px 0 12px rgba(0,20,60,0.5), inset -4px 0 12px rgba(0,20,60,0.5), " +
+                  "3px 0 14px rgba(0,20,60,0.3), -3px 0 14px rgba(0,20,60,0.3)",
+              } : {
+                background: "linear-gradient(90deg, #0e0e11 0%, #25252d 25%, #1e1e26 50%, #25252d 75%, #0e0e11 100%)",
+                boxShadow:
+                  "inset 4px 0 12px rgba(0,0,0,0.6), inset -4px 0 12px rgba(0,0,0,0.6), " +
+                  "3px 0 14px rgba(0,0,0,0.5), -3px 0 14px rgba(0,0,0,0.5)",
+              }}
             >
-              <BinderPage nfts={pages[pageIndex] ?? []} onOpen={setOpenLauncherId} />
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="relative flex items-center justify-center"
+                  style={mode === "light" ? {
+                    width: 30, height: 30,
+                    borderRadius: "50%",
+                    background: "radial-gradient(circle at 32% 28%, #5090d0 0%, #2060a0 40%, #0a2040 100%)",
+                    border: "1.5px solid rgba(100,180,255,0.35)",
+                    boxShadow:
+                      "0 3px 10px rgba(0,20,60,0.7), " +
+                      "0 1px 0 rgba(120,180,255,0.25), " +
+                      "inset 0 1px 3px rgba(120,200,255,0.3), " +
+                      "inset 0 -2px 4px rgba(0,20,60,0.5)",
+                  } : {
+                    width: 30, height: 30,
+                    borderRadius: "50%",
+                    background: "radial-gradient(circle at 32% 28%, #72727e 0%, #38383f 40%, #1a1a20 100%)",
+                    border: "1.5px solid rgba(255,255,255,0.18)",
+                    boxShadow:
+                      "0 3px 10px rgba(0,0,0,0.8), " +
+                      "0 1px 0 rgba(255,255,255,0.12), " +
+                      "inset 0 1px 3px rgba(255,255,255,0.15), " +
+                      "inset 0 -2px 4px rgba(0,0,0,0.6)",
+                  }}
+                >
+                  <div
+                    style={mode === "light" ? {
+                      width: 12, height: 12,
+                      borderRadius: "50%",
+                      background: "radial-gradient(circle at 40% 35%, #3070b0, #0a2040)",
+                      border: "1px solid rgba(0,20,60,0.8)",
+                      boxShadow: "inset 0 1px 5px rgba(0,20,60,1), 0 0 0 1px rgba(100,180,255,0.1)",
+                    } : {
+                      width: 12, height: 12,
+                      borderRadius: "50%",
+                      background: "radial-gradient(circle at 40% 35%, #444, #111)",
+                      border: "1px solid rgba(0,0,0,0.7)",
+                      boxShadow: "inset 0 1px 5px rgba(0,0,0,1), 0 0 0 1px rgba(255,255,255,0.04)",
+                    }}
+                  />
+                </div>
+              ))}
             </div>
+
+            {/* RIGHT AREA — z-2 at rest, raised to z-100 during animation.
+                The flipper lives here so it can pass over the spine rings. */}
+            <div
+              ref={rightAreaRef}
+              className="flex-1 min-w-0 relative"
+              style={{ zIndex: 2 }}
+            >
+              {/* UNDERLAY — absolute, z-0, always beneath the flipper.
+                  Pre-loaded with next-right content so the area shows something as the flipper
+                  begins to rotate away (instead of showing empty page background). */}
+              <div className="absolute inset-0 z-[0]">
+                <BinderPage
+                  nfts={pages[underlayIdx] ?? []}
+                  collectionName={collection.name}
+                  onOpen={setOpenLauncherId}
+                  totalSupply={collection.totalSupply}
+                  rarityTiers={collection.rarityTiers}
+                  side="right"
+                />
+              </div>
+
+              {/* FLIPPER — preserve-3d; transform-origin: left center (rotates around the spine).
+                  Front face (backfaceVisibility: hidden) shows the current right page.
+                  Back face (rotateY(180deg) + backfaceVisibility: hidden) shows the pre-loaded
+                  next-left page — it becomes visible after the flipper passes 90°. */}
+              <div
+                ref={flipperRef}
+                className="absolute inset-0 z-[1]"
+                style={{ transformStyle: "preserve-3d", transformOrigin: "left center" }}
+              >
+                {/* FRONT FACE: current right page */}
+                <div className="absolute inset-0" style={{ backfaceVisibility: "hidden" }}>
+                  <BinderPage
+                    nfts={pages[frontIdx] ?? []}
+                    collectionName={collection.name}
+                    onOpen={setOpenLauncherId}
+                    totalSupply={collection.totalSupply}
+                    rarityTiers={collection.rarityTiers}
+                    side="right"
+                  />
+                </div>
+
+                {/* BACK FACE: pre-loaded next-left page.
+                    rotateY(180deg) so it faces left when the flipper is past 90°.
+                    side="left" so its corner radii match a left-side page. */}
+                <div
+                  className="absolute inset-0"
+                  style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                >
+                  <BinderPage
+                    nfts={pages[backIdx] ?? []}
+                    collectionName={collection.name}
+                    onOpen={setOpenLauncherId}
+                    totalSupply={collection.totalSupply}
+                    rarityTiers={collection.rarityTiers}
+                    side="left"
+                  />
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
-        <BinderPageControls
-          pageIndex={pageIndex}
-          pageCount={pages.length}
-          onPrev={() => flipPage(-1)}
-          onNext={() => flipPage(1)}
-          disabled={animating}
-        />
       </div>
 
-      {openNft && <NftDetailModal nft={openNft} onClose={() => setOpenLauncherId(null)} />}
+      {openNft && (
+        <NftDetailModal
+          nft={openNft}
+          collectionName={collection.name}
+          totalSupply={collection.totalSupply}
+          rarityTiers={collection.rarityTiers}
+          onClose={() => setOpenLauncherId(null)}
+        />
+      )}
+    </div>
+
+    {/* Controls float freely below the binder shell */}
+    <BinderPageControls
+      pageIndex={displaySpread}
+      pageCount={spreadCount}
+      onPrev={() => flipSpread(-1)}
+      onNext={() => flipSpread(1)}
+      disabled={animating}
+    />
     </div>
   );
 }

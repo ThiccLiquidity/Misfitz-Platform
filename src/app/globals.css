@@ -3,7 +3,6 @@
 @tailwind utilities;
 
 :root {
-  /* Sensible fallbacks (dark vault) for anything rendered before ThemeProvider hydrates. */
   --vault-bg: #150f09;
   --page-bg: #241a10;
   --page-border: #b8923f;
@@ -21,4 +20,1362 @@
 body {
   background-color: var(--vault-bg);
   color: var(--title);
+}
+
+/* ================================================================
+   TCG CARD SYSTEM V2 — Full-bleed art, spinning tier borders
+   Rule: art zone is ALWAYS zero overlays. All effects (gloss,
+   sparkle, shimmer) live in the panel or border wrapper only.
+================================================================ */
+
+/* Houdini angle property — required for animated conic-gradient borders */
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes border-spin { to { --angle: 360deg; } }
+
+/* ── GLOW KEYFRAMES ── */
+@keyframes mythic-glow {
+  0%,100% {
+    box-shadow:
+      0 0 0 1px rgba(255,40,180,.95),
+      0 0 18px 5px rgba(255,0,150,.85),
+      0 0 42px 14px rgba(140,0,255,.65),
+      0 0 75px 25px rgba(0,210,255,.4),
+      0 0 120px 40px rgba(255,200,50,.25);
+  }
+  33% {
+    box-shadow:
+      0 0 0 1px rgba(0,230,255,.95),
+      0 0 22px 7px rgba(0,200,255,.85),
+      0 0 50px 16px rgba(200,0,255,.65),
+      0 0 85px 28px rgba(255,80,20,.4),
+      0 0 130px 44px rgba(0,255,140,.25);
+  }
+  66% {
+    box-shadow:
+      0 0 0 1px rgba(255,220,0,.95),
+      0 0 20px 6px rgba(255,190,0,.85),
+      0 0 46px 15px rgba(255,20,90,.65),
+      0 0 80px 26px rgba(0,255,180,.4),
+      0 0 125px 42px rgba(100,80,255,.25);
+  }
+}
+
+@keyframes gold-glow {
+  0%,100% {
+    box-shadow:
+      0 0 0 1px rgba(255,180,0,.9),
+      0 0 16px 5px rgba(255,160,0,.8),
+      0 0 36px 12px rgba(210,130,0,.55),
+      0 0 65px 22px rgba(255,200,50,.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255,220,80,.95),
+      0 0 22px 7px rgba(255,200,50,.88),
+      0 0 48px 16px rgba(220,150,0,.6),
+      0 0 85px 28px rgba(255,180,0,.35);
+  }
+}
+
+@keyframes silver-glow {
+  0%,100% {
+    box-shadow:
+      0 0 0 1px rgba(240,248,255,.98),
+      0 0 20px 6px rgba(210,230,255,.88),
+      0 0 45px 14px rgba(160,200,255,.62),
+      0 0 80px 25px rgba(120,170,255,.38),
+      0 0 120px 38px rgba(100,150,255,.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px #fff,
+      0 0 28px 9px rgba(240,250,255,.95),
+      0 0 60px 20px rgba(190,220,255,.75),
+      0 0 105px 34px rgba(150,195,255,.5),
+      0 0 150px 50px rgba(130,175,255,.28);
+  }
+}
+
+@keyframes red-glow {
+  0%,100% {
+    box-shadow:
+      0 0 0 1px rgba(255,0,0,.9),
+      0 0 14px 4px rgba(255,0,0,.8),
+      0 0 32px 10px rgba(180,0,0,.55),
+      0 0 60px 18px rgba(255,30,30,.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255,60,60,.95),
+      0 0 20px 6px rgba(255,50,50,.85),
+      0 0 44px 14px rgba(200,0,0,.6),
+      0 0 80px 24px rgba(255,0,0,.35);
+  }
+}
+
+/* ── SPARKLE KEYFRAMES (panel-only cross sparkles for mythic + epic) ── */
+@keyframes sp-a { 0%,80%,100%{opacity:0;transform:scale(0) rotate(0deg);}  40%{opacity:1;transform:scale(1) rotate(45deg);} }
+@keyframes sp-b { 0%,75%,100%{opacity:0;transform:scale(0) rotate(-20deg);}45%{opacity:.9;transform:scale(1.1) rotate(25deg);} }
+@keyframes sp-c { 0%,85%,100%{opacity:0;transform:scale(0) rotate(10deg);} 50%{opacity:1;transform:scale(.85) rotate(50deg);} }
+@keyframes sp-d { 0%,70%,100%{opacity:0;transform:scale(0) rotate(-30deg);}38%{opacity:.85;transform:scale(1.2) rotate(15deg);} }
+@keyframes sp-e { 0%,90%,100%{opacity:0;transform:scale(0) rotate(5deg);}  55%{opacity:.95;transform:scale(.9) rotate(40deg);} }
+@keyframes sp-f { 0%,78%,100%{opacity:0;transform:scale(0) rotate(-10deg);}42%{opacity:1;transform:scale(1.05) rotate(30deg);} }
+
+/* ════════════════════════════════════════════════════════════
+   OUTER WRAPPERS — animated conic-gradient spinning borders
+════════════════════════════════════════════════════════════ */
+.tcg-outer {
+  border-radius: 22px;
+  padding: 7px;
+  display: block;
+  transition: transform .2s ease, filter .2s ease;
+}
+.tcg-outer-clickable:hover {
+  transform: translateY(-5px) scale(1.025);
+  filter: brightness(1.08);
+}
+.tcg-outer-clickable:focus-visible {
+  outline: 2px solid rgba(255,255,255,.5);
+  outline-offset: 2px;
+}
+
+.tcg-outer-mythic {
+  background: conic-gradient(from var(--angle),
+    #ff0090, #ff3300, #ffcc00, #00ff66, #00ccff, #9900ff, #ff00cc, #ff0090);
+  animation: border-spin 2s linear infinite, mythic-glow 3s ease-in-out infinite;
+}
+.tcg-outer-legendary {
+  background: conic-gradient(from var(--angle),
+    #ffe566, #b87d00, #ffe566, #ffc200, #fff4a0, #b87d00, #ffe566);
+  animation: border-spin 3s linear infinite, gold-glow 2.5s ease-in-out infinite;
+}
+.tcg-outer-epic {
+  background: conic-gradient(from var(--angle),
+    #ffffff, #c8d8ff, #6090e0, #ffffff, #e8efff, #ffffff, #90b8ff, #d8e8ff, #ffffff);
+  animation: border-spin 2.5s linear infinite, silver-glow 2.5s ease-in-out infinite;
+}
+.tcg-outer-rare {
+  background: conic-gradient(from var(--angle),
+    #ff2020, #8b0000, #ff5555, #cc0000, #ff3333, #8b0000, #ff4444, #ff2020);
+  animation: border-spin 3s linear infinite, red-glow 2.5s ease-in-out infinite;
+}
+.tcg-outer-uncommon { background: #3fae5a; }
+.tcg-outer-common   { background: #3b6cc7; }
+
+/* ════════════════════════════════════════════════════════════
+   CARD BODY
+════════════════════════════════════════════════════════════ */
+.tcg-card-body {
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: inherit;
+  display: block;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ART ZONE — zero overlays, always clean
+   Nothing goes between tcg-art-bg and the NFT image.
+════════════════════════════════════════════════════════════ */
+.tcg-art-zone {
+  position: relative;
+  height: 148px;  /* grid default */
+  overflow: hidden;
+}
+.tcg-art-zone-detail { height: 160px; }
+
+.tcg-art-bg {
+  position: absolute;
+  inset: 0;
+}
+.tcg-art-bg-mythic    { background: radial-gradient(ellipse at 40% 45%, #1e0038 0%, #0d0020 65%, #050010 100%); }
+.tcg-art-bg-legendary { background: radial-gradient(ellipse at 40% 45%, #1c1100 0%, #0d0900 65%, #040400 100%); }
+.tcg-art-bg-epic      { background: radial-gradient(ellipse at 40% 45%, #06102a 0%, #030a1c 65%, #010510 100%); }
+.tcg-art-bg-rare      { background: radial-gradient(ellipse at 40% 45%, #1a0000 0%, #0a0000 65%, #040000 100%); }
+.tcg-art-bg-uncommon  { background: radial-gradient(ellipse at 40% 45%, #061408 0%, #030a04 65%, #010402 100%); }
+.tcg-art-bg-common    { background: radial-gradient(ellipse at 40% 45%, #040c1e 0%, #020610 65%, #010308 100%); }
+
+.tcg-nft-art {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Floating header — fades out fast, never covers art center */
+.tcg-art-hdr {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 5;
+}
+.tcg-art-hdr-mythic    { background: linear-gradient(180deg, rgba(14,0,32,.92)  0%, rgba(14,0,32,.32) 55%, transparent 100%); }
+.tcg-art-hdr-legendary { background: linear-gradient(180deg, rgba(13,9,0,.9)   0%, rgba(13,9,0,.28)  55%, transparent 100%); }
+.tcg-art-hdr-epic      { background: linear-gradient(180deg, rgba(2,6,20,.92)  0%, rgba(2,6,20,.3)   55%, transparent 100%); }
+.tcg-art-hdr-rare      { background: linear-gradient(180deg, rgba(10,0,0,.9)   0%, rgba(10,0,0,.28)  55%, transparent 100%); }
+.tcg-art-hdr-uncommon  { background: linear-gradient(180deg, rgba(3,10,4,.88)  0%, rgba(3,10,4,.25)  55%, transparent 100%); }
+.tcg-art-hdr-common    { background: linear-gradient(180deg, rgba(2,6,18,.88)  0%, rgba(2,6,18,.25)  55%, transparent 100%); }
+
+.tcg-cname {
+  font-size: 17px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0,0,0,.98);
+  line-height: 1.4;
+}
+
+.tcg-rank-tag {
+  border-radius: 7px;
+  padding: 3px 8px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.tcg-rank-tag-mythic    { background: rgba(14,0,32,.94);  border: 1px solid rgba(200,80,255,.45); }
+.tcg-rank-tag-legendary { background: rgba(13,9,0,.94);   border: 1px solid rgba(210,160,0,.45);  }
+.tcg-rank-tag-epic      { background: rgba(2,6,20,.95);   border: 1px solid rgba(180,210,255,.45);}
+.tcg-rank-tag-rare      { background: rgba(10,0,0,.94);   border: 1px solid rgba(220,0,0,.4);     }
+.tcg-rank-tag-uncommon  { background: rgba(3,10,4,.92);   border: 1px solid rgba(63,174,90,.35);  }
+.tcg-rank-tag-common    { background: rgba(2,6,18,.94);   border: 1px solid rgba(59,108,199,.35); }
+
+.tcg-rank-lbl {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+.tcg-rank-tag-mythic    .tcg-rank-lbl { color: rgba(220,150,255,.7);  }
+.tcg-rank-tag-legendary .tcg-rank-lbl { color: rgba(255,200,60,.65);  }
+.tcg-rank-tag-epic      .tcg-rank-lbl { color: rgba(180,215,255,.7);  }
+.tcg-rank-tag-rare      .tcg-rank-lbl { color: rgba(255,100,100,.65); }
+.tcg-rank-tag-uncommon  .tcg-rank-lbl { color: rgba(100,210,130,.65); }
+.tcg-rank-tag-common    .tcg-rank-lbl { color: rgba(100,150,240,.65); }
+
+.tcg-rank-num {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+.tcg-rank-pct {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* ── Per-tier gradient text — card name + rank number ──────────────── */
+/* Applies in both dark and light mode; binder font-size !important wins */
+.tcg-body-mythic .tcg-cname {
+  background: linear-gradient(90deg, #ff60cc 0%, #cc88ff 18%, #60ccff 38%, #88ff88 58%, #ffee44 78%, #ff9944 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent; text-shadow: none;
+}
+.tcg-body-legendary .tcg-cname {
+  background: linear-gradient(90deg, #c89000 0%, #f0c000 30%, #ffe577 52%, #f0c000 72%, #c89000 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent; text-shadow: none;
+}
+.tcg-body-epic .tcg-cname {
+  background: linear-gradient(90deg, #3377cc 0%, #88bbff 45%, #c0ddff 60%, #88bbff 75%, #3377cc 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent; text-shadow: none;
+}
+.tcg-body-rare .tcg-cname {
+  background: linear-gradient(90deg, #cc1111 0%, #ff6060 38%, #ff9944 58%, #ff6060 78%, #cc1111 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent; text-shadow: none;
+}
+.tcg-body-uncommon .tcg-cname {
+  background: linear-gradient(90deg, #1a8035 0%, #5fce7a 40%, #aaee99 60%, #5fce7a 78%, #1a8035 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent; text-shadow: none;
+}
+.tcg-body-common .tcg-cname {
+  background: linear-gradient(90deg, #2244aa 0%, #6090e0 40%, #99bbff 60%, #6090e0 78%, #2244aa 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent; text-shadow: none;
+}
+
+.tcg-body-mythic .tcg-rank-num {
+  background: linear-gradient(135deg, #ff60cc 0%, #cc88ff 30%, #60ccff 55%, #ffee44 85%, #ff9944 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.tcg-body-legendary .tcg-rank-num {
+  background: linear-gradient(135deg, #c89000 0%, #f0c000 40%, #ffe577 60%, #c89000 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.tcg-body-epic .tcg-rank-num {
+  background: linear-gradient(135deg, #3377cc 0%, #88bbff 50%, #3377cc 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.tcg-body-rare .tcg-rank-num {
+  background: linear-gradient(135deg, #cc1111 0%, #ff6060 40%, #ff9944 70%, #cc1111 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.tcg-body-uncommon .tcg-rank-num {
+  background: linear-gradient(135deg, #1a8035 0%, #5fce7a 45%, #aaee99 65%, #1a8035 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.tcg-body-common .tcg-rank-num {
+  background: linear-gradient(135deg, #2244aa 0%, #6090e0 45%, #99bbff 65%, #2244aa 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+
+/* "Art as minted" ghost label — detail variant only */
+.tcg-art-clean-label {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,.5);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 7.5px;
+  font-weight: 700;
+  color: rgba(255,255,255,.35);
+  letter-spacing: .07em;
+  white-space: nowrap;
+  z-index: 20;
+  border: 1px solid rgba(255,255,255,.1);
+}
+
+/* ════════════════════════════════════════════════════════════
+   PANEL — frosted glass; ALL effects (gloss, sparkles) here
+════════════════════════════════════════════════════════════ */
+.tcg-panel {
+  position: relative;
+  z-index: 10;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+  border-top: 1px solid;
+}
+.tcg-panel-mythic    { background: rgba(12,4,30,.92);  border-top-color: rgba(200,60,255,.3);   }
+.tcg-panel-legendary { background: rgba(18,12,0,.92);  border-top-color: rgba(210,160,0,.28);   }
+.tcg-panel-epic      { background: rgba(4,8,24,.93);   border-top-color: rgba(180,210,255,.32); }
+.tcg-panel-rare      { background: rgba(14,2,2,.92);   border-top-color: rgba(200,0,0,.25);     }
+.tcg-panel-uncommon  { background: rgba(3,10,4,.9);    border-top-color: rgba(63,174,90,.22);   }
+.tcg-panel-common    { background: rgba(2,6,18,.9);    border-top-color: rgba(59,108,199,.22);  }
+
+/* Panel gloss — absolute inside .tcg-panel, z-index 0, never touches art */
+.tcg-gloss {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.tcg-gloss-mythic {
+  background: linear-gradient(128deg,
+    rgba(255,255,255,.14) 0%, rgba(255,180,255,.08) 28%,
+    transparent 45%, rgba(100,200,255,.06) 62%, transparent 80%
+  );
+}
+.tcg-gloss-legendary {
+  background: linear-gradient(120deg,
+    rgba(255,255,255,.12) 0%, transparent 32%,
+    rgba(255,220,80,.06) 48%, transparent 65%,
+    rgba(255,255,255,.07) 78%, transparent 100%
+  );
+}
+.tcg-gloss-epic {
+  background: linear-gradient(132deg,
+    rgba(255,255,255,.22) 0%, rgba(220,235,255,.12) 22%,
+    transparent 42%, rgba(200,225,255,.07) 58%,
+    rgba(255,255,255,.14) 72%, transparent 100%
+  );
+}
+
+/* Sparkle cross elements — rendered inside .tcg-panel only */
+.tcg-sp {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  pointer-events: none;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+.tcg-sp::before,
+.tcg-sp::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+  border-radius: 3px;
+}
+.tcg-sp::before { width: 9px;   height: 2.5px; top: 3.5px; left: 0;    }
+.tcg-sp::after  { width: 2.5px; height: 9px;   top: 0;     left: 3.5px; }
+
+/* Panel content sits above gloss + sparkle layer */
+.tcg-panel-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── STATS ROW ── */
+.tcg-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 4px 4px 3px;
+  border-bottom: 1px solid;
+}
+.tcg-stats-mythic    { border-bottom-color: rgba(200,60,255,.15);  }
+.tcg-stats-legendary { border-bottom-color: rgba(210,160,0,.15);   }
+.tcg-stats-epic      { border-bottom-color: rgba(180,210,255,.15); }
+.tcg-stats-rare      { border-bottom-color: rgba(200,0,0,.12);     }
+.tcg-stats-uncommon  { border-bottom-color: rgba(63,174,90,.12);   }
+.tcg-stats-common    { border-bottom-color: rgba(59,108,199,.12);  }
+
+.tcg-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.tcg-stat-lbl {
+  font-size: 6px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 700;
+}
+.tcg-stat-val {
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.3;
+}
+.tcg-stat-sub { font-size: 6px; }
+
+/* Per-tier label/sub colors */
+.tcg-lbl-mythic    { color: rgba(220,150,255,.45); }
+.tcg-lbl-legendary { color: rgba(255,200,60,.45);  }
+.tcg-lbl-epic      { color: rgba(180,215,255,.45); }
+.tcg-lbl-rare      { color: rgba(255,100,100,.4);  }
+.tcg-lbl-uncommon  { color: rgba(100,210,130,.4);  }
+.tcg-lbl-common    { color: rgba(100,150,240,.4);  }
+
+.tcg-sub-mythic    { color: rgba(200,140,255,.55); }
+.tcg-sub-legendary { color: rgba(255,190,40,.5);   }
+.tcg-sub-epic      { color: rgba(160,200,255,.5);  }
+.tcg-sub-rare      { color: rgba(255,80,80,.5);    }
+.tcg-sub-uncommon  { color: rgba(80,190,110,.5);   }
+.tcg-sub-common    { color: rgba(80,130,220,.5);   }
+
+/* ── TRAITS ── */
+.tcg-traits-header {
+  display: flex;
+  justify-content: center;
+  padding: 3px 0 2px;
+}
+.tcg-traits-pill {
+  font-size: 7.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  padding: 3px 14px;
+  border-radius: 20px;
+  border: 1px solid;
+}
+.tcg-traits-pill-mythic    { background: rgba(200,60,255,.12);  border-color: rgba(200,60,255,.4);   color: #cc66ff; }
+.tcg-traits-pill-legendary { background: rgba(210,160,0,.12);   border-color: rgba(210,160,0,.4);    color: #f0c000; }
+.tcg-traits-pill-epic      { background: rgba(180,210,255,.1);  border-color: rgba(180,210,255,.4);  color: #a8d0ff; }
+.tcg-traits-pill-rare      { background: rgba(200,0,0,.12);     border-color: rgba(200,0,0,.4);      color: #ff6060; }
+.tcg-traits-pill-uncommon  { background: rgba(63,174,90,.1);    border-color: rgba(63,174,90,.4);    color: #5fce7a; }
+.tcg-traits-pill-common    { background: rgba(59,108,199,.1);   border-color: rgba(59,108,199,.4);   color: #6090e0; }
+
+.tcg-trait-grid {
+  border-radius: 6px;
+  border: 1px solid;
+  overflow: hidden;
+  margin: 0 7px 4px;
+}
+.tcg-trait-grid-mythic    { border-color: rgba(200,60,255,.2);  }
+.tcg-trait-grid-legendary { border-color: rgba(210,160,0,.2);   }
+.tcg-trait-grid-epic      { border-color: rgba(180,210,255,.2); }
+.tcg-trait-grid-rare      { border-color: rgba(200,0,0,.18);    }
+.tcg-trait-grid-uncommon  { border-color: rgba(63,174,90,.15);  }
+.tcg-trait-grid-common    { border-color: rgba(59,108,199,.15); }
+
+.tcg-trait-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-bottom: 1px solid;
+}
+.tcg-trait-row:last-child { border-bottom: none; }
+.tcg-trait-row-mythic    { border-bottom-color: rgba(200,60,255,.1);  }
+.tcg-trait-row-legendary { border-bottom-color: rgba(210,160,0,.1);   }
+.tcg-trait-row-epic      { border-bottom-color: rgba(180,210,255,.1); }
+.tcg-trait-row-rare      { border-bottom-color: rgba(200,0,0,.1);     }
+.tcg-trait-row-uncommon  { border-bottom-color: rgba(63,174,90,.08);  }
+.tcg-trait-row-common    { border-bottom-color: rgba(59,108,199,.08); }
+
+.tcg-trait-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tcg-trait-type {
+  font-size: 6px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.tcg-trait-val {
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+}
+.tcg-trait-pct {
+  font-size: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ── FOOTER ── */
+.tcg-footer-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  margin: 0 7px 3px;
+  padding: 4px 2px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+.tcg-footer-mythic    { border-color: rgba(200,60,255,.14);  background: rgba(200,60,255,.03);  }
+.tcg-footer-legendary { border-color: rgba(210,160,0,.14);   background: rgba(210,160,0,.03);   }
+.tcg-footer-epic      { border-color: rgba(180,210,255,.14); background: rgba(180,210,255,.03); }
+.tcg-footer-rare      { border-color: rgba(200,0,0,.12);     background: rgba(200,0,0,.02);     }
+.tcg-footer-uncommon  { border-color: rgba(63,174,90,.12);   background: rgba(63,174,90,.02);   }
+.tcg-footer-common    { border-color: rgba(59,108,199,.12);  background: rgba(59,108,199,.02);  }
+
+/* ── TIER BANNER ── */
+.tcg-tier-banner {
+  margin: 3px 7px 7px;
+  border-radius: 20px;
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  border: 1px solid;
+}
+.tcg-tier-banner-mythic    { background: rgba(200,60,255,.14);  border-color: rgba(200,60,255,.55);  color: #e080ff; }
+.tcg-tier-banner-legendary { background: rgba(210,160,0,.14);   border-color: rgba(210,160,0,.55);   color: #f0c000; }
+.tcg-tier-banner-epic      { background: rgba(180,210,255,.12); border-color: rgba(200,230,255,.55); color: #c8e4ff; }
+.tcg-tier-banner-rare      { background: rgba(200,0,0,.12);     border-color: rgba(200,0,0,.5);      color: #ff6060; }
+.tcg-tier-banner-uncommon  { background: rgba(63,174,90,.1);    border-color: rgba(63,174,90,.5);    color: #5fce7a; }
+.tcg-tier-banner-common    { background: rgba(59,108,199,.1);   border-color: rgba(59,108,199,.5);   color: #6090e0; }
+
+/* ════════════════════════════════════════════════════════════
+   BINDER SHELL — unchanged
+════════════════════════════════════════════════════════════ */
+.tcg-binder-shell {
+  position: relative;
+  background:
+    repeating-linear-gradient(
+      -52deg,
+      transparent 0px, transparent 4px,
+      rgba(0,0,0,0.06) 4px, rgba(0,0,0,0.06) 5px
+    ),
+    linear-gradient(160deg, #1c1118 0%, #141012 45%, #0c0b0e 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.05),
+    0 30px 80px rgba(0,0,0,0.8),
+    0 10px 30px rgba(0,0,0,0.5);
+}
+.tcg-binder-shell::before,
+.tcg-binder-shell::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  height: 4px;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.22) 0 3px, transparent 3px 8px);
+}
+.tcg-binder-shell::before { top: 8px;    }
+.tcg-binder-shell::after  { bottom: 8px; }
+
+.tcg-binder-page {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.3) 0%, transparent 60%),
+    linear-gradient(175deg, #1c1c20, #0f0f12);
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  box-shadow: inset 0 0 60px rgba(0,0,0,0.35);
+}
+
+.tcg-sleeve {
+  border-radius: 12px;
+  padding: 3px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(0,0,0,0.2));
+  box-shadow:
+    inset 0 1px 3px rgba(255,255,255,0.09),
+    inset 0 -2px 6px rgba(0,0,0,0.6),
+    0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .tcg-outer-mythic,
+  .tcg-outer-legendary,
+  .tcg-outer-epic,
+  .tcg-outer-rare { animation: none; }
+  .tcg-sp { animation: none; }
+}
+
+/* ── BINDER 3×3 COMPACT OVERRIDES ──────────────────────────────────────────
+   Scope: .tcg-binder-page — applies only inside the 3×3 spread grid.
+   Goal: cards fill their grid cell, showing only art + tier banner.
+   Stats, traits, and footer are hidden; panel gloss/sparkles still render
+   since they are decorative absolute layers that don't need height.
+────────────────────────────────────────────────────────────────────────────── */
+
+/* ── BINDER COMPACT — 3×2 portrait card grid (6 cards/page) ─────────────── */
+/* Stats, traits, and footer are hidden at binder scale.                      */
+/* All details are readable in the detail modal (click any card).             */
+
+/* Sleeve fills its grid cell. */
+.tcg-binder-page .tcg-sleeve {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 2px;
+  border-radius: 10px;
+}
+
+/* Outer spinning-border wrapper flex-fills the sleeve. */
+.tcg-binder-page .tcg-outer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 3px;
+  border-radius: 14px;
+}
+
+/* Card body fills the outer; column layout lets art zone flex-grow. */
+.tcg-binder-page .tcg-card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+}
+
+/* Art zone takes all remaining height after header and panel. */
+.tcg-binder-page .tcg-art-zone {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+}
+
+/* Panel shrinks to fit tier banner only. */
+.tcg-binder-page .tcg-panel {
+  flex-shrink: 0;
+}
+
+/* Hide stats, traits, footer, and sparkle particles — visible/legible in detail modal. */
+.tcg-binder-page .tcg-stats,
+.tcg-binder-page .tcg-traits-header,
+.tcg-binder-page .tcg-trait-grid,
+.tcg-binder-page .tcg-footer-row,
+.tcg-binder-page .tcg-sp {
+  display: none !important;
+}
+
+/* Tier banner — bold and readable at binder scale; never wraps. */
+.tcg-binder-page .tcg-tier-banner {
+  font-size: 8px !important;
+  font-weight: 900 !important;
+  padding: 3px 5px !important;
+  margin: 2px 3px 3px !important;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Card header — name + rank readable at binder scale. */
+.tcg-binder-page .tcg-card-header {
+  padding: 4px 6px !important;
+}
+.tcg-binder-page .tcg-cname {
+  font-size: 7px !important;
+  font-weight: 900 !important;
+}
+.tcg-binder-page .tcg-rank-tag {
+  padding: 2px 4px !important;
+}
+.tcg-binder-page .tcg-rank-lbl {
+  font-size: 5px !important;
+}
+.tcg-binder-page .tcg-rank-num {
+  font-size: 9px !important;
+  font-weight: 900 !important;
+}
+.tcg-binder-page .tcg-rank-pct {
+  font-size: 5px !important;
+}
+
+/* ── CARD BODY BACKGROUNDS — dark tier-tinted material visible in header/corners ── */
+.tcg-body-mythic    { background: linear-gradient(180deg, #0a0018 0%, #060010 55%, #080014 100%); }
+.tcg-body-legendary { background: linear-gradient(180deg, #0d0900 0%, #080600 55%, #0b0800 100%); }
+.tcg-body-epic      { background: linear-gradient(180deg, #030818 0%, #020510 55%, #030714 100%); }
+.tcg-body-rare      { background: linear-gradient(180deg, #100000 0%, #0a0000 55%, #0e0000 100%); }
+.tcg-body-uncommon  { background: linear-gradient(180deg, #030e05 0%, #020904 55%, #030c05 100%); }
+.tcg-body-common    { background: linear-gradient(180deg, #020614 0%, #010410 55%, #020512 100%); }
+
+/* ── CARD HEADER — name plate above art zone, on card body material ── */
+.tcg-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 9px 6px;
+  border-bottom: 1px solid;
+  flex-shrink: 0;
+}
+.tcg-ch-mythic    { border-bottom-color: rgba(200,60,255,.22);  }
+.tcg-ch-legendary { border-bottom-color: rgba(210,160,0,.22);   }
+.tcg-ch-epic      { border-bottom-color: rgba(180,210,255,.25); }
+.tcg-ch-rare      { border-bottom-color: rgba(200,0,0,.22);     }
+.tcg-ch-uncommon  { border-bottom-color: rgba(63,174,90,.2);    }
+.tcg-ch-common    { border-bottom-color: rgba(59,108,199,.2);   }
+
+
+/* ════════════════════════════════════════════════════════════
+   LIGHT MODE OVERRIDES — [data-theme="light"]
+   Sky-blue "bright collector's room" feel.
+   Dark sidebars (FilterSidebar, CollectionSwitcher) are hardcoded
+   and stay dark, matching the reference's dark-panel / light-content split.
+════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* ── Page background: sky blue gradient ── */
+[data-theme="light"] .bg-vault-bg {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(100,180,255,0.3) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 100%, rgba(41,128,200,0.15) 0%, transparent 55%),
+    linear-gradient(180deg, #c8e8f8 0%, #d8f0ff 50%, #c0e4f4 100%) !important;
+}
+
+/* ── Kill ALL card glow / spin animations in light mode ──────────────────
+   They're designed for dark backgrounds. On light, they look like bleeding
+   color stains. Cards look cleaner and more "real" without them. */
+/* Holographic spinning borders for top tiers — vibrant on light bg, glows via filter not box-shadow */
+[data-theme="light"] .tcg-outer-mythic {
+  background: conic-gradient(from var(--angle),
+    #ff00cc, #ff3300, #ffcc00, #00ff88, #00ccff, #9900ff, #ff00cc) !important;
+  animation: border-spin 2s linear infinite !important;
+  filter: drop-shadow(0 0 8px rgba(200,60,255,0.55)) !important;
+}
+[data-theme="light"] .tcg-outer-legendary {
+  background: conic-gradient(from var(--angle),
+    #ffe566, #c89000, #ffe566, #ffd700, #fff4a0, #b87d00, #ffe566) !important;
+  animation: border-spin 3s linear infinite !important;
+  filter: drop-shadow(0 0 7px rgba(210,160,0,0.6)) !important;
+}
+[data-theme="light"] .tcg-outer-epic {
+  background: conic-gradient(from var(--angle),
+    #ffffff, #a0c8ff, #4070e0, #ffffff, #d0e4ff, #ffffff, #80a8ff, #c0d8ff, #ffffff) !important;
+  animation: border-spin 2.5s linear infinite !important;
+  filter: drop-shadow(0 0 6px rgba(80,130,255,0.45)) !important;
+}
+[data-theme="light"] .tcg-outer-rare {
+  background: conic-gradient(from var(--angle),
+    #ff2020, #8b0000, #ff5555, #cc0000, #ff3333, #8b0000, #ff4444, #ff2020) !important;
+  animation: border-spin 3s linear infinite !important;
+  filter: drop-shadow(0 0 5px rgba(200,0,0,0.4)) !important;
+}
+[data-theme="light"] .tcg-outer-uncommon { background: #3fae5a !important; animation: none !important; }
+[data-theme="light"] .tcg-outer-common   { background: #3b6cc7 !important; animation: none !important; }
+
+/* ── Binder shell: crisp white with sky-blue fabric texture ── */
+[data-theme="light"] .tcg-binder-shell {
+  background:
+    repeating-linear-gradient(
+      -52deg,
+      transparent 0px, transparent 6px,
+      rgba(10,32,64,0.06) 6px, rgba(10,32,64,0.06) 7px
+    ),
+    linear-gradient(160deg, #b8d8f5 0%, #a8ccf0 45%, #98c0ea 100%) !important;
+  box-shadow:
+    inset 0 0 0 3px rgba(10,32,64,0.75),
+    inset 0 0 0 5px rgba(26,63,112,0.4),
+    0 24px 64px rgba(0,20,60,0.22),
+    0 6px 18px rgba(0,20,60,0.14) !important;
+}
+
+/* Binder edge accent lines → blue pinstripes */
+[data-theme="light"] .tcg-binder-shell::before,
+[data-theme="light"] .tcg-binder-shell::after {
+  background-image: repeating-linear-gradient(
+    90deg, rgba(10,32,64,0.55) 0 3px, transparent 3px 8px
+  ) !important;
+  opacity: 0.6 !important;
+}
+
+/* ── Binder pages: clean white paper ── */
+[data-theme="light"] .tcg-binder-page {
+  background: linear-gradient(175deg, #ffffff 0%, #f4f9ff 100%) !important;
+  border: 1px solid rgba(10,32,64,0.12) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.9),
+    inset 0 0 40px rgba(10,40,100,0.05),
+    inset 4px 0 20px rgba(10,32,64,0.04),
+    inset -4px 0 20px rgba(10,32,64,0.04),
+    0 2px 8px rgba(10,32,64,0.08) !important;
+}
+
+/* ── Card sleeve: subtle white lift ── */
+[data-theme="light"] .tcg-sleeve {
+  background: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(215,235,255,0.5) 100%) !important;
+  box-shadow:
+    inset 0 1px 3px rgba(255,255,255,1),
+    inset 0 -2px 5px rgba(41,128,200,0.06),
+    0 0 0 1px rgba(41,128,200,0.12) !important;
+}
+
+/* ── Card art zone backgrounds: lighter in light mode ── */
+/* Art zone bg in light mode — top 3 tiers get the same spinning holographic effect as their border */
+[data-theme="light"] .tcg-art-bg-mythic {
+  background: conic-gradient(from var(--angle),
+    #ff00cc, #ff3300, #ffcc00, #00ff88, #00ccff, #9900ff, #ff00cc) !important;
+  animation: border-spin 3s linear infinite !important;
+}
+[data-theme="light"] .tcg-art-bg-legendary {
+  background: conic-gradient(from var(--angle),
+    #ffe566, #c89000, #ffe566, #ffd700, #fff4a0, #b87d00, #ffe566) !important;
+  animation: border-spin 4s linear infinite !important;
+}
+[data-theme="light"] .tcg-art-bg-epic {
+  background: conic-gradient(from var(--angle),
+    #ffffff, #a0c8ff, #4070e0, #ffffff, #d0e4ff, #ffffff, #80a8ff, #c0d8ff, #ffffff) !important;
+  animation: border-spin 3.5s linear infinite !important;
+}
+/* Lower tiers: solid tier color (no spin) */
+[data-theme="light"] .tcg-art-bg-rare      { background: radial-gradient(ellipse at 50% 50%, #cc1818 0%, #aa0808 55%, #880000 100%) !important; }
+[data-theme="light"] .tcg-art-bg-uncommon  { background: radial-gradient(ellipse at 50% 50%, #228840 0%, #186a30 55%, #0e4820 100%) !important; }
+[data-theme="light"] .tcg-art-bg-common    { background: radial-gradient(ellipse at 50% 50%, #2255aa 0%, #1a3d88 55%, #102870 100%) !important; }
+
+/* ── Light mode: card headers become white/light instead of dark overlay ── */
+/* Card body backgrounds — white/light in light mode (replaces dark tier tints) */
+[data-theme="light"] .tcg-body-mythic    { background: linear-gradient(180deg, #faf6ff 0%, #f4eeff 100%) !important; }
+[data-theme="light"] .tcg-body-legendary { background: linear-gradient(180deg, #fffcf0 0%, #fff8e0 100%) !important; }
+[data-theme="light"] .tcg-body-epic      { background: linear-gradient(180deg, #f4f8ff 0%, #eaf2ff 100%) !important; }
+[data-theme="light"] .tcg-body-rare      { background: linear-gradient(180deg, #fff4f4 0%, #ffebeb 100%) !important; }
+[data-theme="light"] .tcg-body-uncommon  { background: linear-gradient(180deg, #f4fff6 0%, #e8fcea 100%) !important; }
+[data-theme="light"] .tcg-body-common    { background: linear-gradient(180deg, #f4f6ff 0%, #eaedff 100%) !important; }
+
+/* Card name text: dark on light header */
+/* cname light-mode handled per-tier by gradient rules */
+
+/* Rank tag backgrounds: use native dark tier backgrounds — header is dark in light mode */
+/* ── Light-mode card header: dark per-tier zone so gradient text pops ── */
+[data-theme="light"] .tcg-ch-mythic    { background: linear-gradient(135deg, rgba(200,80,255,0.12) 0%, rgba(160,40,220,0.06) 100%) !important; border-bottom-color: rgba(180,60,255,0.25) !important; }
+[data-theme="light"] .tcg-ch-legendary { background: linear-gradient(135deg, rgba(220,160,0,0.13) 0%, rgba(180,120,0,0.06) 100%) !important; border-bottom-color: rgba(200,150,0,0.28) !important; }
+[data-theme="light"] .tcg-ch-epic      { background: linear-gradient(135deg, rgba(60,120,240,0.11) 0%, rgba(40,90,200,0.05) 100%) !important; border-bottom-color: rgba(80,140,240,0.25) !important; }
+[data-theme="light"] .tcg-ch-rare      { background: linear-gradient(135deg, rgba(220,40,40,0.11) 0%, rgba(180,20,20,0.05) 100%) !important; border-bottom-color: rgba(200,40,40,0.25) !important; }
+[data-theme="light"] .tcg-ch-uncommon  { background: linear-gradient(135deg, rgba(40,180,80,0.11) 0%, rgba(20,140,50,0.05) 100%) !important; border-bottom-color: rgba(60,180,90,0.25) !important; }
+[data-theme="light"] .tcg-ch-common    { background: linear-gradient(135deg, rgba(50,110,210,0.11) 0%, rgba(30,80,170,0.05) 100%) !important; border-bottom-color: rgba(59,108,199,0.25) !important; }
+
+/* Gradient text glow — drop-shadow works even with -webkit-text-fill-color:transparent */
+/* cname: light-mode override — solid dark tier color (pale gradients wash out on white) */
+[data-theme="light"] .tcg-body-mythic    .tcg-cname { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #6600aa !important; color: #6600aa !important; text-shadow: 0 1px 6px rgba(150,40,220,0.20) !important; filter: none; }
+[data-theme="light"] .tcg-body-legendary .tcg-cname { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #7a5500 !important; color: #7a5500 !important; text-shadow: 0 1px 6px rgba(180,130,0,0.20) !important; filter: none; }
+[data-theme="light"] .tcg-body-epic      .tcg-cname { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #0a33bb !important; color: #0a33bb !important; text-shadow: 0 1px 6px rgba(50,100,220,0.20) !important; filter: none; }
+[data-theme="light"] .tcg-body-rare      .tcg-cname { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #aa0000 !important; color: #aa0000 !important; text-shadow: 0 1px 6px rgba(200,30,30,0.20) !important; filter: none; }
+[data-theme="light"] .tcg-body-uncommon  .tcg-cname { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #0a5520 !important; color: #0a5520 !important; text-shadow: 0 1px 6px rgba(30,150,60,0.20) !important; filter: none; }
+[data-theme="light"] .tcg-body-common    .tcg-cname { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #0a2299 !important; color: #0a2299 !important; text-shadow: 0 1px 6px rgba(40,80,200,0.20) !important; filter: none; }
+
+/* Rank label text: restore white on the now-dark header */
+[data-theme="light"] .tcg-rank-tag-mythic    .tcg-rank-lbl { color: #7700bb !important; opacity: 0.8; }
+[data-theme="light"] .tcg-rank-tag-legendary .tcg-rank-lbl { color: #8a6000 !important; opacity: 0.8; }
+[data-theme="light"] .tcg-rank-tag-epic      .tcg-rank-lbl { color: #1144cc !important; opacity: 0.8; }
+[data-theme="light"] .tcg-rank-tag-rare      .tcg-rank-lbl { color: #bb1111 !important; opacity: 0.8; }
+[data-theme="light"] .tcg-rank-tag-uncommon  .tcg-rank-lbl { color: #116622 !important; opacity: 0.8; }
+[data-theme="light"] .tcg-rank-tag-common    .tcg-rank-lbl { color: #1133bb !important; opacity: 0.8; }
+
+/* Rank tag pill: frosted light with tier-colored border (replaces dark near-black bg) */
+[data-theme="light"] .tcg-rank-tag-mythic    { background: rgba(250,245,255,0.92) !important; border-color: rgba(140,40,210,0.50) !important; }
+[data-theme="light"] .tcg-rank-tag-legendary { background: rgba(255,252,240,0.92) !important; border-color: rgba(170,120,0,0.50) !important; }
+[data-theme="light"] .tcg-rank-tag-epic      { background: rgba(245,248,255,0.92) !important; border-color: rgba(50,100,210,0.50) !important; }
+[data-theme="light"] .tcg-rank-tag-rare      { background: rgba(255,245,245,0.92) !important; border-color: rgba(190,30,30,0.50) !important; }
+[data-theme="light"] .tcg-rank-tag-uncommon  { background: rgba(245,255,247,0.92) !important; border-color: rgba(35,150,60,0.50) !important; }
+[data-theme="light"] .tcg-rank-tag-common    { background: rgba(245,247,255,0.92) !important; border-color: rgba(45,90,190,0.50) !important; }
+
+
+/* Rank number stays dark navy in light mode */
+/* rank-num light-mode handled per-tier by gradient rules */
+
+/* Tier banner at bottom: keep colored but slightly lighter bg */
+/* Card bottom panel: light tinted instead of near-black */
+[data-theme="light"] .tcg-panel-mythic    { background: linear-gradient(180deg, rgba(200,80,255,0.08) 0%, rgba(255,255,255,0.94) 100%) !important; border-top-color: rgba(180,60,255,0.20) !important; }
+[data-theme="light"] .tcg-panel-legendary { background: linear-gradient(180deg, rgba(220,160,0,0.09) 0%, rgba(255,255,255,0.94) 100%) !important; border-top-color: rgba(200,150,0,0.22) !important; }
+[data-theme="light"] .tcg-panel-epic      { background: linear-gradient(180deg, rgba(60,120,240,0.08) 0%, rgba(255,255,255,0.94) 100%) !important; border-top-color: rgba(80,140,240,0.20) !important; }
+[data-theme="light"] .tcg-panel-rare      { background: linear-gradient(180deg, rgba(220,40,40,0.08) 0%, rgba(255,255,255,0.94) 100%) !important; border-top-color: rgba(200,40,40,0.20) !important; }
+[data-theme="light"] .tcg-panel-uncommon  { background: linear-gradient(180deg, rgba(40,180,80,0.08) 0%, rgba(255,255,255,0.94) 100%) !important; border-top-color: rgba(60,180,90,0.20) !important; }
+[data-theme="light"] .tcg-panel-common    { background: linear-gradient(180deg, rgba(50,110,210,0.08) 0%, rgba(255,255,255,0.94) 100%) !important; border-top-color: rgba(59,108,199,0.20) !important; }
+
+/* Stat text in panel: dark navy for readability on light panels */
+[data-theme="light"] .tcg-panel-content .text-title,
+[data-theme="light"] .tcg-stat-lbl { color: #0a1e38 !important; }
+[data-theme="light"] .tcg-stat-val { color: #0a1e38 !important; }
+
+/* Tier banners: vibrant, deeper accent colors on light bg */
+[data-theme="light"] .tcg-tier-banner-mythic    { background: rgba(200,60,255,.1) !important;  border-color: rgba(160,20,220,.65) !important; color: #8800bb !important; }
+[data-theme="light"] .tcg-tier-banner-legendary { background: rgba(210,160,0,.1) !important;   border-color: rgba(170,120,0,.65) !important;  color: #906000 !important; }
+[data-theme="light"] .tcg-tier-banner-epic      { background: rgba(60,110,255,.08) !important; border-color: rgba(60,110,240,.6) !important;  color: #2050c8 !important; }
+[data-theme="light"] .tcg-tier-banner-rare      { background: rgba(200,0,0,.08) !important;    border-color: rgba(180,0,0,.6) !important;     color: #bb0000 !important; }
+[data-theme="light"] .tcg-tier-banner-uncommon  { background: rgba(30,150,60,.08) !important;  border-color: rgba(30,150,60,.55) !important;  color: #157030 !important; }
+[data-theme="light"] .tcg-tier-banner-common    { background: rgba(40,80,200,.08) !important;  border-color: rgba(40,80,200,.55) !important;  color: #1c44aa !important; }
+
+/* Binder page: warm cream instead of stark white */
+/* (tcg-binder-page light styles consolidated above) */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   COLLECTION HEADER — Light mode: sunny sky + cloud/bubble aesthetic
+   All decorative elements (.ch-sun, .ch-cloud-*) are hidden by default
+   and only activated under [data-theme="light"].
+═══════════════════════════════════════════════════════════════════════ */
+
+/* Hidden in dark mode */
+.ch-sun, .ch-cloud { display: none; }
+
+/* ── Sky background ──────────────────────────────────────────────────── */
+[data-theme="light"] .collection-header {
+  background:
+    /* Sun glow — upper right */
+    radial-gradient(ellipse 160px 130px at 95% -10%, rgba(255,240,120,0.7) 0%, rgba(255,220,80,0.3) 45%, transparent 75%),
+    /* Large cloud cluster — bottom left */
+    radial-gradient(ellipse 220px 100px at -2%  92%, rgba(255,255,255,0.92) 0%, transparent 70%),
+    radial-gradient(ellipse 160px  80px at  8%  78%, rgba(255,255,255,0.85) 0%, transparent 68%),
+    radial-gradient(ellipse 120px  65px at 18%  95%, rgba(255,255,255,0.78) 0%, transparent 65%),
+    /* Medium cloud cluster — bottom right */
+    radial-gradient(ellipse 200px  90px at 96%  95%, rgba(255,255,255,0.9)  0%, transparent 70%),
+    radial-gradient(ellipse 140px  70px at 84%  80%, rgba(255,255,255,0.82) 0%, transparent 67%),
+    radial-gradient(ellipse  90px  55px at 74%  95%, rgba(255,255,255,0.72) 0%, transparent 65%),
+    /* Wispy clouds — upper center */
+    radial-gradient(ellipse 130px  45px at 48%  12%, rgba(255,255,255,0.55) 0%, transparent 65%),
+    radial-gradient(ellipse  80px  35px at 58%   5%, rgba(255,255,255,0.45) 0%, transparent 65%),
+    /* Sky gradient: bright at top, warmer at bottom */
+    linear-gradient(175deg, #48b8ff 0%, #65c8ff 25%, #87d5ff 55%, #aee3ff 80%, #cceeff 100%) !important;
+  border: 1px solid rgba(100, 190, 255, 0.5) !important;
+  box-shadow:
+    0 6px 30px rgba(0, 90, 200, 0.14),
+    0 2px 8px  rgba(0, 140, 255, 0.10),
+    inset 0 1px 0 rgba(255,255,255,0.6) !important;
+}
+
+/* ── Sun decoration ─────────────────────────────────────────────────── */
+[data-theme="light"] .ch-sun {
+  display: block;
+  position: absolute;
+  top: -28px;
+  right: 28px;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fffde0 0%, #ffe566 35%, #ffcc00 65%, #ffaa00 100%);
+  box-shadow:
+    0 0 0   8px rgba(255,230, 80,0.22),
+    0 0 0  18px rgba(255,220, 60,0.14),
+    0 0 0  32px rgba(255,210, 40,0.08),
+    0 0 0  50px rgba(255,200, 20,0.04);
+  filter: blur(0.5px);
+  pointer-events: none;
+}
+
+/* ── Cloud puff blobs ────────────────────────────────────────────────── */
+/* Each cloud uses box-shadow offsets to build the classic multi-lobe puff. */
+[data-theme="light"] .ch-cloud {
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(2.5px);
+}
+
+/* Cloud A — large, bottom-left cluster anchor */
+[data-theme="light"] .ch-cloud-a {
+  width:  180px;
+  height:  80px;
+  bottom: -28px;
+  left:  -16px;
+  background: rgba(255,255,255,0.82);
+  box-shadow:
+     55px -28px 0 18px rgba(255,255,255,0.78),
+    115px -16px 0 10px rgba(255,255,255,0.70),
+     28px -44px 0  8px rgba(255,255,255,0.65),
+     80px -48px 0  6px rgba(255,255,255,0.60);
+}
+
+/* Cloud B — right side, mid-height */
+[data-theme="light"] .ch-cloud-b {
+  width:  140px;
+  height:  62px;
+  bottom: -20px;
+  right:  90px;
+  background: rgba(255,255,255,0.80);
+  box-shadow:
+     44px -22px 0 14px rgba(255,255,255,0.74),
+     90px -12px 0  8px rgba(255,255,255,0.66),
+     22px -36px 0  6px rgba(255,255,255,0.58);
+}
+
+/* Cloud C — small wispy cloud, upper center */
+[data-theme="light"] .ch-cloud-c {
+  width:  100px;
+  height:  40px;
+  top:    -8px;
+  left:   42%;
+  background: rgba(255,255,255,0.55);
+  box-shadow:
+     32px -16px 0 10px rgba(255,255,255,0.50),
+     65px  -8px 0  6px rgba(255,255,255,0.42);
+}
+
+/* ── "Misfitz" title: rainbow gradient text ─────────────────────────── */
+[data-theme="light"] .ch-title {
+  background: linear-gradient(120deg,
+    #0055ee  0%,
+    #6622cc 28%,
+    #cc2299 52%,
+    #ee5500 76%,
+    #cc8800 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 4px rgba(100, 0, 220, 0.22));
+}
+
+/* ── Collection title: dark mode — 3D extruded gold ─────────────────────────── */
+[data-theme="dark"] .ch-title {
+  background: linear-gradient(
+    180deg,
+    #ffffff  0%,
+    #fff8b0  4%,
+    #ffd700 13%,
+    #f0a000 26%,
+    #7a4800 42%,
+    #c88000 54%,
+    #f0b800 65%,
+    #ffe044 78%,
+    #fff8b0 90%,
+    #ffffff 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow:
+    0 1px 0 rgba(180, 100,  0, 1.00),
+    0 2px 0 rgba(160,  80,  0, 0.92),
+    0 3px 0 rgba(140,  65,  0, 0.84),
+    0 4px 0 rgba(110,  50,  0, 0.76),
+    0 5px 0 rgba( 80,  35,  0, 0.68),
+    0 6px 0 rgba( 55,  22,  0, 0.58),
+    0 8px 18px rgba(0,   0,  0, 0.95),
+    0 18px 36px rgba(0,  0,  0, 0.55),
+    0 0   50px rgba(255,200,  0, 0.45),
+    0 0   90px rgba(255,160,  0, 0.20);
+  filter: none;
+}
+
+/* ── BINDER badge: vivid gradient pill ──────────────────────────────── */
+[data-theme="light"] .ch-badge {
+  background: linear-gradient(120deg, #0077ff 0%, #8833ee 60%, #cc2299 100%) !important;
+  box-shadow: 0 2px 10px rgba(80, 40, 200, 0.38), 0 1px 0 rgba(255,255,255,0.25) inset !important;
+}
+
+/* ── NFT count: vivid blue-to-purple gradient ───────────────────────── */
+[data-theme="light"] .ch-count {
+  background: linear-gradient(120deg, #0055cc 0%, #9922cc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 3px rgba(80, 0, 180, 0.20));
+}
+
+/* ── Accent left stripe: rainbow in light mode ──────────────────────── */
+[data-theme="light"] .ch-stripe {
+  background: linear-gradient(180deg,
+    #ff6600 0%,
+    #cc00aa 33%,
+    #5500ee 67%,
+    #0088ff 100%
+  ) !important;
+}
+
+/* ── Description text: deep navy so it reads on sky blue ────────────── */
+[data-theme="light"] .ch-desc {
+  color: rgba(0, 30, 80, 0.70) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FULL-PAGE SKY — Light mode: scattered cloud blobs across the whole
+   viewport. background-attachment: fixed = parallax sky (clouds stay
+   fixed while binder content scrolls over them).
+═══════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  background-image:
+    /* ── Sun glow — upper right ── */
+    radial-gradient(ellipse 320px 260px at 92%  2%, rgba(255,240,100,0.55) 0%, rgba(255,220,60,0.22) 42%, transparent 70%),
+    /* ── Cloud cluster — top left ── */
+    radial-gradient(ellipse 380px 170px at -4% 10%, rgba(255,255,255,0.78) 0%, transparent 68%),
+    radial-gradient(ellipse 260px 125px at  5% 22%, rgba(255,255,255,0.70) 0%, transparent 65%),
+    radial-gradient(ellipse 190px  95px at 15% 30%, rgba(255,255,255,0.58) 0%, transparent 62%),
+    /* ── Wispy cloud — top center ── */
+    radial-gradient(ellipse 240px  80px at 42%  6%, rgba(255,255,255,0.56) 0%, transparent 65%),
+    radial-gradient(ellipse 160px  58px at 58%  2%, rgba(255,255,255,0.46) 0%, transparent 62%),
+    /* ── Cloud cluster — top right (flanking sun) ── */
+    radial-gradient(ellipse 200px  90px at 76% 16%, rgba(255,255,255,0.62) 0%, transparent 65%),
+    radial-gradient(ellipse 140px  65px at 87% 24%, rgba(255,255,255,0.52) 0%, transparent 62%),
+    /* ── Cloud cluster — mid left ── */
+    radial-gradient(ellipse 300px 130px at -3% 50%, rgba(255,255,255,0.64) 0%, transparent 68%),
+    radial-gradient(ellipse 210px  95px at  7% 60%, rgba(255,255,255,0.55) 0%, transparent 65%),
+    radial-gradient(ellipse 150px  70px at 16% 68%, rgba(255,255,255,0.44) 0%, transparent 62%),
+    /* ── Cloud cluster — mid right ── */
+    radial-gradient(ellipse 270px 115px at 102% 46%, rgba(255,255,255,0.62) 0%, transparent 68%),
+    radial-gradient(ellipse 190px  85px at  93% 56%, rgba(255,255,255,0.54) 0%, transparent 65%),
+    /* ── Scattered small wisps — mid page ── */
+    radial-gradient(ellipse 140px  52px at 30% 38%, rgba(255,255,255,0.38) 0%, transparent 62%),
+    radial-gradient(ellipse 110px  44px at 65% 32%, rgba(255,255,255,0.34) 0%, transparent 60%),
+    radial-gradient(ellipse 120px  48px at 48% 55%, rgba(255,255,255,0.30) 0%, transparent 60%),
+    /* ── Cloud cluster — lower left ── */
+    radial-gradient(ellipse 340px 150px at -2% 82%, rgba(255,255,255,0.70) 0%, transparent 70%),
+    radial-gradient(ellipse 230px 110px at  8% 92%, rgba(255,255,255,0.62) 0%, transparent 67%),
+    radial-gradient(ellipse 160px  80px at 20% 88%, rgba(255,255,255,0.52) 0%, transparent 64%),
+    /* ── Cloud cluster — lower right ── */
+    radial-gradient(ellipse 300px 135px at 104% 80%, rgba(255,255,255,0.68) 0%, transparent 70%),
+    radial-gradient(ellipse 210px 100px at  94% 90%, rgba(255,255,255,0.58) 0%, transparent 67%),
+    radial-gradient(ellipse 150px  72px at  82% 95%, rgba(255,255,255,0.48) 0%, transparent 64%),
+    /* ── Wisps — lower middle ── */
+    radial-gradient(ellipse 130px  50px at 38% 78%, rgba(255,255,255,0.35) 0%, transparent 62%),
+    radial-gradient(ellipse 100px  42px at 62% 84%, rgba(255,255,255,0.30) 0%, transparent 60%),
+    /* ── Sky gradient base ── */
+    linear-gradient(180deg,
+      #42b0ff  0%,
+      #5ec0ff 15%,
+      #80d0ff 40%,
+      #a4dfff 65%,
+      #c4eeff 85%,
+      #d8f5ff 100%
+    ) !important;
+  background-attachment: fixed !important;
+  background-color: #d8f5ff !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SIDEBAR GLASS PANELS — frosted-glass look that lets the sky show through
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Section labels: TIER / TRAITS / SORT / COLLECTIONS ── */
+[data-theme="light"] .sb-section-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  background: linear-gradient(120deg, #0055ee 0%, #9922cc 45%, #dd2299 85%, #ff5500 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 3px rgba(120, 0, 220, 0.28))
+          drop-shadow(0 0  6px rgba(200, 50, 255, 0.14));
+}
+
+/* ── Cards count label ── */
+[data-theme="light"] .sb-count-label {
+  font-size: 12px;
+  font-weight: 800;
+  background: linear-gradient(120deg, #0066cc 0%, #9922cc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 2px rgba(80, 0, 180, 0.20));
+}
+
+/* ── Tier buttons: give each button a subtle raised/bubble feel ── */
+[data-theme="light"] .sb-tier-btn {
+  letter-spacing: 0.04em;
+  transition: transform 0.1s, box-shadow 0.15s, background 0.15s !important;
+}
+[data-theme="light"] .sb-tier-btn:hover {
+  transform: translateY(-1px) !important;
+}
+[data-theme="light"] .sb-tier-btn:active {
+  transform: translateY(0) !important;
+}
+
+/* ── Collection name in switcher ── */
+[data-theme="light"] .cs-coll-name {
+  background: linear-gradient(120deg, #0044bb 0%, #8822cc 55%, #cc2288 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 2px rgba(100, 0, 200, 0.22));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DETAIL MODAL — Light mode: flip contrast on all panel text.
+   Base classes target dark-glass panels (light text). Light mode panels
+   are pastel, so we override everything to dark-navy text.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Stat labels (formerly translucent tier-colored on dark) ── */
+[data-theme="light"] .tcg-stat-lbl,
+[data-theme="light"] .tcg-lbl-mythic,
+[data-theme="light"] .tcg-lbl-legendary,
+[data-theme="light"] .tcg-lbl-epic,
+[data-theme="light"] .tcg-lbl-rare,
+[data-theme="light"] .tcg-lbl-uncommon,
+[data-theme="light"] .tcg-lbl-common {
+  color: rgba(10, 30, 56, 0.58) !important;
+  font-size: inherit !important;
+}
+
+/* ── Primary stat values ── */
+[data-theme="light"] .tcg-stat-val { color: #0a1e38 !important; font-size: inherit !important; }
+
+/* ── Sub / secondary stat values ── */
+[data-theme="light"] .tcg-stat-sub,
+[data-theme="light"] .tcg-sub-mythic,
+[data-theme="light"] .tcg-sub-legendary,
+[data-theme="light"] .tcg-sub-epic,
+[data-theme="light"] .tcg-sub-rare,
+[data-theme="light"] .tcg-sub-uncommon,
+[data-theme="light"] .tcg-sub-common {
+  color: rgba(10, 30, 56, 0.46) !important;
+  font-size: inherit !important;
+}
+
+/* ── Trait text ── */
+[data-theme="light"] .tcg-trait-grid-mythic    .tcg-trait-type { color: rgba(140,40,200,0.75) !important; font-size: inherit !important; }
+[data-theme="light"] .tcg-trait-grid-legendary .tcg-trait-type { color: rgba(160,110,0,0.75)  !important; font-size: inherit !important; }
+[data-theme="light"] .tcg-trait-grid-epic      .tcg-trait-type { color: rgba(30,80,200,0.75)  !important; font-size: inherit !important; }
+[data-theme="light"] .tcg-trait-grid-rare      .tcg-trait-type { color: rgba(180,20,20,0.75)  !important; font-size: inherit !important; }
+[data-theme="light"] .tcg-trait-grid-uncommon  .tcg-trait-type { color: rgba(20,130,50,0.75)  !important; font-size: inherit !important; }
+[data-theme="light"] .tcg-trait-grid-common    .tcg-trait-type { color: rgba(20,60,180,0.75)  !important; font-size: inherit !important; }
+[data-theme="light"] .tcg-trait-grid-mythic      .tcg-trait-val { color: #7700bb !important; font-size: inherit !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-stroke: unset !important; paint-order: normal !important; }
+[data-theme="light"] .tcg-trait-grid-legendary   .tcg-trait-val { color: #8a6000 !important; font-size: inherit !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-stroke: unset !important; paint-order: normal !important; }
+[data-theme="light"] .tcg-trait-grid-epic        .tcg-trait-val { color: #1144cc !important; font-size: inherit !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-stroke: unset !important; paint-order: normal !important; }
+[data-theme="light"] .tcg-trait-grid-rare         .tcg-trait-val { color: #bb1111 !important; font-size: inherit !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-stroke: unset !important; paint-order: normal !important; }
+[data-theme="light"] .tcg-trait-grid-uncommon    .tcg-trait-val { color: #116622 !important; font-size: inherit !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-stroke: unset !important; paint-order: normal !important; }
+[data-theme="light"] .tcg-trait-grid-common      .tcg-trait-val { color: #1133bb !important; font-size: inherit !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-stroke: unset !important; paint-order: normal !important; }
+[data-theme="light"] .tcg-trait-pct  { font-size: inherit !important; }
+
+/* Trait dot: natural accent colors visible on dark panel — no override needed */
+
+/* ── "Traits" pill — deepen Epic + Common ── */
+/* traits-pill epic/common: natural styles work on dark panel */
+
+/* ── Stats section divider ── */
+[data-theme="light"] .tcg-stats-mythic    { border-bottom-color: rgba(200,60,255,.28) !important; }
+[data-theme="light"] .tcg-stats-legendary { border-bottom-color: rgba(210,160,0,.28)  !important; }
+[data-theme="light"] .tcg-stats-epic      { border-bottom-color: rgba(34,102,238,.22) !important; }
+[data-theme="light"] .tcg-stats-rare      { border-bottom-color: rgba(200,0,0,.24)    !important; }
+[data-theme="light"] .tcg-stats-uncommon  { border-bottom-color: rgba(63,174,90,.24)  !important; }
+[data-theme="light"] .tcg-stats-common    { border-bottom-color: rgba(34,68,204,.22)  !important; }
+
+/* ── Trait grid container border ── */
+[data-theme="light"] .tcg-trait-grid-mythic    { border-color: rgba(200,60,255,.32) !important; }
+[data-theme="light"] .tcg-trait-grid-legendary { border-color: rgba(210,160,0,.32)  !important; }
+[data-theme="light"] .tcg-trait-grid-epic      { border-color: rgba(34,102,238,.26) !important; }
+[data-theme="light"] .tcg-trait-grid-rare      { border-color: rgba(200,0,0,.28)    !important; }
+[data-theme="light"] .tcg-trait-grid-uncommon  { border-color: rgba(63,174,90,.26)  !important; }
+[data-theme="light"] .tcg-trait-grid-common    { border-color: rgba(34,68,204,.24)  !important; }
+
+/* ── Trait row separators ── */
+[data-theme="light"] .tcg-trait-row-mythic    { border-bottom-color: rgba(200,60,255,.16) !important; }
+[data-theme="light"] .tcg-trait-row-legendary { border-bottom-color: rgba(210,160,0,.16)  !important; }
+[data-theme="light"] .tcg-trait-row-epic      { border-bottom-color: rgba(34,102,238,.13) !important; }
+[data-theme="light"] .tcg-trait-row-rare      { border-bottom-color: rgba(200,0,0,.14)    !important; }
+[data-theme="light"] .tcg-trait-row-uncommon  { border-bottom-color: rgba(63,174,90,.12)  !important; }
+[data-theme="light"] .tcg-trait-row-common    { border-bottom-color: rgba(34,68,204,.12)  !important; }
+
+/* ── Footer row ── */
+[data-theme="light"] .tcg-footer-mythic    { border-color: rgba(200,60,255,.24) !important; background: rgba(200,60,255,.05) !important; }
+[data-theme="light"] .tcg-footer-legendary { border-color: rgba(210,160,0,.24)  !important; background: rgba(210,160,0,.05)  !important; }
+[data-theme="light"] .tcg-footer-epic      { border-color: rgba(34,102,238,.20) !important; background: rgba(34,102,238,.04) !important; }
+[data-theme="light"] .tcg-footer-rare      { border-color: rgba(200,0,0,.20)    !important; background: rgba(200,0,0,.03)    !important; }
+[data-theme="light"] .tcg-footer-uncommon  { border-color: rgba(63,174,90,.20)  !important; background: rgba(63,174,90,.03)  !important; }
+[data-theme="light"] .tcg-footer-common    { border-color: rgba(34,68,204,.18)  !important; background: rgba(34,68,204,.03)  !important; }
+
+/* Rank number gradient — darker variants for light-mode white rank tag background */
+[data-theme="light"] .tcg-body-mythic    .tcg-rank-num { background: linear-gradient(135deg, #cc0088 0%, #8800cc 30%, #0055cc 55%, #cc8800 80%, #cc4400 100%) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }
+[data-theme="light"] .tcg-body-legendary .tcg-rank-num { background: linear-gradient(135deg, #8a5a00 0%, #c89000 45%, #8a5a00 100%) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }
+[data-theme="light"] .tcg-body-epic      .tcg-rank-num { background: linear-gradient(135deg, #0033aa 0%, #1155ee 50%, #0033aa 100%) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }
+[data-theme="light"] .tcg-body-rare      .tcg-rank-num { background: linear-gradient(135deg, #990000 0%, #dd2222 40%, #dd5500 70%, #990000 100%) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }
+[data-theme="light"] .tcg-body-uncommon  .tcg-rank-num { background: linear-gradient(135deg, #0a5520 0%, #1a8035 45%, #0a5520 100%) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }
+[data-theme="light"] .tcg-body-common    .tcg-rank-num { background: linear-gradient(135deg, #0a2299 0%, #2244cc 45%, #0a2299 100%) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }
+
+/* ── Dark mode native <select> — set color-scheme via CSS so it applies before JS hydration ── */
+/* Without this, browsers flash a white box before React sets colorScheme: "dark" inline.       */
+[data-theme="dark"] select {
+  color-scheme: dark;
+  background: rgba(18,16,28,0.97) !important;
+  color: rgba(255,255,255,0.88) !important;
+  border-color: rgba(255,255,255,0.18) !important;
+}
+
+/* ── Library title — dark mode: extruded 3D gold ───────────────────────────── */
+/* Stacked text-shadows build depth beneath the gradient-filled text.           */
+/* text-shadow works fine alongside background-clip:text (no compositing issue) */
+.lib-title-dark {
+  background: linear-gradient(
+    180deg,
+    #fffbe0 0%,
+    #ffe566 8%,
+    #f0c000 22%,
+    #c88800 42%,
+    #e8a800 58%,
+    #f0c000 72%,
+    #ffe566 88%,
+    #fffbe0 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow:
+    0 1px 0 rgba(160, 90,  0, 0.95),
+    0 2px 0 rgba(140, 75,  0, 0.88),
+    0 3px 0 rgba(120, 60,  0, 0.80),
+    0 4px 0 rgba(100, 50,  0, 0.72),
+    0 5px 0 rgba( 80, 40,  0, 0.64),
+    0 6px 0 rgba( 60, 30,  0, 0.55),
+    0 8px 16px rgba(0,  0,  0, 0.90),
+    0 16px 32px rgba(0,  0,  0, 0.50),
+    0 0   50px rgba(255,180, 0, 0.25);
 }

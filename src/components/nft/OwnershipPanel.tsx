@@ -1,3 +1,5 @@
+import { truncateAddress } from "@/lib/format";
+
 interface OwnershipPanelProps {
   ownerAddress: string | null;
 }
@@ -11,9 +13,7 @@ export function OwnershipPanel({ ownerAddress }: OwnershipPanelProps) {
   return (
     <div className="text-xs">
       <span className="text-subtle">Currently held by </span>
-      <span className="text-title font-mono">
-        {ownerAddress.slice(0, 10)}…{ownerAddress.slice(-6)}
-      </span>
+      <span className="text-title font-mono">{truncateAddress(ownerAddress)}</span>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { DataSource } from "../types";
 import type { CollectionData, NftData } from "@/types";
 import { getCollectionPlugin } from "@/lib/collections/registry";
+import { MOCK_XCH_USD_RATE } from "@/lib/rarity/enrich";
 import misfitzFixture from "./fixtures/misfitz.json";
 
 // Fixture files are shaped like a real NFT indexer response (MintGarden-style: launcherId,
@@ -21,8 +22,15 @@ function toNftData(slug: string, raw: (typeof misfitzFixture)["nfts"][number]): 
     rarityRank: raw.rarityRank,
     currentOwnerAddress: raw.currentOwnerAddress,
     fairValue: raw.fairValue
-      ? { ...raw.fairValue, estimatedAt: new Date().toISOString() }
+      ? {
+          ...raw.fairValue,
+          totalEstimateUsd: Math.round(raw.fairValue.totalEstimate * MOCK_XCH_USD_RATE * 100) / 100,
+          estimatedAt: new Date().toISOString(),
+        }
       : null,
+    rarityScore: null,
+    listing: null,
+    dealScore: null,
   };
 }
 
@@ -39,6 +47,8 @@ export class MockDataSource implements DataSource {
       bannerUrl: null,
       iconUrl: null,
       nftCount: fixture.nftCount,
+      totalSupply: plugin.totalSupply,
+      rarityTiers: plugin.rarityTiers,
       theme: plugin.theme,
     };
   }

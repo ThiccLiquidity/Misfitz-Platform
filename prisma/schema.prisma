@@ -60,6 +60,13 @@ model Collection {
   dataSourceKey     String   @default("mock") // "mock" | "mintgarden" | future adapters
   themeConfig       String // JSON: accent color, logo, card chrome tweaks — see src/lib/theme
   traitSchema       String? // JSON: optional hint for how to render this collection's traits
+  // True series size (e.g. 10000), independent of how many NFTs are currently loaded into
+  // `nfts` below. Rarity tiers (src/lib/rarity) are computed as rarityRank/totalSupply, so this
+  // must stay the real collection size even while we're importing a small batch at a time.
+  totalSupply       Int      @default(0)
+  // JSON: optional override of rarity tier percentage cutoffs (src/lib/rarity/tiers.ts). Null
+  // means "use the platform defaults" — most collections never need to set this.
+  tierConfig        String?
   createdAt         DateTime @default(now())
 
   nfts    Nft[]

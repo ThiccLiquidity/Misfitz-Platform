@@ -24,6 +24,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setMode((prev) => {
       const next = prev === "dark" ? "light" : "dark";
       window.localStorage.setItem(STORAGE_KEY, next);
+      // Keep <html> color-scheme in sync so native controls (select, input, etc.)
+      // switch immediately without waiting for a re-render cycle.
+      document.documentElement.style.colorScheme = next === "dark" ? "dark" : "light";
       return next;
     });
   };
