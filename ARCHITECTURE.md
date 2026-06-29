@@ -17,7 +17,10 @@ foundation so none of it is Misfitz-specific:
 - **The Binder** — the core browsing surface, not a generic grid. Spec validated via an interactive
   prototype, see §11.
 - **Fair Value Estimator** — every NFT gets an explainable estimate (floor + rarity premium + trait
-  premium, later sales/demand/reward premiums), never a mystery number.
+  premium, later sales/demand/reward premiums), never a mystery number. The full locked
+  ranking + valuation model (OpenRarity, special-number badges, robust floor, dynamic trait
+  heat/reputation, range + confidence) is specified in **VALUATION.md** — the source of truth the
+  `src/lib/rarity` + `src/lib/valuation` code is built against.
 - **Profiles, levels, badges, leaderboards** — collector identity is separate from wallet ownership (see
   §5/§6). Badges are permanent earned events; collector levels are permanent once reached (confirmed —
   selling down does not demote a collector).
