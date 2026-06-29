@@ -86,7 +86,7 @@ export async function listAddressNfts(
   address: string,
   cursor?: string | null,
   size = 50,
-  type = "address",
+  type = "owned",
 ): Promise<MgPage<MgListItem>> {
   const hex = addressToPuzzleHashHex(address);
   if (!hex) return EMPTY_PAGE;
