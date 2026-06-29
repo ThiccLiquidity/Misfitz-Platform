@@ -5,7 +5,7 @@ import { TIER_ORDER, getTierVisual, type TierId } from "@/lib/rarity/tiers";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 export type TierFilter = "all" | TierId;
-export type SortKey = "rank-asc" | "rank-desc" | "token-asc" | "token-desc";
+export type SortKey = "rank-asc" | "rank-desc" | "deal-desc" | "token-asc" | "token-desc";
 export type TraitFilters = Record<string, string>;
 
 interface FilterSidebarProps {
@@ -25,6 +25,7 @@ interface FilterSidebarProps {
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "rank-asc",   label: "Rarest first"      },
   { value: "rank-desc",  label: "Most common first"  },
+  { value: "deal-desc",  label: "Best deals first"   },
   { value: "token-asc",  label: "Token # ↑"          },
   { value: "token-desc", label: "Token # ↓"          },
 ];

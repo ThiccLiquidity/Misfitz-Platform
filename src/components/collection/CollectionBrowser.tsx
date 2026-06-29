@@ -11,6 +11,7 @@ import { useThemeMode } from "@/components/theme/ThemeProvider";
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "rank-asc",   label: "Rarest first"     },
   { value: "rank-desc",  label: "Most common first" },
+  { value: "deal-desc",  label: "Best deals first"  },
   { value: "token-asc",  label: "Token # ↑"         },
   { value: "token-desc", label: "Token # ↓"         },
 ];
@@ -85,6 +86,7 @@ export function CollectionBrowser({ collection, nfts, allCollections }: Collecti
     switch (sort) {
       case "rank-asc":   sorted.sort((a, b) => (a.rarityRank ?? 99999) - (b.rarityRank ?? 99999)); break;
       case "rank-desc":  sorted.sort((a, b) => (b.rarityRank ?? 0)     - (a.rarityRank ?? 0));     break;
+      case "deal-desc":  sorted.sort((a, b) => (b.dealScore?.score ?? -1) - (a.dealScore?.score ?? -1)); break;
       case "token-asc":  sorted.sort((a, b) => tokenNum(a) - tokenNum(b));                          break;
       case "token-desc": sorted.sort((a, b) => tokenNum(b) - tokenNum(a));                          break;
     }
