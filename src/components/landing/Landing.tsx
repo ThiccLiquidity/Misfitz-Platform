@@ -32,7 +32,7 @@ export function Landing() {
         </nav>
 
         {/* CTA hotspots */}
-        <a href="/binder" aria-label="Open my binder" className="absolute" style={{ left: "24.6%", top: "74.5%", width: "16.4%", height: "10%" }} />
+        <a href="/browse" aria-label="Open my binder" className="absolute" style={{ left: "24.6%", top: "74.5%", width: "16.4%", height: "10%" }} />
         <a href="/signup" aria-label="Create account" className="absolute" style={{ left: "41.8%", top: "74.5%", width: "16.4%", height: "10%" }} />
         <a href="/browse" aria-label="Explore NFTs" className="absolute" style={{ left: "59%", top: "74.5%", width: "16.4%", height: "10%" }} />
       </div>

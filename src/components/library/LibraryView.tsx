@@ -2,6 +2,7 @@
 
 import type { CollectionData } from "@/types";
 import { CollectionCoverCard, ComingSoonCard } from "./CollectionCoverCard";
+import { YourBinderCover } from "./YourBinderCover";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // Enough placeholders so the shelf always looks full regardless of how many real
@@ -119,6 +120,9 @@ export function LibraryView({ collections }: LibraryViewProps) {
             className="flex gap-2 items-end overflow-x-auto pb-1"
             style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
           >
+            <div className="flex-1 flex-shrink-0" style={{ minWidth: "clamp(72px, 11vw, 130px)" }}>
+              <YourBinderCover />
+            </div>
             {collections.map((c) => (
               <div key={c.slug} className="flex-1 flex-shrink-0" style={{ minWidth: "clamp(72px, 11vw, 130px)" }}>
                 <CollectionCoverCard collection={c} />
