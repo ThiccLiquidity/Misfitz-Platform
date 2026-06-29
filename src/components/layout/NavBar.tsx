@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
@@ -24,8 +25,9 @@ export function NavBar() {
           : "0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
-      <Link href="/" className="text-lg transition hover:opacity-80" aria-label="Traitfolio home">
-        <Wordmark />
+      <Link href="/" className="flex items-center gap-2 transition hover:opacity-80" aria-label="Traitfolio home">
+        <Image src="/brand/logo-mark.png" alt="" width={425} height={478} className="h-7 w-auto" priority />
+        <Wordmark className="text-lg" />
       </Link>
 
       <nav className="flex items-center gap-3">

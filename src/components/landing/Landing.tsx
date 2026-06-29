@@ -1,19 +1,23 @@
 import Link from "next/link";
-import { BinderHero } from "./BinderHero";
+import Image from "next/image";
 
 // Logged-out home (the "/" route). Three paths — your binder, create a profile, or explore — over
 // the binder hero, with a placeholder search. Stats strip intentionally omitted for now.
 export function Landing() {
   return (
     <div className="mx-auto max-w-5xl px-4 pb-20 pt-4 text-center">
-      <div className="mx-auto mt-2 max-w-md">
-        <BinderHero />
+      <div className="mx-auto mt-4 max-w-md">
+        <Image
+          src="/brand/logo-full.png"
+          alt="Traitfolio — The home of digital collecting"
+          width={705}
+          height={656}
+          className="mx-auto h-auto w-full max-w-xs sm:max-w-sm"
+          priority
+        />
       </div>
 
-      <h1 className="text-title mt-14 text-4xl font-black tracking-tight sm:text-5xl">
-        THE HOME OF <span className="tf-grad">DIGITAL</span> COLLECTING
-      </h1>
-      <p className="text-subtle mx-auto mt-3 max-w-xl text-lg">
+      <p className="text-subtle mx-auto mt-6 max-w-xl text-lg">
         Track your collections. Discover new ones. Flex what you own.
       </p>
 
