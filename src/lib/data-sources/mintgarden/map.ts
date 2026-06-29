@@ -5,6 +5,7 @@ import { collectibleNumber } from "@/lib/rarity/collectibleNumbers";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 import { buildRankEstimator, type RankEstimator } from "@/lib/rarity/estimateRank";
+import { declaredRarityTier, syntheticRankForTier } from "@/lib/rarity/declaredRarity";
 
 // Pure mappers: raw MintGarden shapes -> our generic domain model (src/types). No network here.
 
@@ -132,6 +133,15 @@ export function mapDetailToNftData(
   if (rarityRank === null) {
     const estimated = getRankEstimator(collection)?.rankOf(traits) ?? null;
     if (estimated !== null) { rarityRank = estimated; rankEstimated = true; }
+  }
+  // Last-resort: collections with no indexer rank AND no frequency table (e.g. TCG sets) often carry
+  // the creator's own declared rarity as a trait. Honor it so the card still tiers/sorts. ≈ flagged.
+  if (rarityRank === null) {
+    const declared = declaredRarityTier(traits);
+    if (declared) {
+      const r = syntheticRankForTier(declared, totalSupply);
+      if (r !== null) { rarityRank = r; rankEstimated = true; }
+    }
   }
   // Prefer a resolved floor (e.g. a live Dexie ask) passed by the caller; fall back to MintGarden's
   // own floor_price. Dexie is the platform's designated floor source (ARCHITECTURE.md §7 market layer).
