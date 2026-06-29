@@ -13,8 +13,8 @@ const righteous = Righteous({
 });
 
 export const metadata: Metadata = {
-  title: "Chia NFT Collector Platform",
-  description: "A collector-first home for Chia NFT collections, starting with Misfitz.",
+  title: "Traitfolio — The home of digital collecting",
+  description: "Traitfolio — track your Chia NFT collections, discover new ones, and flex what you own. Built for collectors.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

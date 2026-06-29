@@ -1428,3 +1428,35 @@ body {
 :root:not([data-theme="light"]) .tcg-trait-pct {
   font-size: inherit !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TRAITFOLIO BRAND
+   ═══════════════════════════════════════════════════════════════════════ */
+.tf-folio-gradient {
+  background: linear-gradient(90deg, #a855f7, #6366f1, #3b82f6, #22d3ee, #34d399, #fbbf24, #f43f5e);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.tf-grad {
+  background: linear-gradient(90deg, #8b5cf6, #3b82f6, #22d3ee);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.tf-binder-cover {
+  background: linear-gradient(160deg, #5b3aa6 0%, #3f2f9e 55%, #2a2270 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tf-holo {
+  background: linear-gradient(135deg, #ff6ec7, #a855f7, #3b82f6, #22d3ee, #34d399);
+  box-shadow: 0 4px 20px rgba(140, 80, 255, 0.35);
+}
+.tf-cta {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: 2px; border-radius: 14px; padding: 16px 20px; text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tf-cta:hover { transform: translateY(-2px); }
+.tf-cta-primary { background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; box-shadow: 0 6px 20px rgba(124, 58, 237, 0.3); }
+.tf-cta-dark { background: #1a1633; color: #fff; border: 1px solid rgba(255, 255, 255, 0.1); }
+.tf-cta-light { background: #ffffff; color: #0a1e38; border: 1px solid rgba(0, 0, 0, 0.08); }
+[data-theme="light"] .tf-cta-dark { background: #15234a; }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 export function NavBar() {
   const { data: session, status } = useSession();
@@ -23,27 +24,18 @@ export function NavBar() {
           : "0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
-      <Link
-        href="/"
-        className="text-sm font-black tracking-tight transition hover:opacity-80"
-        style={{ color: isLight ? "#0a1e38" : "var(--title)" }}
-      >
-        {isLight ? (
-          <span className="flex items-center gap-2">
-            <span
-              className="inline-block px-2 py-0.5 rounded-md text-white text-[10px] font-black tracking-widest uppercase"
-              style={{ background: "linear-gradient(135deg, #2980c8 0%, #1a5fa0 100%)" }}
-            >
-              Chia
-            </span>
-            <span>NFT Collector</span>
-          </span>
-        ) : (
-          "Chia NFT Collector Platform"
-        )}
+      <Link href="/" className="text-lg transition hover:opacity-80" aria-label="Traitfolio home">
+        <Wordmark />
       </Link>
 
       <nav className="flex items-center gap-3">
+        <Link
+          href="/browse"
+          className="hidden text-xs font-semibold transition hover:opacity-70 sm:inline"
+          style={{ color: isLight ? "#2d5a8e" : "var(--subtle)" }}
+        >
+          Browse Collections
+        </Link>
         <ThemeToggle />
         <Link
           href="/portfolio"
