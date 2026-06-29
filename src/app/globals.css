@@ -1379,3 +1379,52 @@ body {
     0 16px 32px rgba(0,  0,  0, 0.50),
     0 0   50px rgba(255,180, 0, 0.25);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DARK MODE CARD TEXT FIX — mirror of the light-mode readability fix above.
+   Dark mode kept the original translucent 6px tier-colored text, which is
+   barely legible when a card is zoomed (detail view). This applies the same
+   `font-size: inherit` enlargement the light fix uses, with bright light-on-
+   dark colors. Scoped to :not([data-theme="light"]) so it covers the default
+   (dark) theme whether or not an explicit data-theme is set.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root:not([data-theme="light"]) .tcg-stat-lbl,
+:root:not([data-theme="light"]) .tcg-lbl-mythic,
+:root:not([data-theme="light"]) .tcg-lbl-legendary,
+:root:not([data-theme="light"]) .tcg-lbl-epic,
+:root:not([data-theme="light"]) .tcg-lbl-rare,
+:root:not([data-theme="light"]) .tcg-lbl-uncommon,
+:root:not([data-theme="light"]) .tcg-lbl-common {
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: inherit !important;
+}
+
+:root:not([data-theme="light"]) .tcg-stat-val {
+  color: #ffffff !important;
+  font-size: inherit !important;
+}
+
+:root:not([data-theme="light"]) .tcg-stat-sub,
+:root:not([data-theme="light"]) .tcg-sub-mythic,
+:root:not([data-theme="light"]) .tcg-sub-legendary,
+:root:not([data-theme="light"]) .tcg-sub-epic,
+:root:not([data-theme="light"]) .tcg-sub-rare,
+:root:not([data-theme="light"]) .tcg-sub-uncommon,
+:root:not([data-theme="light"]) .tcg-sub-common {
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: inherit !important;
+}
+
+:root:not([data-theme="light"]) .tcg-trait-type {
+  color: rgba(255, 255, 255, 0.66) !important;
+  font-size: inherit !important;
+}
+:root:not([data-theme="light"]) .tcg-trait-val {
+  color: #ffffff !important;
+  font-size: inherit !important;
+  font-weight: 700 !important;
+}
+:root:not([data-theme="light"]) .tcg-trait-pct {
+  font-size: inherit !important;
+}
