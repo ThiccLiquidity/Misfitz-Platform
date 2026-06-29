@@ -1,14 +1,13 @@
 import type { NftData } from "@/types";
 import { fetchOwnerNftDetails } from "@/lib/data-sources/mintgarden/owner";
 import { mapDetailToNftData } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { valueRange, type Confidence } from "@/lib/valuation/range";
 
-// The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / Two entry
-// paths). Pulls an address's live holdings from MintGarden, attaches our fair-value estimate, and
-// groups by collection with running totals. No account, no DB writes — purely a read-and-value.
-//
-// Floor source: we prefer the live Dexie floor (cheapest active ask) per collection and fall back
-// to MintGarden's stored floor_price when Dexie has none — Dexie is the designated market source.
+// The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / VALUATION.md).
+// Pulls an address's live holdings from MintGarden, values each NFT, groups by collection, and
+// attaches a per-collection confidence + range driven by how liquid that collection is. No account,
+// no DB writes. Floor prefers live Dexie, falling back to MintGarden.
 
 function round(value: number, decimals = 2): number {
   const f = 10 ** decimals;
@@ -27,8 +26,11 @@ export interface PortfolioGroup {
   floorXch: number | null;
   floorSource: "dexie" | "mintgarden" | "none";
   items: PortfolioNft[];
-  estimateXch: number; // sum of our fair-value estimates
-  listedXch: number; // sum of active listing asks in this group
+  estimateXch: number; // point estimate (sum of fair-value estimates)
+  low: number; // range floor for this collection's estimate
+  high: number; // range ceiling
+  confidence: Confidence; // driven by this collection's liquidity (active listings + recent sales)
+  listedXch: number;
   listedCount: number;
 }
 
@@ -39,8 +41,13 @@ export interface Portfolio {
   totalCount: number;
   totalEstimateXch: number;
   totalEstimateUsd: number;
-  truncated: boolean; // address holds more NFTs than we fetched (see MAX_HOLDINGS)
+  totalLowXch: number;
+  totalHighXch: number;
+  confidence: Confidence; // a portfolio is only as trustworthy as its least-liquid holding
+  truncated: boolean;
 }
+
+const CONF_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 
 export async function getAddressPortfolio(address: string): Promise<Portfolio> {
   const [{ details, truncated }, rate] = await Promise.all([
@@ -60,11 +67,14 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
     }
   }
   const colIds = Array.from(mgFloorByCol.keys());
-  const dexieFloors = await Promise.all(
-    colIds.map((id) => fetchCollectionFloor(id).catch(() => null)),
-  );
+  const [dexieFloors, listingCounts] = await Promise.all([
+    Promise.all(colIds.map((id) => fetchCollectionFloor(id).catch(() => null))),
+    Promise.all(colIds.map((id) => fetchCollectionListingCount(id).catch(() => 0))),
+  ]);
   const floorByCol = new Map<string, { floor: number | null; source: PortfolioGroup["floorSource"] }>();
+  const listingsByCol = new Map<string, number>();
   colIds.forEach((id, i) => {
+    listingsByCol.set(id, listingCounts[i] ?? 0);
     const dexie = dexieFloors[i];
     if (typeof dexie === "number") floorByCol.set(id, { floor: dexie, source: "dexie" });
     else {
@@ -86,6 +96,9 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
         floorSource: resolved.source,
         items: [],
         estimateXch: 0,
+        low: 0,
+        high: 0,
+        confidence: "low",
         listedXch: 0,
         listedCount: 0,
       };
@@ -100,13 +113,24 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
   }
 
   const groups = Array.from(byCol.values()).sort((a, b) => b.estimateXch - a.estimateXch);
+
+  // Per-collection confidence + range. recentSales = 0 until the sales-history feed exists, so the
+  // ceiling today is "medium" (≥3 active listings) — honestly capped.
+  let confidence: Confidence = groups.length ? "high" : "low";
   for (const g of groups) {
     g.estimateXch = round(g.estimateXch);
     g.listedXch = round(g.listedXch);
+    const r = valueRange(g.estimateXch, { activeListings: listingsByCol.get(g.collectionId) ?? 0, recentSales: 0 });
+    g.low = r.low;
+    g.high = r.high;
+    g.confidence = r.confidence;
+    if (CONF_RANK[g.confidence] < CONF_RANK[confidence]) confidence = g.confidence;
   }
 
-  const totalEstimateXch = round(groups.reduce((sum, g) => sum + g.estimateXch, 0));
-  const totalCount = groups.reduce((sum, g) => sum + g.items.length, 0);
+  const totalEstimateXch = round(groups.reduce((s, g) => s + g.estimateXch, 0));
+  const totalLowXch = round(groups.reduce((s, g) => s + g.low, 0));
+  const totalHighXch = round(groups.reduce((s, g) => s + g.high, 0));
+  const totalCount = groups.reduce((s, g) => s + g.items.length, 0);
 
   return {
     address,
@@ -115,6 +139,9 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
     totalCount,
     totalEstimateXch,
     totalEstimateUsd: round(totalEstimateXch * xchUsdRate),
+    totalLowXch,
+    totalHighXch,
+    confidence,
     truncated,
   };
 }

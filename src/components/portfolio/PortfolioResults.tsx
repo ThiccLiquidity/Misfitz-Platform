@@ -1,10 +1,11 @@
 import { formatUsd, formatXch, truncateAddress } from "@/lib/format";
 import type { Portfolio } from "@/lib/portfolio/service";
 import { PortfolioGrid } from "./PortfolioGrid";
+import { ConfidenceChip } from "./ConfidenceChip";
 
 // Server-rendered results: summary banner + notes, then the interactive grid (client).
 export function PortfolioResults({ portfolio }: { portfolio: Portfolio }) {
-  const { groups, totalCount, totalEstimateXch, totalEstimateUsd, truncated, address } = portfolio;
+  const { groups, totalCount, totalEstimateXch, totalEstimateUsd, totalLowXch, totalHighXch, confidence, truncated, address } = portfolio;
 
   if (totalCount === 0) {
     return (
@@ -21,9 +22,14 @@ export function PortfolioResults({ portfolio }: { portfolio: Portfolio }) {
     <div className="mt-8">
       <div className="flex flex-wrap items-end justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] p-5">
         <div>
-          <div className="text-subtle text-xs uppercase tracking-wide">Estimated collection value</div>
+          <div className="flex items-center gap-2">
+            <span className="text-subtle text-xs uppercase tracking-wide">Estimated collection value</span>
+            <ConfidenceChip confidence={confidence} />
+          </div>
           <div className="text-title mt-1 text-3xl font-bold">{formatXch(totalEstimateXch)}</div>
-          <div className="text-subtle text-sm">≈ {formatUsd(totalEstimateUsd)}</div>
+          <div className="text-subtle text-sm">
+            range {formatXch(totalLowXch)} – {formatXch(totalHighXch)} · ≈ {formatUsd(totalEstimateUsd)}
+          </div>
         </div>
         <div className="text-right">
           <div className="text-title text-lg font-semibold">{totalCount} NFTs</div>

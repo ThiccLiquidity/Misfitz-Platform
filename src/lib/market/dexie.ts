@@ -100,6 +100,33 @@ export async function fetchCollectionFloor(
   });
 }
 
+// ── Active listing count (liquidity proxy for the confidence chip) ────────────
+
+/**
+ * Number of active asks for a collection — a cheap liquidity proxy that feeds the value-range
+ * confidence (VALUATION.md Part 3). Capped fetch (we only need "few vs many"); cached 5 min.
+ * Returns 0 for non-col1 ids or on error.
+ */
+export async function fetchCollectionListingCount(dexieCollectionId: string): Promise<number> {
+  if (!dexieCollectionId.startsWith("col1")) return 0;
+
+  return withCache(`listings_${dexieCollectionId}`, 5 * 60_000, async () => {
+    try {
+      const url = new URL(`${DEXIE_BASE}/offers`);
+      url.searchParams.set("status", "1");               // active only
+      url.searchParams.set("offered", dexieCollectionId);
+      url.searchParams.set("requested", "xch");
+      url.searchParams.set("page_size", "20");            // enough to distinguish thin vs liquid
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (!res.ok) return 0;
+      const json = (await res.json()) as { offers?: unknown[] };
+      return Array.isArray(json?.offers) ? json.offers.length : 0;
+    } catch {
+      return 0;
+    }
+  });
+}
+
 // ── Per-NFT active listing ────────────────────────────────────────────────────
 
 /**

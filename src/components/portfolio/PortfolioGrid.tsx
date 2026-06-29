@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { NftRarityCard } from "@/components/nft/NftRarityCard";
 import { NftDetailModal } from "@/components/nft/NftDetailModal";
 import { formatXch } from "@/lib/format";
+import { ConfidenceChip } from "./ConfidenceChip";
 import type { PortfolioGroup, PortfolioNft } from "@/lib/portfolio/service";
 
 type SortKey = "value" | "rarity" | "listed";
@@ -92,13 +93,19 @@ export function PortfolioGrid({ groups }: { groups: PortfolioGroup[] }) {
           <section key={group.collectionId} className="mt-8">
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/10 pb-2">
               <h2 className="text-title text-lg font-semibold">{group.collectionName}</h2>
-              <div className="text-subtle text-xs">
-                {group.items.length} owned · floor{" "}
-                {group.floorXch !== null ? formatXch(group.floorXch) : "—"}
-                {group.floorSource !== "none" && (
-                  <span className="opacity-70"> (via {group.floorSource})</span>
-                )}{" "}
-                · est. <span className="text-title font-semibold">{formatXch(group.estimateXch)}</span>
+              <div className="text-subtle flex flex-wrap items-center gap-2 text-xs">
+                <span>
+                  {group.items.length} owned · floor{" "}
+                  {group.floorXch !== null ? formatXch(group.floorXch) : "—"}
+                  {group.floorSource !== "none" && (
+                    <span className="opacity-70"> (via {group.floorSource})</span>
+                  )}{" "}
+                  · est. <span className="text-title font-semibold">{formatXch(group.estimateXch)}</span>{" "}
+                  <span className="opacity-70">
+                    ({formatXch(group.low)}–{formatXch(group.high)})
+                  </span>
+                </span>
+                <ConfidenceChip confidence={group.confidence} short />
               </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
