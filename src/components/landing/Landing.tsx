@@ -1,67 +1,29 @@
 import Link from "next/link";
 import Image from "next/image";
 
-// Traitfolio landing (logged-out home). Two-column hero from the mockup: framed binder on the left,
-// headline on the right, then the three CTAs + placeholder search over a warm gradient.
+// Landing = the full branded mockup image, shown as-is so the page looks exactly like the artwork.
+// Invisible <Link> hotspots sit over the baked-in buttons so they actually work. Positions are
+// percentages of the image, so they stay aligned at every size. (Fine-tuned against a screenshot.)
 export function Landing() {
   return (
-    <div className="tf-hero relative mx-auto max-w-6xl overflow-hidden rounded-3xl px-5 py-10 sm:px-8 sm:py-14">
-      <div className="grid items-center gap-8 lg:grid-cols-2">
-        {/* Binder */}
-        <div className="mx-auto w-full max-w-md overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/5">
-          <Image
-            src="/brand/hero-binder.png"
-            alt="Traitfolio collector binder"
-            width={691}
-            height={635}
-            className="h-auto w-full"
-            priority
-          />
-        </div>
+    <div className="relative mx-auto w-full max-w-6xl select-none">
+      <Image
+        src="/brand/landing-hero.png"
+        alt="Traitfolio — The home of digital collecting"
+        width={1536}
+        height={1024}
+        className="h-auto w-full"
+        priority
+      />
 
-        {/* Headline */}
-        <div className="text-center lg:text-left">
-          <h1 className="text-4xl font-black leading-[1.05] tracking-tight text-[#171327] sm:text-5xl">
-            THE HOME OF <span className="tf-grad">DIGITAL</span> COLLECTING.
-          </h1>
-          <p className="mt-4 text-2xl font-black tracking-tight">
-            <span className="text-[#7c3aed]">Discover.</span>{" "}
-            <span className="text-[#2563eb]">Collect.</span>{" "}
-            <span className="text-[#e0399b]">Showcase.</span>
-          </p>
-        </div>
-      </div>
+      {/* nav: logo -> home, Browse -> /browse */}
+      <Link href="/" aria-label="Traitfolio home" className="absolute left-[1%] top-[0.5%] h-[8%] w-[22%]" />
+      <Link href="/browse" aria-label="Browse collections" className="absolute right-[13%] top-[2%] h-[6%] w-[18%]" />
 
       {/* CTAs */}
-      <div className="mx-auto mt-10 grid max-w-4xl gap-3 sm:grid-cols-3">
-        <Link href="/login" className="tf-cta tf-cta-primary">
-          <span className="text-base font-bold">Open My Binder</span>
-          <span className="text-sm opacity-80">Sign In</span>
-        </Link>
-        <Link href="/signup" className="tf-cta tf-cta-dark">
-          <span className="text-base font-bold">Create Account</span>
-          <span className="text-sm opacity-80">Get Started</span>
-        </Link>
-        <Link href="/browse" className="tf-cta tf-cta-light">
-          <span className="text-base font-bold">Browse Collections</span>
-          <span className="text-sm opacity-70">Explore NFTs</span>
-        </Link>
-      </div>
-
-      {/* Placeholder search */}
-      <div className="mx-auto mt-4 max-w-4xl">
-        <div
-          className="flex items-center gap-3 rounded-full border border-black/5 bg-white/90 px-5 py-3.5 text-left text-sm text-slate-500 shadow-sm"
-          title="Search is coming soon"
-        >
-          <span aria-hidden>🔍</span>
-          <span>Search NFTs, Collections, Traits or Collectors…</span>
-        </div>
-      </div>
-
-      <p className="mt-10 text-center text-sm font-semibold text-[#2a2350]">
-        Built for collectors. Not corporations. 💜
-      </p>
+      <Link href="/login" aria-label="Open my binder" className="absolute left-[6%] top-[61%] h-[9%] w-[24%]" />
+      <Link href="/signup" aria-label="Create account" className="absolute left-[31%] top-[61%] h-[9%] w-[22%]" />
+      <Link href="/browse" aria-label="Explore NFTs" className="absolute left-[55%] top-[61%] h-[9%] w-[24%]" />
     </div>
   );
 }
