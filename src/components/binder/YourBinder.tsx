@@ -3,26 +3,18 @@
 import { useMemo, useState } from "react";
 import type { CollectionData, NftData } from "@/types";
 import { BinderView } from "./BinderView";
+import { BinderCollectionPicker } from "./BinderCollectionPicker";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatUsd, formatXch } from "@/lib/format";
 import type { MyHoldings } from "@/lib/portfolio/myHoldings";
 
-// Binder shell — cards compute rarity from each NFT's own totalSupply, so this only supplies theme.
 const SHELL: CollectionData = {
-  slug: "my-binder",
-  name: "Your Binder",
-  description: null,
-  bannerUrl: null,
-  iconUrl: null,
-  nftCount: 0,
-  totalSupply: 0,
-  theme: { accent: "#8b5cf6" },
-  dexieCollectionId: null,
+  slug: "my-binder", name: "Your Binder", description: null, bannerUrl: null, iconUrl: null,
+  nftCount: 0, totalSupply: 0, theme: { accent: "#8b5cf6" }, dexieCollectionId: null,
 };
 
-// Rarity percentile (lower = rarer), using each NFT's own collection size (VALUATION.md).
 function pct(n: NftData): number {
   return n.rarityRank && n.totalSupply ? (n.rarityRank / n.totalSupply) * 100 : 101;
 }
@@ -39,13 +31,17 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
   const oneCollection = collectionId !== "all";
 
-  // Scope to the chosen collection first (the tier bar + traits reflect this scope).
+  function pickCollection(id: string) {
+    setCollectionId(id);
+    setTraitFilters({});
+    setTier("all");
+  }
+
   const scoped = useMemo(
     () => (oneCollection ? holdings.nfts.filter((n) => n.collectionSlug === collectionId) : holdings.nfts),
     [holdings.nfts, collectionId, oneCollection],
   );
 
-  // Traits only exist once you've narrowed to a single collection.
   const traitOptions = useMemo(() => {
     if (!oneCollection) return {};
     const map: Record<string, Set<string>> = {};
@@ -78,23 +74,6 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     [filtered],
   );
 
-  const collectionSelect = (
-    <select
-      value={collectionId}
-      onChange={(e) => {
-        setCollectionId(e.target.value);
-        setTraitFilters({});
-        setTier("all");
-      }}
-      className="text-title w-full rounded-lg border border-white/15 bg-card-bg px-3 py-2 text-xs font-semibold outline-none"
-    >
-      <option value="all">All collections ({holdings.nfts.length})</option>
-      {holdings.collections.map((c) => (
-        <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
-      ))}
-    </select>
-  );
-
   const sidebarProps = {
     tierFilter: tier, onTierFilter: setTier,
     sort, onSort: setSort,
@@ -107,47 +86,61 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const binderKey = `${collectionId}|${tier}|${sort}|${JSON.stringify(traitFilters)}`;
 
   return (
-    <div className="mx-auto max-w-6xl px-2">
+    <div>
       {holdings.demo && (
         <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400">
           Demo binder (seeded Misfitz) — sign in or paste an address to see your real collection.
         </p>
       )}
 
-      {/* Value header */}
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] p-5">
+      {/* Full-width value header */}
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] px-6 py-6">
         <div>
-          <div className="text-subtle text-xs uppercase tracking-wide">
+          <div className="text-subtle text-xs uppercase tracking-widest">
             {oneCollection ? "This collection's value" : "Your collection value"}
           </div>
-          <div className="text-title mt-1 text-3xl font-bold">{formatXch(shownValue)}</div>
+          <div className="text-title mt-1 text-4xl font-black">{formatXch(shownValue)}</div>
           <div className="text-subtle text-sm">≈ {formatUsd(Math.round(shownValue * holdings.xchUsdRate * 100) / 100)}</div>
         </div>
         <div className="text-right">
-          <div className="text-title text-lg font-semibold">{filtered.length} NFTs</div>
-          <div className="text-subtle text-xs">
+          <div className="text-title text-2xl font-bold">{filtered.length}</div>
+          <div className="text-subtle text-xs uppercase tracking-widest">NFTs</div>
+          <div className="text-subtle mt-1 text-xs">
             {holdings.collections.length} collection{holdings.collections.length === 1 ? "" : "s"}{holdings.truncated ? " · capped" : ""}
           </div>
         </div>
       </div>
 
+      {/* Full-width tier stats bar */}
       <TierStatsBar collection={SHELL} nfts={scoped} />
 
-      {/* Desktop: sidebar (collection picker + filters) + binder */}
+      {/* Desktop: filters · binder · collections */}
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1440 }}>
-        <div className="flex flex-shrink-0 flex-col gap-2" style={{ width: 184 }}>
-          {collectionSelect}
-          <FilterSidebar {...sidebarProps} />
-        </div>
+        <FilterSidebar {...sidebarProps} />
         <div className="min-w-0 flex-1" style={{ maxWidth: 930 }}>
           <BinderView key={binderKey} collection={SHELL} nfts={filtered} />
         </div>
+        <BinderCollectionPicker
+          collections={holdings.collections}
+          totalCount={holdings.nfts.length}
+          selectedId={collectionId}
+          onSelect={pickCollection}
+        />
       </div>
 
-      {/* Mobile: collection + sort on top, then binder */}
+      {/* Mobile: collection + sort, then binder */}
       <div className="flex flex-col gap-2 md:hidden">
         <div className="flex gap-2">
-          <div className="flex-1">{collectionSelect}</div>
+          <select
+            value={collectionId}
+            onChange={(e) => pickCollection(e.target.value)}
+            className="text-title flex-1 rounded-lg border border-white/15 bg-card-bg px-3 py-2 text-xs font-semibold outline-none"
+          >
+            <option value="all">All collections ({holdings.nfts.length})</option>
+            {holdings.collections.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
+            ))}
+          </select>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
