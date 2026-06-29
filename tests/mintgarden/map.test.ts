@@ -77,3 +77,10 @@ test("missing floor => fairValue null but NFT still maps", () => {
   assert.equal(nft.fairValue, null);
   assert.equal(nft.rarityRank, 72);
 });
+
+test("a resolved floor override (e.g. Dexie) replaces MintGarden's floor in valuation", () => {
+  const { nft } = mapDetailToNftData(DETAIL, 10, 2.0); // override floor 1.0 -> 2.0
+  assert.equal(nft.fairValue?.floorValue, 2.0);
+  // rarity premium scales with floor: 2.0 * 0.15 = 0.30
+  assert.equal(nft.fairValue?.rarityPremium, 0.3);
+});

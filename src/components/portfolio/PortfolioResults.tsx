@@ -50,8 +50,11 @@ export function PortfolioResults({ portfolio }: { portfolio: Portfolio }) {
             <h2 className="text-title text-lg font-semibold">{group.collectionName}</h2>
             <div className="text-subtle text-xs">
               {group.items.length} owned · floor{" "}
-              {group.floorXch !== null ? formatXch(group.floorXch) : "—"} · est.{" "}
-              <span className="text-title font-semibold">{formatXch(group.estimateXch)}</span>
+              {group.floorXch !== null ? formatXch(group.floorXch) : "—"}
+              {group.floorSource !== "none" && (
+                <span className="opacity-70"> (via {group.floorSource})</span>
+              )}{" "}
+              · est. <span className="text-title font-semibold">{formatXch(group.estimateXch)}</span>
             </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">

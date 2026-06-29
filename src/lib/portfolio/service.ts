@@ -1,11 +1,14 @@
 import type { NftData } from "@/types";
 import { fetchOwnerNftDetails } from "@/lib/data-sources/mintgarden/owner";
 import { mapDetailToNftData } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 
 // The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / Two entry
 // paths). Pulls an address's live holdings from MintGarden, attaches our fair-value estimate, and
 // groups by collection with running totals. No account, no DB writes — purely a read-and-value.
+//
+// Floor source: we prefer the live Dexie floor (cheapest active ask) per collection and fall back
+// to MintGarden's stored floor_price when Dexie has none — Dexie is the designated market source.
 
 function round(value: number, decimals = 2): number {
   const f = 10 ** decimals;
@@ -22,6 +25,7 @@ export interface PortfolioGroup {
   collectionId: string;
   collectionName: string;
   floorXch: number | null;
+  floorSource: "dexie" | "mintgarden" | "none";
   items: PortfolioNft[];
   estimateXch: number; // sum of our fair-value estimates
   listedXch: number; // sum of active listing asks in this group
@@ -45,15 +49,41 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
   ]);
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
 
+  // Resolve one floor per collection: live Dexie ask first, MintGarden floor_price as fallback.
+  const mgFloorByCol = new Map<string, number | null>();
+  for (const d of details) {
+    if (!mgFloorByCol.has(d.collection.id)) {
+      mgFloorByCol.set(
+        d.collection.id,
+        typeof d.collection.floor_price === "number" ? d.collection.floor_price : null,
+      );
+    }
+  }
+  const colIds = Array.from(mgFloorByCol.keys());
+  const dexieFloors = await Promise.all(
+    colIds.map((id) => fetchCollectionFloor(id).catch(() => null)),
+  );
+  const floorByCol = new Map<string, { floor: number | null; source: PortfolioGroup["floorSource"] }>();
+  colIds.forEach((id, i) => {
+    const dexie = dexieFloors[i];
+    if (typeof dexie === "number") floorByCol.set(id, { floor: dexie, source: "dexie" });
+    else {
+      const mg = mgFloorByCol.get(id) ?? null;
+      floorByCol.set(id, { floor: mg, source: mg !== null ? "mintgarden" : "none" });
+    }
+  });
+
   const byCol = new Map<string, PortfolioGroup>();
   for (const d of details) {
-    const m = mapDetailToNftData(d, xchUsdRate);
+    const resolved = floorByCol.get(d.collection.id) ?? { floor: null, source: "none" as const };
+    const m = mapDetailToNftData(d, xchUsdRate, resolved.floor);
     let group = byCol.get(m.collectionId);
     if (!group) {
       group = {
         collectionId: m.collectionId,
         collectionName: m.collectionName,
-        floorXch: m.collectionFloorXch,
+        floorXch: resolved.floor,
+        floorSource: resolved.source,
         items: [],
         estimateXch: 0,
         listedXch: 0,

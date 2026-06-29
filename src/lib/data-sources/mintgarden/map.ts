@@ -77,12 +77,19 @@ export interface MappedNft {
 }
 
 // Full mapping from an NFT detail, including a live fair-value estimate + deal score.
-export function mapDetailToNftData(detail: MgNftDetail, xchUsdRate = XCH_USD_FALLBACK): MappedNft {
+export function mapDetailToNftData(
+  detail: MgNftDetail,
+  xchUsdRate = XCH_USD_FALLBACK,
+  floorOverrideXch?: number | null,
+): MappedNft {
   const collection = detail.collection;
   const totalSupply = collection.nft_count ?? detail.data?.metadata_json?.series_total ?? 0;
   const rarityRank = parseRank(detail.openrarity_rank);
   const traits = mapTraits(detail);
-  const floorXch = typeof collection.floor_price === "number" ? collection.floor_price : null;
+  // Prefer a resolved floor (e.g. a live Dexie ask) passed by the caller; fall back to MintGarden's
+  // own floor_price. Dexie is the platform's designated floor source (ARCHITECTURE.md §7 market layer).
+  const mgFloor = typeof collection.floor_price === "number" ? collection.floor_price : null;
+  const floorXch = floorOverrideXch ?? mgFloor;
 
   const fairValue: FairValueEstimate | null =
     floorXch !== null
