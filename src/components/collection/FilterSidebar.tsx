@@ -181,23 +181,20 @@ export function FilterSidebar({
           isLight={isLight}
         />
 
-        {/* 6 tiers laid out two-wide so the panel grows outward, not down */}
-        <div className="grid grid-cols-2 gap-2">
-          {TIER_ORDER.map((id) => {
-            const v = getTierVisual(id);
-            return (
-              <TierChip
-                key={id}
-                tierId={id}
-                label={v.label}
-                emoji={v.emoji}
-                active={tierFilter === id}
-                onClick={() => onTierFilter(tierFilter === id ? "all" : id)}
-                isLight={isLight}
-              />
-            );
-          })}
-        </div>
+        {TIER_ORDER.map((id) => {
+          const v = getTierVisual(id);
+          return (
+            <TierChip
+              key={id}
+              tierId={id}
+              label={v.label}
+              emoji={v.emoji}
+              active={tierFilter === id}
+              onClick={() => onTierFilter(tierFilter === id ? "all" : id)}
+              isLight={isLight}
+            />
+          );
+        })}
       </div>
 
       {/* ── Traits ─────────────────────────────────────── */}
