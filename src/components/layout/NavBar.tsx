@@ -45,6 +45,13 @@ export function NavBar() {
 
       <nav className="flex items-center gap-3">
         <ThemeToggle />
+        <Link
+          href="/portfolio"
+          className="text-xs font-semibold hover:opacity-70 transition"
+          style={{ color: isLight ? "#2d5a8e" : "var(--subtle)" }}
+        >
+          Value my wallet
+        </Link>
         {status === "authenticated" ? (
           <>
             <Link

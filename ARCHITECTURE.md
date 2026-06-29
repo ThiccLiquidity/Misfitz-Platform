@@ -265,6 +265,15 @@ interface DataSource {
 - `Collection.dataSourceKey` picks the adapter per collection, so Misfitz could run on mock data while a
   future collection runs live, simultaneously, with no code branching in the UI layer.
 
+**Implemented (live):** `MintGardenDataSource` (src/lib/data-sources/mintgarden) implements the same
+`DataSource` interface against api.mintgarden.io, and `getDataSource(dataSourceKey)` (factory.ts)
+selects mock vs mintgarden. The no-login value view (`/portfolio`, ARCHITECTURE.md Two entry paths)
+uses it directly at request time — paste an XCH address, fetch holdings live, attach a fair-value
+estimate, group by collection. Holdings are never written to the DB (they aren't ours to store);
+only curated collections live in Postgres. Live NFTs are valued by `src/lib/valuation/estimate.ts`,
+an explainable v1 heuristic (floor + rarity premium + trait premium) since DB-stored premiums only
+exist for seeded collections.
+
 ## 8. Collection Plugin Strategy
 
 Adding a collection is a registration, not a feature build:

@@ -1,0 +1,67 @@
+// Raw MintGarden API response shapes (https://api.mintgarden.io). Only the fields we consume are
+// typed; everything else is left off deliberately so the mappers stay readable. Verified against
+// live responses (nft detail, collection, and the cursor-paginated list endpoints).
+
+export interface MgAttribute {
+  trait_type: string;
+  value: string | number;
+}
+
+export interface MgEncodedRef {
+  id: string;
+  encoded_id: string;
+}
+
+// GET /collections/{col1...}  (also embedded inside an NFT detail's `collection`)
+export interface MgCollection {
+  id: string; // col1...
+  name: string;
+  description: string | null;
+  thumbnail_uri: string | null;
+  banner_uri: string | null;
+  nft_count: number | null;
+  floor_price: number | null; // XCH
+  // { trait_type(lowercased): { value(lowercased): count } }
+  attributes_frequency_counts?: Record<string, Record<string, number>> | null;
+}
+
+// GET /nfts/{nft1...}
+export interface MgNftDetail {
+  id: string;
+  encoded_id: string; // nft1...
+  data: {
+    thumbnail_uri?: string | null;
+    preview_uri?: string | null;
+    data_uris?: string[] | null;
+    metadata_json?: {
+      name?: string;
+      attributes?: MgAttribute[];
+      series_total?: number;
+      series_number?: number;
+    } | null;
+  };
+  xch_price?: number | null; // active listing ask, if any
+  owner_address?: MgEncodedRef | null;
+  collection: MgCollection;
+  openrarity_rank?: string | number | null;
+}
+
+// One element of GET /collections/{id}/nfts and /addresses/{addr}/nfts (slimmer than detail).
+export interface MgListItem {
+  id: string;
+  encoded_id: string; // nft1...
+  name: string;
+  thumbnail_uri: string | null;
+  openrarity_rank?: string | number | null;
+  price?: number | null; // listing ask
+  collection_id: string; // col1...
+  collection_name: string;
+  owner_address_encoded_id?: string | null;
+}
+
+// Cursor-paginated list envelope.
+export interface MgPage<T> {
+  items: T[];
+  next: string | null;
+  previous: string | null;
+}
