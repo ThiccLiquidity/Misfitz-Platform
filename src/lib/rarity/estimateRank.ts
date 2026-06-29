@@ -15,6 +15,17 @@ export const NONE_VALUE = "(none)";
 
 // Drop identifier-like categories (serial numbers, hashes) where almost every NFT is distinct.
 const DEGENERATE_RATIO = 0.5;
+// A category is also identifier-like (NOT a real rarity trait) if, among the NFTs that HAVE it, the
+// values are highly diverse — e.g. a per-person "x username". Real visual traits reuse a small set
+// of values; identity fields spread across hundreds. Guarded by a minimum distinct count so small
+// collections aren't over-pruned.
+const HIGH_CARDINALITY_DISTINCT = 25;
+const HIGH_CARDINALITY_RATIO = 0.2;
+// Category names that denote identity/social handles rather than visual rarity. Matched on the
+// normalized (lower-cased) name as a substring. These tag WHO owns an NFT, not how rare it is, and
+// would otherwise inflate scores massively (a near-unique handle ≈ 13+ bits). E.g. go4.me PFPs
+// carry "x username" / "x profile" / "go4.me profile".
+const IDENTIFIER_NAME = /username|handle|profile|wallet|address|twitter|discord|telegram|\bx user|account|holder|owner/;
 // IC is bucketed to this resolution (bits) for the convolution. 0.01 bit is far finer than tier
 // bands need, while keeping the support small enough to convolve quickly.
 const BUCKET = 0.01;
@@ -65,10 +76,14 @@ function prepareCategories(freq: FrequencyCounts, n: number): Map<string, Prepar
       sum += count;
       distinct += 1;
     }
-    if (sum < n) counts.set(NONE_VALUE, n - sum); // NFTs without this category
     if (counts.size === 0) continue;
-    // Degenerate (identifier-like): nearly every NFT distinct within the population that has it.
+    // Identity/social field by name (e.g. "x username") — tags the owner, not rarity.
+    if (IDENTIFIER_NAME.test(category)) continue;
+    // Fully degenerate: nearly every NFT in the whole collection is distinct here.
     if (distinct / n >= DEGENERATE_RATIO) continue;
+    // High-cardinality among holders: values too diverse to be a real visual trait (identifier-like).
+    if (distinct >= HIGH_CARDINALITY_DISTINCT && sum > 0 && distinct / sum >= HIGH_CARDINALITY_RATIO) continue;
+    if (sum < n) counts.set(NONE_VALUE, n - sum); // NFTs without this category
     out.set(category, { counts });
   }
   return out;
