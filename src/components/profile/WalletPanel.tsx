@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { truncateAddress } from "@/lib/format";
+import { getWalletConnector } from "@/lib/wallet/connect";
 
 export interface WalletRow {
   id: string;
@@ -12,24 +13,21 @@ export interface WalletRow {
   verifiedAt: string | null;
 }
 
-const WALLET_TYPES = [
-  { key: "sage", name: "Sage (WalletConnect)" },
-  { key: "goby", name: "Goby (browser)" },
-  { key: "manual", name: "Paste only" },
-];
-
-// Profile wallet linking + Phase 2 verification (ARCHITECTURE.md §6). Verified wallets are what
-// unlock badges and artist airdrop eligibility — distinct from the no-login "see my NFT value"
-// path, which needs no account at all.
+// Profile wallet linking + Phase 2 verification (ARCHITECTURE.md §6). Verified wallets unlock
+// badges and artist airdrop eligibility — distinct from the no-login "see my NFT value" path.
 //
-// Flow: pick wallet + paste address -> POST /challenge (gets a single-use message) -> sign it ->
-// POST /verify (server-side check) -> wallet shows Verified. While the platform is mock-first, a
-// "Simulate signature" action stands in for the real Sage/Goby signing step.
+// Three ways to verify, in order of preference:
+//   1. Connect Sage (WalletConnect) — the real flow when NEXT_PUBLIC_WC_PROJECT_ID is configured.
+//   2. Paste an address manually + sign elsewhere (always available).
+//   3. Dev "simulate signature" — only meaningful while the server runs the mock verifier.
+// Verification itself always runs server-side, so none of these can fake a pass.
 export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] }) {
+  const connector = getWalletConnector("sage");
+
   const [wallets, setWallets] = useState<WalletRow[]>(initialWallets);
   const [address, setAddress] = useState("");
-  const [walletType, setWalletType] = useState("sage");
   const [challenge, setChallenge] = useState<{ nonce: string; message: string; address: string } | null>(null);
+  const [wcUri, setWcUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -44,20 +42,58 @@ export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] })
     });
   }
 
-  async function startChallenge() {
+  async function requestChallenge(addr: string, walletType: string) {
+    const res = await fetch("/api/wallet/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: addr, walletType }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Could not start verification.");
+    upsertWallet({ id: data.walletId, address: data.address, label: null, walletType, verifiedAt: null });
+    return data as { nonce: string; message: string; address: string };
+  }
+
+  async function verify(nonce: string, addr: string, walletType: string, proof: { pubkey: string; signature: string; signingMode?: string }) {
+    const res = await fetch("/api/wallet/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nonce, ...proof }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Verification failed.");
+    upsertWallet({ id: "", address: addr, label: null, walletType, verifiedAt: new Date().toISOString() });
+    setNotice(`Verified ${truncateAddress(data.address, 8, 4)}`);
+  }
+
+  // ── 1. Connect Sage (real WalletConnect flow) ──────────────────────────────
+  async function connectSage() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    setWcUri(null);
+    try {
+      const { address: addr } = await connector.connect((uri) => setWcUri(uri));
+      setWcUri(null);
+      const ch = await requestChallenge(addr, "sage");
+      const proof = await connector.signMessageByAddress(ch.address, ch.message);
+      await verify(ch.nonce, ch.address, "sage", proof);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't connect Sage.");
+    } finally {
+      setBusy(false);
+      setWcUri(null);
+    }
+  }
+
+  // ── 2. Manual paste -> challenge (sign elsewhere or simulate) ───────────────
+  async function startManualChallenge() {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch("/api/wallet/challenge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: address.trim(), walletType }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not start verification.");
-      setChallenge({ nonce: data.nonce, message: data.message, address: data.address });
-      upsertWallet({ id: data.walletId, address: data.address, label: null, walletType, verifiedAt: null });
+      const ch = await requestChallenge(address.trim(), "manual");
+      setChallenge(ch);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -65,6 +101,7 @@ export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] })
     }
   }
 
+  // ── 3. Dev simulate (mock verifier only) ────────────────────────────────────
   async function simulateAndVerify() {
     if (!challenge) return;
     setBusy(true);
@@ -77,27 +114,7 @@ export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] })
       });
       const proof = await sim.json();
       if (!sim.ok) throw new Error(proof.error ?? "Simulated signing failed.");
-      await submitProof(proof.pubkey, proof.signature, proof.signingMode);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
-      setBusy(false);
-    }
-  }
-
-  async function submitProof(pubkey: string, signature: string, signingMode?: string) {
-    if (!challenge) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/wallet/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nonce: challenge.nonce, pubkey, signature, signingMode }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Verification failed.");
-      upsertWallet({ id: "", address: challenge.address, label: null, walletType, verifiedAt: new Date().toISOString() });
-      setNotice(`Verified ${truncateAddress(data.address, 8, 4)}`);
+      await verify(challenge.nonce, challenge.address, "manual", proof);
       setChallenge(null);
       setAddress("");
     } catch (e) {
@@ -147,24 +164,45 @@ export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] })
         ))}
       </ul>
 
-      {!challenge ? (
-        <div className="mt-5 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {WALLET_TYPES.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setWalletType(t.key)}
-                className={`rounded-full border px-3 py-1 text-xs transition ${
-                  walletType === t.key
-                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-300"
-                    : "text-subtle border-white/10 hover:border-white/25"
-                }`}
-              >
-                {t.name}
-              </button>
-            ))}
+      {/* Connect Sage */}
+      <div className="mt-5">
+        {connector.available ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={connectSage}
+            className="w-full rounded-lg bg-emerald-500/90 px-4 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:opacity-40 sm:w-auto"
+          >
+            {busy ? "Connecting…" : "Connect Sage Wallet"}
+          </button>
+        ) : (
+          <p className="text-subtle rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs">
+            Sage connect isn&rsquo;t configured yet (no WalletConnect project id). You can still link an
+            address manually below — see WALLET_SETUP.md to enable one-click Sage.
+          </p>
+        )}
+
+        {wcUri && (
+          <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-3">
+            <p className="text-title text-sm font-medium">Open Sage → Settings → WalletConnect → paste this:</p>
+            <pre className="text-subtle mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-all rounded bg-black/30 p-2 text-[11px]">
+              {wcUri}
+            </pre>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(wcUri).catch(() => {})}
+              className="text-subtle mt-2 text-xs underline-offset-2 hover:text-title hover:underline"
+            >
+              Copy URI
+            </button>
           </div>
+        )}
+      </div>
+
+      {/* Manual link */}
+      {!challenge ? (
+        <div className="mt-6 border-t border-white/10 pt-5">
+          <p className="text-subtle mb-2 text-xs uppercase tracking-wide">Or link an address manually</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={address}
@@ -176,15 +214,15 @@ export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] })
             <button
               type="button"
               disabled={busy || address.trim().length < 8}
-              onClick={startChallenge}
-              className="rounded-lg bg-emerald-500/90 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:opacity-40"
+              onClick={startManualChallenge}
+              className="text-subtle rounded-lg border border-white/15 px-4 py-2 text-sm transition hover:border-white/30 disabled:opacity-40"
             >
-              {busy ? "Working…" : "Link & verify"}
+              {busy ? "Working…" : "Get message to sign"}
             </button>
           </div>
         </div>
       ) : (
-        <div className="mt-5 space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
+        <div className="mt-6 space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
           <p className="text-title text-sm font-medium">Sign this message in your wallet to prove ownership:</p>
           <pre className="text-subtle max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-3 text-xs">
             {challenge.message}
@@ -211,8 +249,8 @@ export function WalletPanel({ initialWallets }: { initialWallets: WalletRow[] })
             </button>
           </div>
           <p className="text-subtle text-xs">
-            Sage and Goby signing will replace the dev button once live. Verification always runs
-            server-side.
+            The dev button works while the server runs the mock verifier. Real Sage/Goby signing
+            verifies the same way — server-side.
           </p>
         </div>
       )}

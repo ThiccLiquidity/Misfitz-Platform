@@ -236,10 +236,14 @@ view (see Product Vision), which needs no wallet at all.
   deps; `ChiaBlsWalletVerifier` (Chia wallet-sdk WASM bindings, no native build) is a one-line swap
   via `WALLET_VERIFIER=chia-bls`. A dev-only `simulate-sign` endpoint stands in for Sage/Goby while
   mock is active and is hard-disabled under any real verifier.
-- **Wallet support:** Sage (WalletConnect) and Goby (injected provider) connect differently on the
-  client but hand the backend the same `{ address, message, pubkey, signature, signingMode }` proof,
-  so the server path is identical. Per-wallet connect adapters are a thin client concern added at
-  go-live.
+- **Wallet support:** a client `WalletConnector` seam (src/lib/wallet/connect) abstracts the connect
+  step; all wallets hand the backend the same `{ address, message, pubkey, signature, signingMode }`
+  proof, so the server path is identical and connectors are NOT security-critical (a bad proof just
+  fails verification). **Sage** (WalletConnect) is the first connector. **Goby is deliberately
+  deferred:** Chia Network flagged the Goby extension in a security notice re: the Raccoon Stealer
+  v2 malware, so we don't steer users to it until that's clearly resolved — a vetted wallet slots
+  into the same seam later. Real connect + real verification are gated behind env (project id +
+  `WALLET_VERIFIER=chia-bls`) and documented in WALLET_SETUP.md; the safe default stays mock.
 - **No custody, no transactions:** the app never requests transaction signing — only message signing
   to prove ownership. Small security surface, no offer/trade flows (outside the product vision).
 
