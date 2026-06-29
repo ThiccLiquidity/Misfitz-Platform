@@ -45,6 +45,13 @@ function lastSalePriceXch(events: MgNftDetail["events"]): number | null {
   return price;
 }
 
+// Per-NFT price signal used to derive a COLLECTION floor when the market has no other floor: this
+// NFT's most recent sale, else its current ask. Aggregated across a collection's NFTs in service.ts.
+export function nftMarketAnchorXch(detail: MgNftDetail): number | null {
+  const listing = typeof detail.xch_price === "number" && detail.xch_price > 0 ? detail.xch_price : null;
+  return lastSalePriceXch(detail.events) ?? listing;
+}
+
 function bestImage(detail: MgNftDetail): string {
   return (
     detail.data?.thumbnail_uri ||
@@ -147,10 +154,11 @@ export function mapDetailToNftData(
   // own floor_price. Dexie is the platform's designated floor source (ARCHITECTURE.md §7 market layer).
   const mgFloor = typeof collection.floor_price === "number" ? collection.floor_price : null;
   const listingXch = typeof detail.xch_price === "number" && detail.xch_price > 0 ? detail.xch_price : null;
-  const lastSale = lastSalePriceXch(detail.events);
-  // Many Chia collections have no listed floor — fall back to this NFT's last sale, then its current
-  // ask, so traded/listed NFTs still show a value instead of $0.
-  const floorXch = floorOverrideXch ?? mgFloor ?? lastSale ?? listingXch;
+  // The base floor is resolved at the COLLECTION level by the caller (service.ts) and passed in, so
+  // every card in a collection shares one base and only the rarity premium varies between them.
+  // Per-NFT sale/listing prices feed that collection floor via nftMarketAnchorXch — they never set an
+  // individual card's base, which is what made sibling cards' values look wildly inconsistent.
+  const floorXch = floorOverrideXch ?? mgFloor;
 
   // Special/collectible mint number -> badge + desirability value bump (VALUATION.md Part 2).
   const collectible = collectibleNumber(parseMintNumber(detail), totalSupply);

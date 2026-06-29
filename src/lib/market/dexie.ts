@@ -100,6 +100,41 @@ export async function fetchCollectionFloor(
   });
 }
 
+// ── Collection recent-sale floor ──────────────────────────────────────────────
+
+/**
+ * Derives a collection floor from RECENT COMPLETED sales on Dexie (status 4), for collections with
+ * no active asks and no MintGarden floor. Uses a low percentile of the last ~25 sales (min for tiny
+ * samples) so a single lowball trade doesn't set the floor. Cached 10 min. Returns null on error /
+ * no sales / non-col1 id.
+ */
+export async function fetchCollectionSaleFloor(dexieCollectionId: string): Promise<number | null> {
+  if (!dexieCollectionId.startsWith("col1")) return null;
+
+  return withCache(`salefloor_${dexieCollectionId}`, 10 * 60_000, async () => {
+    try {
+      const url = new URL(`${DEXIE_BASE}/offers`);
+      url.searchParams.set("status", "4");                // completed (sold)
+      url.searchParams.set("offered", dexieCollectionId);
+      url.searchParams.set("requested", "xch");
+      url.searchParams.set("sort", "date_completed");     // most recent first
+      url.searchParams.set("page_size", "25");
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { offers?: { price?: number }[] };
+      const prices = (json?.offers ?? [])
+        .map((o) => o.price)
+        .filter((p): p is number => typeof p === "number" && p > 0)
+        .sort((a, b) => a - b);
+      if (prices.length === 0) return null;
+      const idx = prices.length >= 5 ? Math.floor(0.15 * (prices.length - 1)) : 0;
+      return prices[idx];
+    } catch {
+      return null;
+    }
+  });
+}
+
 // ── Active listing count (liquidity proxy for the confidence chip) ────────────
 
 /**
