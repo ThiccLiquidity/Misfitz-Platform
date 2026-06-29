@@ -67,7 +67,10 @@ test("detail carries a live fair-value estimate + deal score + collection meta",
   assert.equal(mapped.totalSupply, 250);
   assert.equal(mapped.collectionFloorXch, 1.0);
   assert.ok(mapped.nft.fairValue);
-  assert.equal(mapped.nft.fairValue!.totalEstimate, 1.21);
+  assert.equal(mapped.nft.fairValue!.totalEstimate, 1.18); // floor 1.0 + rarity .15 + desirability .03
+  assert.equal(mapped.nft.fairValue!.desirabilityPremium, 0.03);
+  assert.equal(mapped.nft.fairValue!.traitPremium, 0); // no rarity double-count
+  assert.equal(mapped.nft.collectible!.tier, 3); // #181 is a palindrome
   assert.ok(mapped.nft.dealScore);
 });
 

@@ -14,7 +14,11 @@ export interface Trait {
 export interface FairValueEstimate {
   floorValue: number;
   rarityPremium: number;
+  // Reserved for dynamic trait demand/reputation (VALUATION.md). 0 until the sales feed exists.
   traitPremium: number;
+  // Special/collectible-number bump (VALUATION.md Part 2). Optional so legacy/mock estimates that
+  // predate it still type-check.
+  desirabilityPremium?: number | null;
   historicalSalesPremium: number | null;
   demandPremium: number | null;
   rewardValue: number | null;
@@ -55,6 +59,9 @@ export interface NftData {
   rarityScore: number | null;
   listing: ListingData | null;
   dealScore: DealScore | null;
+  // Special/collectible mint-number badge (VALUATION.md Part 2). Optional — only live-mapped NFTs
+  // with a special number carry it. tier 1 = grail … 4 = fun.
+  collectible?: { tier: number; label: string } | null;
 }
 
 export interface ThemeConfig {

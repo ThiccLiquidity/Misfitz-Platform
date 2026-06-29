@@ -28,9 +28,10 @@ function resolveAccent(accent: string, isLight: boolean): string {
 const FV_ROWS: { key: keyof FairValueEstimate; label: string }[] = [
   { key: "floorValue",             label: "Floor value"       },
   { key: "rarityPremium",          label: "Rarity premium"    },
-  { key: "traitPremium",           label: "Trait premium"     },
+  { key: "desirabilityPremium",    label: "Collector appeal"  },
+  { key: "traitPremium",           label: "Trait demand"      },
+  { key: "demandPremium",          label: "Trait heat"        },
   { key: "historicalSalesPremium", label: "Historical sales"  },
-  { key: "demandPremium",          label: "Market demand"     },
   { key: "rewardValue",            label: "Rewards / airdrops"},
 ];
 
@@ -120,9 +121,19 @@ export function NftDetailModal({
             className="flex items-center justify-between px-4 py-2.5"
             style={{ borderBottom: `1px solid ${divider}` }}
           >
-            <span className="text-sm font-bold" style={{ color: tier.accent }}>
-              {tier.emoji} {tier.label.toUpperCase()}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold" style={{ color: tier.accent }}>
+                {tier.emoji} {tier.label.toUpperCase()}
+              </span>
+              {nft.collectible && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{ background: `${accentColor}22`, color: accentColor }}
+                >
+                  ★ {nft.collectible.label}
+                </span>
+              )}
+            </div>
             {tier.rank !== null && (
               <span className="text-xs" style={{ color: lblColor }}>
                 Rank #{tier.rank}

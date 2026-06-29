@@ -1,6 +1,7 @@
 import type { CollectionData, FairValueEstimate, ListingData, NftData, Trait } from "@/types";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { estimateFairValue } from "@/lib/valuation/estimate";
+import { collectibleNumber } from "@/lib/rarity/collectibleNumbers";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 
@@ -22,6 +23,16 @@ function parseRank(rank: string | number | null | undefined): number | null {
   if (rank === null || rank === undefined) return null;
   const n = typeof rank === "string" ? parseInt(rank, 10) : rank;
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Mint/edition number for special-number badges: prefer metadata series_number, else parse a
+// trailing "#123" from the name. Null when there's no clean number (e.g. 1/1 art).
+function parseMintNumber(detail: MgNftDetail): number | null {
+  const series = detail.data?.metadata_json?.series_number;
+  if (typeof series === "number" && Number.isInteger(series)) return series;
+  const name = detail.data?.metadata_json?.name ?? "";
+  const m = name.match(/#?(\d+)\s*$/);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 function bestImage(detail: MgNftDetail): string {
@@ -98,15 +109,16 @@ export function mapDetailToNftData(
   const mgFloor = typeof collection.floor_price === "number" ? collection.floor_price : null;
   const floorXch = floorOverrideXch ?? mgFloor;
 
+  // Special/collectible mint number -> badge + desirability value bump (VALUATION.md Part 2).
+  const collectible = collectibleNumber(parseMintNumber(detail), totalSupply);
+
   const fairValue: FairValueEstimate | null =
     floorXch !== null
       ? estimateFairValue({
           floorXch,
           rarityRank,
           totalSupply,
-          traitRarityPercents: traits
-            .map((t) => t.rarityPercent)
-            .filter((p): p is number => typeof p === "number"),
+          desirabilityWeight: collectible?.weight ?? 0,
           xchUsdRate,
         })
       : null;
@@ -135,6 +147,7 @@ export function mapDetailToNftData(
     rarityScore,
     listing,
     dealScore,
+    collectible: collectible ? { tier: collectible.tier, label: collectible.label } : null,
   };
 
   return { nft, collectionId: collection.id, collectionName: collection.name, collectionFloorXch: floorXch, totalSupply };

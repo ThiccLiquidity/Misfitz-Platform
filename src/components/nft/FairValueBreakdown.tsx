@@ -3,9 +3,10 @@ import type { FairValueEstimate } from "@/types";
 const ROWS: { key: keyof FairValueEstimate; label: string }[] = [
   { key: "floorValue", label: "Base floor value" },
   { key: "rarityPremium", label: "Rarity premium" },
-  { key: "traitPremium", label: "Trait premium" },
+  { key: "desirabilityPremium", label: "Collector appeal" },
+  { key: "traitPremium", label: "Trait demand" },
+  { key: "demandPremium", label: "Trait heat" },
   { key: "historicalSalesPremium", label: "Historical sales premium" },
-  { key: "demandPremium", label: "Market demand premium" },
   { key: "rewardValue", label: "Reward/airdrop value" },
 ];
 
