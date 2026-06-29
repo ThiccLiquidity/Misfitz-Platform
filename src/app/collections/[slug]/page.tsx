@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getCollectionBySlug, listNftsForCollection, listCollections } from "@/lib/db/queries";
 import { enrichNfts } from "@/lib/rarity/enrich";
+import { fetchMarketContext } from "@/lib/market/dexie";
 import { CollectionHeader } from "@/components/collection/CollectionHeader";
 import { CollectionBrowser } from "@/components/collection/CollectionBrowser";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
@@ -15,11 +16,17 @@ export default async function CollectionPage({ params }: { params: { slug: strin
   if (!collection) notFound();
 
   // DEV CAP: loading all 10k NFTs on every request kills performance in dev mode.
-  // Proper server-side pagination is the permanent fix (future task). 500 is plenty
-  // for browsing/filtering while staying responsive.
   const DEV_CAP = 500;
-  const rawNfts = await listNftsForCollection(params.slug, 0, DEV_CAP);
-  const nfts = enrichNfts(rawNfts, collection.totalSupply);
+
+  // Fetch NFTs and market data in parallel — market fetch is TTL-cached so it's cheap
+  const [rawNfts, market] = await Promise.all([
+    listNftsForCollection(params.slug, 0, DEV_CAP),
+    fetchMarketContext(collection.dexieCollectionId),
+  ]);
+
+  // market.floorXch is real if collection.dexieCollectionId is set + Dexie has listings;
+  // falls back to mock floor/mocked listing prices otherwise — UI never breaks either way.
+  const nfts = enrichNfts(rawNfts, collection.totalSupply, market);
 
   return (
     <div>

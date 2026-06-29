@@ -72,6 +72,9 @@ export interface CollectionData {
   totalSupply: number; // true series size — used for rarity percentile math, see src/lib/rarity
   rarityTiers?: Partial<RarityTierThresholds>; // collection's custom tier cutoffs, if any
   theme: ThemeConfig;
+  /** On-chain collection id (col1...). Populated once the collection is minted and on Dexie.
+   *  When non-null, the market layer fetches real floor/listing prices. Null → mock data. */
+  dexieCollectionId: string | null;
 }
 
 export type ThemeMode = "dark" | "light";

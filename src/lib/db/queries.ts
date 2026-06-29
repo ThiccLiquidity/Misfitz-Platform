@@ -43,6 +43,7 @@ export async function listCollections(): Promise<CollectionData[]> {
     totalSupply: c.totalSupply,
     rarityTiers: c.tierConfig ? JSON.parse(c.tierConfig) : undefined,
     theme: JSON.parse(c.themeConfig),
+    dexieCollectionId: c.chainCollectionId,
   }));
 }
 
@@ -63,6 +64,7 @@ export async function getCollectionBySlug(slug: string): Promise<CollectionData 
     totalSupply: collection.totalSupply,
     rarityTiers: collection.tierConfig ? JSON.parse(collection.tierConfig) : undefined,
     theme: JSON.parse(collection.themeConfig),
+    dexieCollectionId: collection.chainCollectionId,
   };
 }
 

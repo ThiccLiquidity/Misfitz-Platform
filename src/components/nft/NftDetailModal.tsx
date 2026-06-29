@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
@@ -178,6 +179,22 @@ export function NftDetailModal({
                 <span className="text-sm font-bold" style={{ color: valColor }}>—</span>
               )}
             </div>
+          </div>
+
+          {/* View Full Page link */}
+          <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>
+            <Link
+              href={`/collections/${nft.collectionSlug}/nfts/${nft.launcherId}`}
+              onClick={onClose}
+              className="flex items-center justify-center gap-2 w-full rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
+              style={{
+                background: isLight ? `${accentColor}14` : `${accentColor}18`,
+                border: `1px solid ${accentColor}44`,
+                color: accentColor,
+              }}
+            >
+              View Full Page →
+            </Link>
           </div>
 
           {/* Fair Value Breakdown */}

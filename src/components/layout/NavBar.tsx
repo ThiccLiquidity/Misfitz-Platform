@@ -49,7 +49,7 @@ export function NavBar() {
           <>
             <Link
               href="/profile"
-              className="text-xs hover:opacity-70 transition"
+              className="hidden sm:inline text-xs hover:opacity-70 transition"
               style={{ color: isLight ? "#2d5a8e" : "var(--subtle)" }}
             >
               {session.user?.email}

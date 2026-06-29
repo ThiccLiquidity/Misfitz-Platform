@@ -12,13 +12,13 @@ const ARC_LENGTH = Math.PI * ARC_RADIUS; // half-circle circumference
 export function colorForLabel(label?: string): string {
   switch (label) {
     case "GREAT DEAL":
-      return "#3b9c4a";
+      return "#22c55e"; // bright green
     case "GOOD DEAL":
-      return "#5b8fd9";
+      return "#10b981"; // emerald — still green but less vivid
     case "FAIR DEAL":
-      return "#d99a3b";
+      return "#3b82f6"; // neutral blue
     case "OVERPRICED":
-      return "#c2503f";
+      return "#ef4444"; // bright red
     default:
       return "#9a9aa2";
   }

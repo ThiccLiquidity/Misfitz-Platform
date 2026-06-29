@@ -114,15 +114,18 @@ export function LibraryView({ collections }: LibraryViewProps) {
             `,
           }}
         >
-          {/* Binders row — each takes equal share of the shelf width */}
-          <div className="flex gap-2 items-end">
+          {/* Binders row — fills width on desktop, scrolls horizontally on mobile */}
+          <div
+            className="flex gap-2 items-end overflow-x-auto pb-1"
+            style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+          >
             {collections.map((c) => (
-              <div key={c.slug} className="flex-1 min-w-0">
+              <div key={c.slug} className="flex-1 flex-shrink-0" style={{ minWidth: "clamp(72px, 11vw, 130px)" }}>
                 <CollectionCoverCard collection={c} />
               </div>
             ))}
             {previews.map((p) => (
-              <div key={p.name} className="flex-1 min-w-0">
+              <div key={p.name} className="flex-1 flex-shrink-0" style={{ minWidth: "clamp(72px, 11vw, 130px)" }}>
                 <ComingSoonCard collection={p} />
               </div>
             ))}

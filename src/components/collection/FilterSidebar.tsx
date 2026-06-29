@@ -18,6 +18,8 @@ interface FilterSidebarProps {
   traitOptions: Record<string, string[]>;
   resultCount: number;
   totalCount: number;
+  /** Sheet mode: no outer container chrome — used when caller wraps in a bottom drawer. */
+  sheet?: boolean;
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -124,6 +126,7 @@ export function FilterSidebar({
   traitFilters, onTraitFilter,
   traitOptions,
   resultCount, totalCount,
+  sheet = false,
 }: FilterSidebarProps) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
@@ -137,8 +140,11 @@ export function FilterSidebar({
 
   return (
     <div
-      className="flex flex-col gap-5 flex-shrink-0 rounded-xl p-4 sticky top-4"
-      style={{
+      className={sheet
+        ? "flex flex-col gap-5 p-4 pb-8"
+        : "flex flex-col gap-5 flex-shrink-0 rounded-xl p-4 sticky top-4"
+      }
+      style={sheet ? {} : {
         width: 184,
         background: isLight
           ? "rgba(255,255,255,0.72)"

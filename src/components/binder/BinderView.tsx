@@ -60,6 +60,10 @@ export function BinderView({ collection, nfts }: BinderViewProps) {
   const [animating,     setAnimating]     = useState(false);
   const [openLauncherId, setOpenLauncherId] = useState<string | null>(null);
 
+  const openNft = openLauncherId
+    ? nfts.find((n) => n.launcherId === openLauncherId) ?? null
+    : null;
+
   const spreadRef    = useRef(0);          // shadow of displaySpread safe to read in closures
   const animatingRef = useRef(false);
   const flipperRef   = useRef<HTMLDivElement | null>(null);
@@ -160,10 +164,6 @@ export function BinderView({ collection, nfts }: BinderViewProps) {
     if (Math.abs(dx) > 40) flipSpread(dx < 0 ? 1 : -1);
     touchStartXRef.current = null;
   }
-
-  const openNft = openLauncherId
-    ? nfts.find((n) => n.launcherId === openLauncherId) ?? null
-    : null;
 
   return (
     <div>
