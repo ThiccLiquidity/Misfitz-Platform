@@ -50,6 +50,9 @@ export class MockDataSource implements DataSource {
       totalSupply: plugin.totalSupply,
       rarityTiers: plugin.rarityTiers,
       theme: plugin.theme,
+      // null today (Misfitz unminted) -> market layer falls back to mock floor/listing values.
+      // Flips on automatically once the plugin's chainCollectionId (col1...) is set.
+      dexieCollectionId: plugin.chainCollectionId,
     };
   }
 
