@@ -40,10 +40,13 @@ interface NftDetailModalProps {
   totalSupply: number;
   rarityTiers?: Partial<RarityTierThresholds>;
   onClose: () => void;
+  // Where the "View Full Page" button links. undefined = default DB collection route;
+  // null = hide the button (live NFTs from MintGarden have no on-platform page).
+  fullPageHref?: string | null;
 }
 
 export function NftDetailModal({
-  nft, collectionName, totalSupply, rarityTiers, onClose,
+  nft, collectionName, totalSupply, rarityTiers, onClose, fullPageHref,
 }: NftDetailModalProps) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
@@ -55,6 +58,11 @@ export function NftDetailModal({
   );
 
   // Panel colours — solid backgrounds so they read over the black overlay
+  const resolvedFullPageHref =
+    fullPageHref === undefined
+      ? `/collections/${nft.collectionSlug}/nfts/${nft.launcherId}`
+      : fullPageHref;
+
   const accentColor = resolveAccent(tier.accent, isLight);
   const panelBg     = isLight ? "rgba(255,255,255,0.97)" : "rgba(18,18,24,0.97)";
   const panelBorder = isLight ? `1px solid ${accentColor}55` : "1px solid rgba(255,255,255,0.08)";
@@ -182,20 +190,22 @@ export function NftDetailModal({
           </div>
 
           {/* View Full Page link */}
-          <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>
-            <Link
-              href={`/collections/${nft.collectionSlug}/nfts/${nft.launcherId}`}
-              onClick={onClose}
-              className="flex items-center justify-center gap-2 w-full rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-              style={{
-                background: isLight ? `${accentColor}14` : `${accentColor}18`,
-                border: `1px solid ${accentColor}44`,
-                color: accentColor,
-              }}
-            >
-              View Full Page →
-            </Link>
-          </div>
+          {resolvedFullPageHref !== null && (
+            <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>
+              <Link
+                href={resolvedFullPageHref}
+                onClick={onClose}
+                className="flex items-center justify-center gap-2 w-full rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
+                style={{
+                  background: isLight ? `${accentColor}14` : `${accentColor}18`,
+                  border: `1px solid ${accentColor}44`,
+                  color: accentColor,
+                }}
+              >
+                View Full Page →
+              </Link>
+            </div>
+          )}
 
           {/* Fair Value Breakdown */}
           {nft.fairValue && (

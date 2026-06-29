@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mapDetailToNftData, mapTraits } from "../../src/lib/data-sources/mintgarden/map";
+import { mapDetailToNftData, mapTraits, isDisplayableNft } from "../../src/lib/data-sources/mintgarden/map";
 import type { MgNftDetail } from "../../src/lib/data-sources/mintgarden/types";
 
 // Compact but faithful slice of a real GET /nfts/{id} response (Chia Gods #181).
@@ -83,4 +83,11 @@ test("a resolved floor override (e.g. Dexie) replaces MintGarden's floor in valu
   assert.equal(nft.fairValue?.floorValue, 2.0);
   // rarity premium scales with floor: 2.0 * 0.15 = 0.30
   assert.equal(nft.fairValue?.rarityPremium, 0.3);
+});
+
+test("isDisplayableNft hides blocked content, keeps clean/sensitive", () => {
+  assert.equal(isDisplayableNft({}), true);
+  assert.equal(isDisplayableNft({ is_blocked: false, blocked_content: false }), true);
+  assert.equal(isDisplayableNft({ is_blocked: true }), false);
+  assert.equal(isDisplayableNft({ blocked_content: true }), false);
 });

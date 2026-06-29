@@ -6,6 +6,13 @@ import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 
 // Pure mappers: raw MintGarden shapes -> our generic domain model (src/types). No network here.
 
+// Safety/quality gate: never surface NFTs MintGarden has flagged as blocked. (We keep merely
+// "sensitive" ones — that's a display concern, not a safety one.) Used to filter live holdings
+// before they ever reach the value view, per the platform's collector-safety stance.
+export function isDisplayableNft(detail: { is_blocked?: boolean | null; blocked_content?: boolean | null }): boolean {
+  return detail.is_blocked !== true && detail.blocked_content !== true;
+}
+
 function round(value: number, decimals = 1): number {
   const f = 10 ** decimals;
   return Math.round(value * f) / f;

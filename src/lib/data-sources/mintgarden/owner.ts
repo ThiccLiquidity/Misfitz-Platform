@@ -1,4 +1,5 @@
 import { listAddressNfts, getNftDetail } from "./client";
+import { isDisplayableNft } from "./map";
 import type { MgNftDetail } from "./types";
 
 // Shared by MintGardenDataSource.getNftsByOwner and the portfolio service: page through an
@@ -55,6 +56,6 @@ export async function fetchOwnerNftDetails(address: string): Promise<OwnerDetail
       return null;
     }
   });
-  const details = settled.filter((d): d is MgNftDetail => d !== null);
+  const details = settled.filter((d): d is MgNftDetail => d !== null).filter(isDisplayableNft);
   return { details, truncated };
 }

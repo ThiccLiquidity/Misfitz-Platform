@@ -44,6 +44,9 @@ export interface MgNftDetail {
   owner_address?: MgEncodedRef | null;
   collection: MgCollection;
   openrarity_rank?: string | number | null;
+  is_blocked?: boolean | null;
+  blocked_content?: boolean | null;
+  sensitive_content?: boolean | null;
 }
 
 // One element of GET /collections/{id}/nfts and /addresses/{addr}/nfts (slimmer than detail).
