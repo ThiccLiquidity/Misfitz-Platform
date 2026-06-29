@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 // Client input for the no-login value view: navigates to /portfolio?address=... so the result is
 // a shareable, server-rendered URL (no client data-fetching needed).
-export function AddressForm({ initial = "" }: { initial?: string }) {
+export function AddressForm({ initial = "", path = "/portfolio", buttonLabel = "Value my NFTs" }: { initial?: string; path?: string; buttonLabel?: string }) {
   const router = useRouter();
   const [address, setAddress] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -15,7 +15,7 @@ export function AddressForm({ initial = "" }: { initial?: string }) {
     const v = address.trim();
     if (v.length < 8) return;
     setPending(true);
-    router.push(`/portfolio?address=${encodeURIComponent(v)}`);
+    router.push(`${path}?address=${encodeURIComponent(v)}`);
   }
 
   return (
@@ -32,7 +32,7 @@ export function AddressForm({ initial = "" }: { initial?: string }) {
         disabled={pending || address.trim().length < 8}
         className="rounded-lg bg-emerald-500/90 px-6 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:opacity-40"
       >
-        {pending ? "Valuing…" : "Value my NFTs"}
+        {pending ? "Loading…" : buttonLabel}
       </button>
     </form>
   );

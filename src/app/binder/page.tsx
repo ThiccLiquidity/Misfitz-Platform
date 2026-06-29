@@ -1,10 +1,11 @@
 import { isValidChiaAddress } from "@/lib/wallet/message";
 import { getMyHoldings, getDemoHoldings } from "@/lib/portfolio/myHoldings";
 import { YourBinder } from "@/components/binder/YourBinder";
+import { AddressForm } from "@/components/portfolio/AddressForm";
 
-// Your Binder — every NFT you own in one binder, sorted by rarity, with total value. Sources: a
-// pasted ?address= today, plus saved profile addresses once those land. Falls back to a seeded demo
-// so the view is never empty while the live holdings fetch is finalized.
+// Your Binder — every NFT you own in one binder, sorted by rarity, with total value. Today it
+// takes a pasted ?address=; saved profile addresses + wallet connect populate it automatically
+// later. Falls back to a seeded demo when no address is given.
 export const dynamic = "force-dynamic";
 
 export default async function BinderPage({ searchParams }: { searchParams: { address?: string } }) {
@@ -18,7 +19,12 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
 
   return (
     <div className="py-2">
-      <h1 className="text-title mb-3 px-2 text-xl font-bold">Your Binder</h1>
+      <div className="mb-4 flex flex-col gap-3 px-2 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-title text-xl font-bold">Your Binder</h1>
+        <div className="w-full sm:max-w-md">
+          <AddressForm initial={raw ?? ""} path="/binder" buttonLabel="Open binder" />
+        </div>
+      </div>
       <YourBinder holdings={holdings} />
     </div>
   );
