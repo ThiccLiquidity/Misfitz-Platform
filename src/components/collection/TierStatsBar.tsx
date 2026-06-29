@@ -99,7 +99,7 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
     for (const id of TIER_ORDER) counts[id] = 0;
     for (const nft of nfts) {
       if (!nft.rarityRank) continue;
-      const pct = (nft.rarityRank / collection.totalSupply) * 100;
+      const pct = (nft.rarityRank / (nft.totalSupply ?? collection.totalSupply)) * 100;
       let assigned = false;
       let prev = 0;
       for (const id of TIER_ORDER) {
@@ -110,7 +110,7 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
       if (!assigned) counts["common"]++;
     }
     return counts;
-  }, [nfts, thresholds, collection.totalSupply]);
+  }, [nfts, thresholds, collection.totalSupply]);  // per-nft totalSupply respected for mixed binders
 
   return (
     <div

@@ -20,6 +20,8 @@ interface FilterSidebarProps {
   totalCount: number;
   /** Sheet mode: no outer container chrome — used when caller wraps in a bottom drawer. */
   sheet?: boolean;
+  /** Hide the trait dropdowns (e.g. Your Binder until a single collection is picked). */
+  hideTraits?: boolean;
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -128,6 +130,7 @@ export function FilterSidebar({
   traitOptions,
   resultCount, totalCount,
   sheet = false,
+  hideTraits = false,
 }: FilterSidebarProps) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
@@ -195,6 +198,7 @@ export function FilterSidebar({
       </div>
 
       {/* ── Traits ─────────────────────────────────────── */}
+      {!hideTraits && (
       <div className="flex flex-col gap-3">
         <span
           className="text-[10px] font-black uppercase tracking-widest"
@@ -223,6 +227,7 @@ export function FilterSidebar({
           </div>
         ))}
       </div>
+      )}
 
       {/* ── Sort ───────────────────────────────────────── */}
       <div className="flex flex-col gap-1">
