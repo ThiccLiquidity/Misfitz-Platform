@@ -6,7 +6,6 @@ import { BinderView } from "./BinderView";
 import { BinderCollectionPicker } from "./BinderCollectionPicker";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
-import { TraitFilterBar } from "@/components/collection/TraitFilterBar";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatUsd, formatXch } from "@/lib/format";
 import type { MyHoldings } from "@/lib/portfolio/myHoldings";
@@ -81,7 +80,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     traitFilters, onTraitFilter: (t: string, v: string) => setTraitFilters((p) => ({ ...p, [t]: v })),
     traitOptions,
     resultCount: filtered.length, totalCount: scoped.length,
-    hideTraits: true,
+    hideTraits: !oneCollection,
   };
 
   const binderKey = `${collectionId}|${tier}|${sort}|${JSON.stringify(traitFilters)}`;
@@ -118,14 +117,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       {/* Desktop: filters · binder · collections */}
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1440 }}>
         <FilterSidebar {...sidebarProps} />
-        <div className="min-w-0 flex-1" style={{ maxWidth: 930 }}>
-          {oneCollection && (
-            <TraitFilterBar
-              traitOptions={traitOptions}
-              traitFilters={traitFilters}
-              onTraitFilter={(t, v) => setTraitFilters((p) => ({ ...p, [t]: v }))}
-            />
-          )}
+        <div className="min-w-0 flex-1" style={{ maxWidth: 880 }}>
           <BinderView key={binderKey} collection={SHELL} nfts={filtered} />
         </div>
         <BinderCollectionPicker

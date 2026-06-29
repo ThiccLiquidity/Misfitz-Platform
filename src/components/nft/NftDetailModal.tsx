@@ -136,7 +136,7 @@ export function NftDetailModal({
             </div>
             {tier.rank !== null && (
               <span className="text-xs" style={{ color: lblColor }}>
-                Rank #{tier.rank}
+                Rank {nft.rankEstimated ? "≈#" : "#"}{tier.rank}
               </span>
             )}
           </div>

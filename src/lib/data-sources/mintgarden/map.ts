@@ -4,6 +4,7 @@ import { estimateFairValue } from "@/lib/valuation/estimate";
 import { collectibleNumber } from "@/lib/rarity/collectibleNumbers";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem, MgNftDetail } from "./types";
+import { buildRankEstimator, type RankEstimator } from "@/lib/rarity/estimateRank";
 
 // Pure mappers: raw MintGarden shapes -> our generic domain model (src/types). No network here.
 
@@ -94,6 +95,18 @@ export function mapCollection(c: MgCollection): CollectionData {
   };
 }
 
+// Cache one rank estimator per collection (keyed by id + supply) — building it convolves the whole
+// trait distribution, so we do it once and reuse across every held NFT of that collection.
+const rankEstimatorCache = new Map<string, RankEstimator | null>();
+function getRankEstimator(collection: MgCollection): RankEstimator | null {
+  const total = collection.nft_count ?? 0;
+  const key = `${collection.id}:${total}`;
+  if (!rankEstimatorCache.has(key)) {
+    rankEstimatorCache.set(key, buildRankEstimator(collection.attributes_frequency_counts ?? {}, total));
+  }
+  return rankEstimatorCache.get(key) ?? null;
+}
+
 export interface MappedNft {
   nft: NftData;
   collectionId: string;
@@ -110,8 +123,16 @@ export function mapDetailToNftData(
 ): MappedNft {
   const collection = detail.collection;
   const totalSupply = collection.nft_count ?? detail.data?.metadata_json?.series_total ?? 0;
-  const rarityRank = parseRank(detail.openrarity_rank);
   const traits = mapTraits(detail);
+  // Prefer the indexer's exact OpenRarity rank. When absent (many Chia collections), estimate it
+  // ourselves from the collection's trait-frequency table so the NFT can still be tiered/sorted.
+  const indexerRank = parseRank(detail.openrarity_rank);
+  let rarityRank = indexerRank;
+  let rankEstimated = false;
+  if (rarityRank === null) {
+    const estimated = getRankEstimator(collection)?.rankOf(traits) ?? null;
+    if (estimated !== null) { rarityRank = estimated; rankEstimated = true; }
+  }
   // Prefer a resolved floor (e.g. a live Dexie ask) passed by the caller; fall back to MintGarden's
   // own floor_price. Dexie is the platform's designated floor source (ARCHITECTURE.md §7 market layer).
   const mgFloor = typeof collection.floor_price === "number" ? collection.floor_price : null;
@@ -152,6 +173,7 @@ export function mapDetailToNftData(
     imageUrl: bestImage(detail),
     traits,
     rarityRank,
+    rankEstimated,
     currentOwnerAddress: detail.owner_address?.encoded_id ?? null,
     fairValue,
     rarityScore,

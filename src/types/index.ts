@@ -51,6 +51,9 @@ export interface NftData {
   imageUrl: string;
   traits: Trait[];
   rarityRank: number | null;
+  // True when rarityRank was computed by our own OpenRarity estimator (src/lib/rarity/estimateRank)
+  // because the indexer didn't supply one — UI marks these "≈". Exact (indexer) ranks omit it.
+  rankEstimated?: boolean;
   currentOwnerAddress: string | null;
   fairValue: FairValueEstimate | null;
   // Composite 0-100 score blending rank percentile and trait rarity — undefined until enriched

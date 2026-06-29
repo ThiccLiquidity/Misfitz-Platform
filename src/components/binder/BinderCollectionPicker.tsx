@@ -29,7 +29,7 @@ export function BinderCollectionPicker({
         key={id}
         type="button"
         onClick={() => onSelect(id)}
-        className="group flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-all"
+        className="group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-all"
         style={{
           background: active
             ? `linear-gradient(135deg, ${accent}20, ${accent}10)`
@@ -40,7 +40,7 @@ export function BinderCollectionPicker({
       >
         <div
           className="flex-shrink-0 rounded-sm"
-          style={{ width: 7, height: 44, background: `linear-gradient(180deg, ${accent}ee 0%, ${accent}99 100%)` }}
+          style={{ width: 6, height: 38, flexShrink: 0, background: `linear-gradient(180deg, ${accent}ee 0%, ${accent}99 100%)` }}
         />
         <div className="min-w-0">
           <div
@@ -61,7 +61,7 @@ export function BinderCollectionPicker({
     <div
       className="sticky top-4 flex flex-shrink-0 flex-col gap-1 rounded-xl p-3"
       style={{
-        width: 168,
+        width: 248,
         background: isLight ? "rgba(255,255,255,0.72)" : "linear-gradient(175deg, #1e1e22 0%, #121214 100%)",
         border: isLight ? "1px solid rgba(100, 180, 255, 0.35)" : "1px solid rgba(255,255,255,0.08)",
         boxShadow: isLight ? "0 4px 24px rgba(0, 80, 160, 0.12), inset 0 1px 0 rgba(255,255,255,0.8)" : "0 4px 24px rgba(0,0,0,0.4)",
@@ -74,8 +74,10 @@ export function BinderCollectionPicker({
       >
         Collections
       </div>
-      {row("all", "All collections", totalCount, "#8b5cf6")}
-      {collections.map((c, i) => row(c.id, c.name, c.count, ACCENTS[(i + 1) % ACCENTS.length]))}
+      <div className="grid grid-cols-2 gap-1.5 overflow-y-auto" style={{ maxHeight: 470 }}>
+        {row("all", "All collections", totalCount, "#8b5cf6")}
+        {collections.map((c, i) => row(c.id, c.name, c.count, ACCENTS[(i + 1) % ACCENTS.length]))}
+      </div>
     </div>
   );
 }

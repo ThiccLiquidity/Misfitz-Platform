@@ -149,7 +149,7 @@ export function FilterSidebar({
         : "flex flex-col gap-5 flex-shrink-0 rounded-xl p-4 sticky top-4"
       }
       style={sheet ? {} : {
-        width: 184,
+        width: 248,
         background: isLight
           ? "rgba(255,255,255,0.72)"
           : "linear-gradient(175deg, #1e1e22 0%, #121214 100%)",
@@ -181,51 +181,68 @@ export function FilterSidebar({
           isLight={isLight}
         />
 
-        {TIER_ORDER.map((id) => {
-          const v = getTierVisual(id);
-          return (
-            <TierChip
-              key={id}
-              tierId={id}
-              label={v.label}
-              emoji={v.emoji}
-              active={tierFilter === id}
-              onClick={() => onTierFilter(tierFilter === id ? "all" : id)}
-              isLight={isLight}
-            />
-          );
-        })}
+        {/* 6 tiers laid out two-wide so the panel grows outward, not down */}
+        <div className="grid grid-cols-2 gap-2">
+          {TIER_ORDER.map((id) => {
+            const v = getTierVisual(id);
+            return (
+              <TierChip
+                key={id}
+                tierId={id}
+                label={v.label}
+                emoji={v.emoji}
+                active={tierFilter === id}
+                onClick={() => onTierFilter(tierFilter === id ? "all" : id)}
+                isLight={isLight}
+              />
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Traits ─────────────────────────────────────── */}
-      {!hideTraits && (
-      <div className="flex flex-col gap-3">
+      {!hideTraits && Object.keys(traitOptions).length > 0 && (
+      <div className="flex flex-col gap-2">
         <span
           className="text-[10px] font-black uppercase tracking-widest"
           style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.7)" }}
         >
           Traits
         </span>
-        {Object.entries(traitOptions).map(([traitType, values]) => (
-          <div key={traitType} className="flex flex-col gap-1">
-            <label
-              className="text-[10px] font-bold uppercase tracking-wider"
-              style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}
-            >
-              {traitType}
-            </label>
-            <select
-              value={traitFilters[traitType] ?? ""}
-              onChange={(e) => onTraitFilter(traitType, e.target.value)}
-              style={selectStyle(isLight)}
-            >
-              <option value="">Any</option>
-              {values.map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          </div>
-        ))}
+        {/* Two-wide, internally scrolled so a trait-heavy collection never pushes the binder away */}
+        <div
+          className="grid grid-cols-2 gap-x-2 gap-y-2 overflow-y-auto pr-1"
+          style={sheet ? {} : { maxHeight: 300 }}
+        >
+          {Object.entries(traitOptions).map(([traitType, values]) => {
+            const active = (traitFilters[traitType] ?? "") !== "";
+            return (
+              <div key={traitType} className="flex min-w-0 flex-col gap-1">
+                <label
+                  className="truncate text-[10px] font-bold uppercase tracking-wider"
+                  style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}
+                >
+                  {traitType}
+                </label>
+                <select
+                  value={traitFilters[traitType] ?? ""}
+                  onChange={(e) => onTraitFilter(traitType, e.target.value)}
+                  style={{
+                    ...selectStyle(isLight),
+                    ...(active
+                      ? { borderColor: isLight ? "rgba(60,120,220,0.7)" : "rgba(140,160,255,0.6)" }
+                      : {}),
+                  }}
+                >
+                  <option value="">Any</option>
+                  {values.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
+        </div>
       </div>
       )}
 

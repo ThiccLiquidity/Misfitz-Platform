@@ -125,7 +125,7 @@ export function NftRarityCard({
           {tier.rank !== null && (
             <div className={`tcg-rank-tag tcg-rank-tag-${id}`}>
               <span className="tcg-rank-lbl">Rank</span>
-              <span className="tcg-rank-num">#{tier.rank}</span>
+              <span className="tcg-rank-num">{nft.rankEstimated ? "≈#" : "#"}{tier.rank}</span>
             </div>
           )}
         </div>

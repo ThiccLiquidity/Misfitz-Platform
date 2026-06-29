@@ -29,7 +29,7 @@ export function CollectionSwitcher({ collections, currentSlug }: CollectionSwitc
     <div
       className="flex flex-col gap-1 flex-shrink-0 rounded-xl p-3 sticky top-4"
       style={{
-        width: 168,
+        width: 248,
         background: isLight
           ? "rgba(255,255,255,0.72)"
           : "linear-gradient(175deg, #1e1e22 0%, #121214 100%)",
@@ -58,7 +58,8 @@ export function CollectionSwitcher({ collections, currentSlug }: CollectionSwitc
         </Link>
       </div>
 
-      {/* Live collections */}
+      {/* Live + coming-soon laid out two-wide so the panel grows outward, not down */}
+      <div className="grid grid-cols-2 gap-1.5 overflow-y-auto" style={{ maxHeight: 470 }}>
       {collections.map((c) => {
         const isActive = c.slug === currentSlug;
         const accent = c.theme?.accent ?? "#888888";
@@ -81,8 +82,8 @@ export function CollectionSwitcher({ collections, currentSlug }: CollectionSwitc
             <div
               className="flex-shrink-0 rounded-sm"
               style={{
-                width: 7,
-                height: 44,
+                width: 6,
+                height: 38,
                 background: `linear-gradient(180deg, ${accent}ee 0%, ${accent}99 100%)`,
                 boxShadow: isActive ? `0 0 10px ${accent}66` : `0 0 0 ${accent}00`,
                 transition: "box-shadow 0.2s",
@@ -123,8 +124,8 @@ export function CollectionSwitcher({ collections, currentSlug }: CollectionSwitc
           <div
             className="flex-shrink-0 rounded-sm"
             style={{
-              width: 7,
-              height: 44,
+              width: 6,
+              height: 38,
               background: `linear-gradient(180deg, ${p.accent}88 0%, ${p.accent}44 100%)`,
             }}
           />
@@ -139,6 +140,7 @@ export function CollectionSwitcher({ collections, currentSlug }: CollectionSwitc
           </div>
         </div>
       ))}
+      </div>
 
       {/* Footer */}
       <div
