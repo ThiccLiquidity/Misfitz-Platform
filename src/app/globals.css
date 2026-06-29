@@ -1460,3 +1460,10 @@ body {
 .tf-cta-dark { background: #1a1633; color: #fff; border: 1px solid rgba(255, 255, 255, 0.1); }
 .tf-cta-light { background: #ffffff; color: #0a1e38; border: 1px solid rgba(0, 0, 0, 0.08); }
 [data-theme="light"] .tf-cta-dark { background: #15234a; }
+
+/* Traitfolio landing hero — warm branded gradient (fixed, not theme-swapped) */
+.tf-hero {
+  background:
+    radial-gradient(110% 80% at 72% 22%, rgba(157, 107, 255, 0.38), transparent 60%),
+    linear-gradient(120deg, #ffd9b8 0%, #ffc0dd 34%, #d3b4ff 68%, #a884ff 100%);
+}
