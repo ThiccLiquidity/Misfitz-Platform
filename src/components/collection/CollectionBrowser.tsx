@@ -6,6 +6,7 @@ import { tierIdForPercentile, resolveTierThresholds } from "@/lib/rarity/tiers";
 import { BinderView } from "@/components/binder/BinderView";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "./FilterSidebar";
 import { CollectionSwitcher } from "./CollectionSwitcher";
+import { TraitFilterBar } from "./TraitFilterBar";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -109,8 +110,13 @@ export function CollectionBrowser({ collection, nfts, allCollections }: Collecti
     <>
       {/* ── Desktop layout ─────────────────────────────────────────────── */}
       <div className="hidden md:flex gap-4 items-start mx-auto justify-center" style={{ maxWidth: 1440 }}>
-        <FilterSidebar {...sidebarProps} />
+        <FilterSidebar {...sidebarProps} hideTraits />
         <div className="flex-1 min-w-0" style={{ maxWidth: 930 }}>
+          <TraitFilterBar
+            traitOptions={traitOptions}
+            traitFilters={traitFilters}
+            onTraitFilter={handleTraitFilter}
+          />
           <BinderView key={binderKey} collection={collection} nfts={filtered} />
         </div>
         {allCollections && (

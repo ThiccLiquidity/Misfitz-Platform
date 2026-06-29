@@ -80,6 +80,19 @@ export function NftRarityCard({
   const id = tier.id;
   const sparkles = SPARKLE_CONFIGS[id] ?? [];
 
+  // Keep cards a consistent shape regardless of how many traits an NFT has. Sort rarest-first
+  // (when trait rarity is known) so the most interesting traits survive the cap. Compact grid
+  // cells show up to GRID_TRAIT_CAP with a "+N more" chip; the detail view shows all but inside a
+  // bounded, scrollable box (.tcg-trait-grid-scroll) so it never elongates off the card.
+  const GRID_TRAIT_CAP = 6;
+  const sortedTraits = [...nft.traits].sort((a, b) => {
+    const ra = typeof a.rarityPercent === "number" ? a.rarityPercent : 999;
+    const rb = typeof b.rarityPercent === "number" ? b.rarityPercent : 999;
+    return ra - rb;
+  });
+  const shownTraits = isDetail ? sortedTraits : sortedTraits.slice(0, GRID_TRAIT_CAP);
+  const hiddenTraitCount = nft.traits.length - shownTraits.length;
+
   const lbl = isDetail ? "text-xs"     : "text-[7px]";
   const val = isDetail ? "text-sm"     : "text-[9px]";
   const sub = isDetail ? "text-xs"     : "";
@@ -188,10 +201,14 @@ export function NftRarityCard({
             {nft.traits.length > 0 && (
               <>
                 <div className="tcg-traits-header">
-                  <span className={`tcg-traits-pill tcg-traits-pill-${id}`}>Traits</span>
+                  <span className={`tcg-traits-pill tcg-traits-pill-${id}`}>
+                    Traits · {nft.traits.length}
+                  </span>
                 </div>
-                <div className={`tcg-trait-grid tcg-trait-grid-${id}`}>
-                  {nft.traits.map((trait) => (
+                <div
+                  className={`tcg-trait-grid tcg-trait-grid-${id}${isDetail ? " tcg-trait-grid-scroll" : ""}`}
+                >
+                  {shownTraits.map((trait) => (
                     <TraitRow
                       key={trait.trait_type}
                       trait={trait}
@@ -200,6 +217,11 @@ export function NftRarityCard({
                       lblClass={lbl}
                     />
                   ))}
+                  {hiddenTraitCount > 0 && (
+                    <div className={`tcg-trait-more tcg-trait-row-${id}`}>
+                      +{hiddenTraitCount} more {hiddenTraitCount === 1 ? "trait" : "traits"}
+                    </div>
+                  )}
                 </div>
               </>
             )}

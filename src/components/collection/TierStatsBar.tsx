@@ -112,6 +112,11 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
     return counts;
   }, [nfts, thresholds, collection.totalSupply]);  // per-nft totalSupply respected for mixed binders
 
+  // Many Chia collections aren't OpenRarity-ranked on MintGarden yet (openrarity_rank: null). Those
+  // NFTs can't be tiered, so rather than silently showing zeros we surface the count explicitly.
+  const unrankedCount = useMemo(() => nfts.filter((n) => !n.rarityRank).length, [nfts]);
+  const rankedCount = nfts.length - unrankedCount;
+
   return (
     <div
       className="rounded-2xl mb-4 overflow-hidden"
@@ -173,6 +178,23 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
           );
         })}
       </div>
+
+      {unrankedCount > 0 && (
+        <div
+          className="flex items-center justify-center gap-1.5 px-4 py-2 text-[11px]"
+          style={{
+            borderTop: isLight ? "1px solid rgba(100,150,255,0.14)" : "1px solid rgba(255,255,255,0.06)",
+            background: isLight ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.25)",
+            color: isLight ? "#5a6a85" : "rgba(255,255,255,0.5)",
+          }}
+        >
+          <span style={{ fontWeight: 700 }}>{rankedCount.toLocaleString()}</span>
+          <span>ranked</span>
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span style={{ fontWeight: 700 }}>{unrankedCount.toLocaleString()}</span>
+          <span>not yet scored by the rarity index</span>
+        </div>
+      )}
     </div>
   );
 }

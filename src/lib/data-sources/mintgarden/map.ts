@@ -35,6 +35,14 @@ function parseMintNumber(detail: MgNftDetail): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
+// Most recent sale price (XCH) from the NFT's events — a value anchor when the collection has no
+// listed floor (common on Chia). Takes the last event carrying a positive xch_price.
+function lastSalePriceXch(events: MgNftDetail["events"]): number | null {
+  let price: number | null = null;
+  for (const e of events ?? []) if (typeof e.xch_price === "number" && e.xch_price > 0) price = e.xch_price;
+  return price;
+}
+
 function bestImage(detail: MgNftDetail): string {
   return (
     detail.data?.thumbnail_uri ||
@@ -107,7 +115,11 @@ export function mapDetailToNftData(
   // Prefer a resolved floor (e.g. a live Dexie ask) passed by the caller; fall back to MintGarden's
   // own floor_price. Dexie is the platform's designated floor source (ARCHITECTURE.md §7 market layer).
   const mgFloor = typeof collection.floor_price === "number" ? collection.floor_price : null;
-  const floorXch = floorOverrideXch ?? mgFloor;
+  const listingXch = typeof detail.xch_price === "number" && detail.xch_price > 0 ? detail.xch_price : null;
+  const lastSale = lastSalePriceXch(detail.events);
+  // Many Chia collections have no listed floor — fall back to this NFT's last sale, then its current
+  // ask, so traded/listed NFTs still show a value instead of $0.
+  const floorXch = floorOverrideXch ?? mgFloor ?? lastSale ?? listingXch;
 
   // Special/collectible mint number -> badge + desirability value bump (VALUATION.md Part 2).
   const collectible = collectibleNumber(parseMintNumber(detail), totalSupply);
@@ -124,9 +136,7 @@ export function mapDetailToNftData(
       : null;
 
   const listing: ListingData | null =
-    typeof detail.xch_price === "number" && detail.xch_price > 0
-      ? { priceXch: detail.xch_price, priceUsd: round(detail.xch_price * xchUsdRate, 2) }
-      : null;
+    listingXch !== null ? { priceXch: listingXch, priceUsd: round(listingXch * xchUsdRate, 2) } : null;
 
   const rankPercentile = rarityRank && totalSupply > 0 ? (rarityRank / totalSupply) * 100 : null;
   const rarityScore = rankPercentile !== null ? round(100 - rankPercentile, 1) : null;

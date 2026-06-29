@@ -44,6 +44,9 @@ export interface MgNftDetail {
   owner_address?: MgEncodedRef | null;
   collection: MgCollection;
   openrarity_rank?: string | number | null;
+  // Recent on-chain events; sale events carry an xch_price we use as a value anchor when the
+  // collection has no floor.
+  events?: { type?: number | null; xch_price?: number | null }[] | null;
   is_blocked?: boolean | null;
   blocked_content?: boolean | null;
   sensitive_content?: boolean | null;
