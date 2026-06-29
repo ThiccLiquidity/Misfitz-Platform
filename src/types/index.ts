@@ -62,6 +62,11 @@ export interface NftData {
   // Special/collectible mint-number badge (VALUATION.md Part 2). Optional — only live-mapped NFTs
   // with a special number carry it. tier 1 = grail … 4 = fun.
   collectible?: { tier: number; label: string } | null;
+  // For mixed binders (Your Binder, across collections): the NFT's own collection size + display
+  // name, so each card computes rarity against the right collection. Optional — single-collection
+  // views pass these as props instead.
+  totalSupply?: number;
+  collectionName?: string;
 }
 
 export interface ThemeConfig {

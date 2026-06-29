@@ -73,7 +73,9 @@ export function NftRarityCard({
   variant = "grid",
 }: NftRarityCardProps) {
   const thresholds = resolveTierThresholds(rarityTiers);
-  const tier = getRarityTier(nft.rarityRank, totalSupply, thresholds);
+  const supply = nft.totalSupply ?? totalSupply;
+  const colName = nft.collectionName ?? collectionName;
+  const tier = getRarityTier(nft.rarityRank, supply, thresholds);
   const isDetail = variant === "detail";
   const id = tier.id;
   const sparkles = SPARKLE_CONFIGS[id] ?? [];
@@ -85,7 +87,7 @@ export function NftRarityCard({
   // Tier banner suffix: "#1 OF 50" for top-1%-or-rarer, otherwise "TOP X%"
   const bannerSuffix =
     tier.percentile !== null && tier.percentile < 1 && tier.rank !== null
-      ? "#" + tier.rank + " OF " + String(totalSupply)
+      ? "#" + tier.rank + " OF " + String(supply)
       : tier.percentileLabel.toUpperCase();
 
   return (
@@ -105,7 +107,7 @@ export function NftRarityCard({
         {/* ── CARD HEADER — name + rank on card body material, NOT inside art zone ── */}
         <div className={`tcg-card-header tcg-ch-${id}`}>
           <span className="tcg-cname">
-            {collectionName} | {tokenSuffix(nft.name)}
+            {colName} | {tokenSuffix(nft.name)}
           </span>
           {tier.rank !== null && (
             <div className={`tcg-rank-tag tcg-rank-tag-${id}`}>
