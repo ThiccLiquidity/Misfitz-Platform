@@ -27,6 +27,13 @@ foundation so none of it is Misfitz-specific:
   token rewards are explicitly deferred; the data model below reserves room for them without committing
   to them yet.
 
+### Two entry paths
+
+The platform answers a question that doesn't exist on Chia today: *what are the NFTs in my wallet actually worth?* Two ways in, by design:
+
+- **No-login value view (the hook)** — paste an XCH address, no account required. The platform reads the address's holdings (MintGarden), pulls each collection's floor (Dexie), and runs the Fair Value Estimator per NFT. Zero friction; this is what most visitors come for.
+- **Connected wallet (profile, badges, airdrops)** — verifying ownership of an address (§6) is *not* required to see value. It exists so a collector can hold a profile, earn badges, show off binders, and qualify for artist promotions such as airdrops to top collectors. Most of the community runs **Sage** (WalletConnect) or **Goby** (injected browser provider); both produce the same ownership proof, so verification is wallet-agnostic.
+
 ---
 
 ## 1. Tech Stack
@@ -201,16 +208,35 @@ them would make login fragile.
 
 ## 6. Wallet Integration Strategy
 
-Phased, matching the "mock before live" instruction:
+Phased, matching the "mock before live" instruction. Wallet verification proves a user controls an
+XCH address so it can be claimed on their profile — deliberately separate from the no-login value
+view (see Product Vision), which needs no wallet at all.
 
-- **Phase 1 (mock):** user pastes a Chia address into their profile, no signature check. The platform treats
-  it as "view this address's NFTs" — useful for demos and for browsing before real verification exists.
-- **Phase 2 (verified):** wallet linking via challenge-response — the platform generates a nonce, the user
-  signs it with a Chia wallet that supports message signing (Sage Wallet is the current standard for this),
-  and the backend verifies the signature against the claimed address before marking `Wallet.verifiedAt`.
-- **No custody, no transactions:** this is a collector/viewing platform, not a marketplace — the app never
-  requests a wallet connection for signing transactions, only for proving address ownership. That keeps the
-  security surface small and avoids building offer/trade flows that aren't part of the product vision.
+- **Phase 1 (paste / unverified):** the user pastes an XCH address. It is stored as an unverified
+  `Wallet` row — useful for "view this address's NFTs" and as the starting point for verification.
+- **Phase 2 (verified, server-side):** challenge-response. `POST /api/wallet/challenge` issues a
+  single-use, short-TTL nonce wrapped in a human-readable message (`WalletChallenge`). The user
+  signs it with their Chia wallet via CHIP-0002 `chia_signMessageByAddress`, which returns
+  `{ pubkey, signature, signingMode }`. `POST /api/wallet/verify` validates the still-live challenge
+  and runs the active `WalletVerifier` **server-side** before stamping `Wallet.verifiedAt`.
+  Single-use + TTL defeat replay.
+- **Why server-side, and why two checks:** a Chia address is a puzzle hash, not a public key.
+  Trusting the wallet's own `chia_verifySignature` would let a malicious client fake success. So the
+  verifier independently (1) checks the BLS12-381 signature over the CHIP-0002 digest
+  `sha256tree("Chia Signed Message", message)` under `pubkey`, and (2) reconstructs the standard
+  puzzle hash from `pubkey` (synthetic key -> p2 puzzle -> bech32m) and requires it to equal the
+  claimed address. Check (2) is what stops a valid signature from an unrelated key the user controls.
+- **Mock-first verifier seam:** `WalletVerifier` mirrors the `DataSource` pattern (§7).
+  `MockWalletVerifier` lets the whole flow + UI run and be unit-tested today with no wallet or crypto
+  deps; `ChiaBlsWalletVerifier` (Chia wallet-sdk WASM bindings, no native build) is a one-line swap
+  via `WALLET_VERIFIER=chia-bls`. A dev-only `simulate-sign` endpoint stands in for Sage/Goby while
+  mock is active and is hard-disabled under any real verifier.
+- **Wallet support:** Sage (WalletConnect) and Goby (injected provider) connect differently on the
+  client but hand the backend the same `{ address, message, pubkey, signature, signingMode }` proof,
+  so the server path is identical. Per-wallet connect adapters are a thin client concern added at
+  go-live.
+- **No custody, no transactions:** the app never requests transaction signing — only message signing
+  to prove ownership. Small security surface, no offer/trade flows (outside the product vision).
 
 ## 7. Mock Data Strategy
 

@@ -30,10 +30,38 @@ model Wallet {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   address    String
   label      String?
-  verifiedAt DateTime? // null until Phase 2 signature verification (ARCHITECTURE.md §6)
+  // Which wallet produced the proof: "sage" | "goby" | "manual" | other. Informational only —
+  // server-side verification (ARCHITECTURE.md §6) is wallet-agnostic.
+  walletType String?
+  // null = claimed but unverified (Phase 1 paste). Set once a challenge signature is verified
+  // server-side (Phase 2). Verified wallets unlock profile badges + artist airdrop eligibility.
+  verifiedAt DateTime?
   createdAt  DateTime  @default(now())
 
+  challenges WalletChallenge[]
+
+  // A given address can only be linked once per user (re-linking updates the same row).
+  @@unique([userId, address])
   @@index([userId])
+}
+
+// Single-use, short-TTL nonce backing the Phase 2 challenge-response flow (ARCHITECTURE.md §6).
+// The user signs a message containing `nonce` with their Chia wallet; the backend verifies the
+// signature server-side, then marks the matching Wallet.verifiedAt. consumedAt makes each
+// challenge one-shot, which (together with expiresAt) defeats replay.
+model WalletChallenge {
+  id         String    @id @default(cuid())
+  walletId   String
+  wallet     Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  nonce      String    @unique
+  // The exact human-readable string the wallet is asked to sign (includes nonce, address, domain,
+  // and issued-at). Stored verbatim so verification reconstructs the identical signed payload.
+  message    String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([walletId])
 }
 
 model Profile {

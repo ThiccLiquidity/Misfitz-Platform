@@ -13,3 +13,6 @@ next-env.d.ts
 # Only the small subset actually copied into public/collections/<slug>/ is tracked.
 misfitz-import/
 __write_test__
+
+# test build output
+.test-build/
