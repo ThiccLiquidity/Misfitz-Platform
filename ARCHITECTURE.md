@@ -26,6 +26,11 @@ foundation so none of it is Misfitz-specific:
 - **Future marketplace/rewards** — offer creation, offer visibility across the Chia ecosystem, and CAT
   token rewards are explicitly deferred; the data model below reserves room for them without committing
   to them yet.
+  - *Offer files (deferred, planned):* host and display native Chia offer files that collectors can
+    take and add. Trustless by design — the platform never holds NFTs or funds; the taker completes
+    the trade in their own wallet. This is the point the site stops being purely view-only, so it
+    requires careful offer display/validation (show exactly what's traded, make tampering obvious)
+    and a full security review before launch.
 
 ### Two entry paths
 
