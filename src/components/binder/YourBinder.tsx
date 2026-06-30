@@ -34,22 +34,52 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   // the enrichment route and merge them in by NFT id, so cards sharpen up after they're on screen.
   const [nfts, setNfts] = useState<NftData[]>(holdings.nfts);
   const [enriching, setEnriching] = useState(!holdings.demo && holdings.addresses.length > 0);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     if (holdings.demo || holdings.addresses.length === 0) return;
     let cancelled = false;
+    const all = holdings.nfts;
+    const total = all.length;
+    if (total === 0) { setEnriching(false); return; }
+
+    // Reuse the floor the fast pass already resolved per collection so values stay stable while
+    // traits + estimated ranks fill in (only the rarity premium refines).
+    const floors: Record<string, number> = {};
+    for (const n of all) {
+      if (n.fairValue && !(n.collectionSlug in floors)) floors[n.collectionSlug] = n.fairValue.floorValue;
+    }
+
+    const CHUNK = 24;
+    const chunks: string[][] = [];
+    for (let i = 0; i < all.length; i += CHUNK) chunks.push(all.slice(i, i + CHUNK).map((n) => n.launcherId));
+
     setEnriching(true);
-    fetch(`/api/binder?address=${encodeURIComponent(holdings.addresses.join(","))}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { nfts?: NftData[] } | null) => {
-        if (cancelled || !data?.nfts) return;
-        const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
-        setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setEnriching(false); });
+    setProgress(0);
+    (async () => {
+      let done = 0;
+      for (const ids of chunks) {
+        if (cancelled) return;
+        try {
+          const res = await fetch("/api/binder", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ids, floors, xchUsdRate: holdings.xchUsdRate }),
+          });
+          const data = res.ok ? ((await res.json()) as { nfts?: NftData[] }) : null;
+          if (data?.nfts && !cancelled) {
+            const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
+            setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
+          }
+        } catch { /* keep fast card on failure */ }
+        done += ids.length;
+        if (!cancelled) setProgress(Math.min(1, done / total));
+      }
+      if (!cancelled) setEnriching(false);
+    })();
+
     return () => { cancelled = true; };
-  }, [holdings.addresses, holdings.demo]);
+  }, [holdings.addresses, holdings.demo, holdings.nfts, holdings.xchUsdRate]);
 
   const oneCollection = collectionId !== "all";
 
@@ -131,10 +161,20 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             {holdings.collections.length} collection{holdings.collections.length === 1 ? "" : "s"}{holdings.truncated ? " · capped" : ""}
           </div>
           {enriching && (
-            <div className="mt-1 text-[11px] text-violet-300/80 animate-pulse">Refining rarity…</div>
+            <div className="mt-1 text-[11px] text-violet-300/90">Refining rarity… {Math.round(progress * 100)}%</div>
           )}
         </div>
       </div>
+
+      {/* Enrichment progress bar — fills as per-NFT traits + ranks stream in */}
+      {enriching && (
+        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full transition-[width] duration-300 ease-out"
+            style={{ width: `${Math.round(progress * 100)}%`, background: "linear-gradient(90deg, #8b5cf6, #ec4899)" }}
+          />
+        </div>
+      )}
 
       {/* Full-width tier stats bar */}
       <TierStatsBar collection={SHELL} nfts={scoped} />

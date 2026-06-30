@@ -20,6 +20,10 @@
 body {
   background-color: var(--vault-bg);
   color: var(--title);
+  /* Crisp light-on-dark text — without this, the UI font renders heavy/glowy on dark backgrounds. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* ================================================================

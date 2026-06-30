@@ -1,6 +1,7 @@
 import type { NftData } from "@/types";
 import { fetchOwnerNftDetails } from "@/lib/data-sources/mintgarden/owner";
-import { mapDetailToNftData, nftMarketAnchorXch } from "@/lib/data-sources/mintgarden/map";
+import { mapDetailToNftData, nftMarketAnchorXch, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
+import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
 
@@ -165,4 +166,35 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
     confidence,
     truncated,
   };
+}
+
+// Enrich a specific set of NFTs (by launcher id) for the progressive binder's BATCHED loading: fetch
+// each detail (cached) and map it with the collection floor the fast path already resolved, so values
+// stay stable while traits + our estimated ranks fill in. Returns only the NFTs that mapped cleanly.
+export async function enrichNftsByIds(
+  ids: string[],
+  floorByCollection: Record<string, number>,
+  xchUsdRate: number,
+): Promise<NftData[]> {
+  // small bounded-concurrency pool
+  const details = new Array<Awaited<ReturnType<typeof getNftDetail>> | null>(ids.length);
+  let next = 0;
+  const LIMIT = 12;
+  await Promise.all(
+    Array.from({ length: Math.min(LIMIT, ids.length) }, async () => {
+      while (next < ids.length) {
+        const i = next++;
+        try { details[i] = await getNftDetail(ids[i]); } catch { details[i] = null; }
+      }
+    }),
+  );
+
+  const out: NftData[] = [];
+  for (const d of details) {
+    if (!d || !isDisplayableNft(d)) continue;
+    const floor = floorByCollection[d.collection.id];
+    const m = mapDetailToNftData(d, xchUsdRate, typeof floor === "number" ? floor : null);
+    out.push({ ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName });
+  }
+  return out;
 }
