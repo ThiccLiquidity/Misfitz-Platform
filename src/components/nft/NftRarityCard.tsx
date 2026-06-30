@@ -49,6 +49,8 @@ interface NftRarityCardProps {
   onOpen?: (launcherId: string) => void;
   // "grid" = compact binder cell; "detail" = larger zoomed view (same layout, bigger art + text)
   variant?: "grid" | "detail";
+  // When set (detail view), clicking the art opens a full-screen lightbox of just the NFT.
+  onArtClick?: () => void;
 }
 
 // Full TCG-style rarity card with full-bleed art and per-tier spinning border.
@@ -71,6 +73,7 @@ export function NftRarityCard({
   rarityTiers,
   onOpen,
   variant = "grid",
+  onArtClick,
 }: NftRarityCardProps) {
   const thresholds = resolveTierThresholds(rarityTiers);
   const supply = nft.totalSupply ?? totalSupply;
@@ -133,7 +136,13 @@ export function NftRarityCard({
         {/* ── ART ZONE — truly zero overlays, clean art as minted ── */}
         <div className={`tcg-art-zone${isDetail ? " tcg-art-zone-detail" : ""}`}>
           <div className={`tcg-art-bg tcg-art-bg-${id}`} />
-          <div className="tcg-nft-art">
+          <div
+            className="tcg-nft-art"
+            onClick={onArtClick ? (e) => { e.stopPropagation(); onArtClick(); } : undefined}
+            style={onArtClick ? { cursor: "zoom-in" } : undefined}
+            role={onArtClick ? "button" : undefined}
+            aria-label={onArtClick ? "View full image" : undefined}
+          >
             <Image
               src={nft.imageUrl}
               alt={nft.name}
@@ -144,6 +153,21 @@ export function NftRarityCard({
           </div>
           {isDetail && (
             <div className="tcg-art-clean-label">Art as minted</div>
+          )}
+          {/* For-sale tell — a small price pill so you can spot listings without opening the card. */}
+          {nft.listing && !isDetail && (
+            <div
+              style={{
+                position: "absolute", top: 6, left: 6, zIndex: 5,
+                display: "flex", alignItems: "center", gap: 3,
+                background: "rgba(18,140,72,0.94)", color: "#eafff1",
+                fontSize: 10, fontWeight: 800, lineHeight: 1, letterSpacing: "0.02em",
+                padding: "3px 7px", borderRadius: 999,
+                border: "1px solid rgba(120,230,160,0.55)", boxShadow: "0 1px 6px rgba(0,0,0,0.45)",
+              }}
+            >
+              <span aria-hidden>🏷️</span>{formatXch(nft.listing.priceXch)} XCH
+            </div>
           )}
         </div>
 

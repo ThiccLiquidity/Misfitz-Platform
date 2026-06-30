@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import Image from "next/image";
+import { useMemo, useState } from "react";
 import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
@@ -51,6 +52,7 @@ export function NftDetailModal({
 }: NftDetailModalProps) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
+  const [lightbox, setLightbox] = useState(false);
 
   const thresholds = useMemo(() => resolveTierThresholds(rarityTiers), [rarityTiers]);
   const tier = useMemo(
@@ -108,7 +110,31 @@ export function NftDetailModal({
           totalSupply={totalSupply}
           rarityTiers={rarityTiers}
           variant="detail"
+          onArtClick={() => setLightbox(true)}
         />
+
+        {/* Full-screen lightbox — just the NFT art, big and clean. Click anywhere / ✕ to close. */}
+        {lightbox && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/92 p-4 sm:p-10"
+            onClick={(e) => { e.stopPropagation(); setLightbox(false); }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${nft.name} full image`}
+          >
+            <button
+              type="button"
+              aria-label="Close image"
+              onClick={(e) => { e.stopPropagation(); setLightbox(false); }}
+              className="absolute right-4 top-4 z-10 rounded-full bg-white/10 px-3 py-1.5 text-lg text-white transition hover:bg-white/20"
+            >
+              ✕
+            </button>
+            <div className="relative h-full w-full">
+              <Image src={nft.imageUrl} alt={nft.name} fill className="object-contain" sizes="100vw" priority />
+            </div>
+          </div>
+        )}
 
         {/* ── Market Panel ─────────────────────────────────────────────── */}
         <div
