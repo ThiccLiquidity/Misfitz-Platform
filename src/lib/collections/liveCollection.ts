@@ -100,7 +100,8 @@ export async function getCollectionNftsPage(id: string, cursor: string, size = 6
 // through every NFT (slim list items carry openrarity_rank for ranked collections), sort by rank, and
 // cache the result. First call for a collection is slow (sequential paging); after that it's instant
 // for 10 min. The binder renders only the visible slice, so big collections stay light in the DOM.
-const _fullCache = new Map<string, { value: NftData[]; expiresAt: number }>();
+interface BaseCollection { cards: NftData[]; floorXch: number | null; xchUsdRate: number; capped: boolean }
+const _fullCache = new Map<string, { value: BaseCollection; expiresAt: number }>();
 const FULL_PAGE_SIZE = 100;
 const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their rarest ~12k
 
@@ -110,13 +111,13 @@ export interface FullCollection {
   capped: boolean;
 }
 
-export async function getAllCollectionCards(id: string): Promise<FullCollection> {
-  if (!id.startsWith("col1")) return { nfts: [], total: 0, capped: false };
+async function buildBaseCollection(id: string): Promise<BaseCollection> {
+  if (!id.startsWith("col1")) return { cards: [], floorXch: null, xchUsdRate: XCH_USD_FALLBACK, capped: false };
   const hit = _fullCache.get(id);
-  if (hit && Date.now() < hit.expiresAt) return { nfts: hit.value, total: hit.value.length, capped: false };
+  if (hit && Date.now() < hit.expiresAt) return hit.value;
 
   const [col, rate] = await Promise.all([getCollection(id).catch(() => null), fetchXchUsdRate()]);
-  if (!col) return { nfts: [], total: 0, capped: false };
+  if (!col) return { cards: [], floorXch: null, xchUsdRate: XCH_USD_FALLBACK, capped: false };
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
   // Kick off the floor + Dexie active-offers fetches in parallel with the (sequential) NFT paging.
   const floorPromise = resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null);
@@ -147,33 +148,6 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   }
   const floorXch = floorCandidates.length ? Math.min(...floorCandidates) : floorFallback;
   const cards = cardsFrom(items, col, floorXch, xchUsdRate);
-
-  // Comparable-sales blend (behind a flag; old estimate is the fallback). The model is cached/built in
-  // the background — getCompsModel returns null on a cold cache so this NEVER blocks the request. Where
-  // real sales sit near an NFT's rank, we pull its value toward the sales-implied number, weighted by
-  // confidence; thin evidence leaves the existing estimate essentially untouched. Done before the deal
-  // overlay so deal scores reflect the blended value.
-  if (isCompsEnabled()) {
-    const comps = await getCompsModel(id).catch(() => null);
-    if (comps) {
-      for (const card of cards) {
-        if (card.rarityRank == null || !card.fairValue) continue;
-        const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
-        const cv = comps.valueOf(card.rarityRank, traits);
-        if (cv.value == null || cv.confidence <= 0) continue;
-        const w = cv.confidence;
-        const blended = w * cv.value + (1 - w) * card.fairValue.totalEstimate;
-        const clamped = floorXch != null ? Math.max(floorXch, blended) : blended;
-        card.fairValue = {
-          ...card.fairValue,
-          totalEstimate: Math.round(clamped * 1000) / 1000,
-          totalEstimateUsd: Math.round(clamped * xchUsdRate * 100) / 100,
-        };
-        card.valueBasis = cv.basis;
-        card.valueConfidence = Math.round(cv.confidence * 100) / 100;
-      }
-    }
-  }
 
   // Listings come from Dexie (authoritative, full asset terms):
   //   • Single-NFT, XCH-only offer  → real listing + deal score.
@@ -218,6 +192,36 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   }
 
   cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last
-  _fullCache.set(id, { value: cards, expiresAt: Date.now() + 10 * 60_000 });
-  return { nfts: cards, total: cards.length, capped };
+  const base: BaseCollection = { cards, floorXch, xchUsdRate, capped };
+  _fullCache.set(id, { value: base, expiresAt: Date.now() + 10 * 60_000 });
+  return base;
+}
+
+// Public entry: base cards (cached 10 min) with the comparable-sales blend applied ON READ. The blend is
+// cheap arithmetic over the independently-cached comps model, so the instant that model finishes building
+// in the background it appears on the very next request — it is NOT trapped behind the 10-min card cache.
+export async function getAllCollectionCards(id: string): Promise<FullCollection> {
+  const base = await buildBaseCollection(id);
+  const result = (cards: NftData[]) => ({ nfts: cards, total: cards.length, capped: base.capped });
+  if (!isCompsEnabled()) return result(base.cards);
+  const comps = await getCompsModel(id).catch(() => null);
+  if (!comps) return result(base.cards); // cold model → old values until the background build warms up
+
+  const { floorXch, xchUsdRate } = base;
+  const nfts = base.cards.map((card) => {
+    if (card.rarityRank == null || !card.fairValue) return card;
+    const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
+    const cv = comps.valueOf(card.rarityRank, traits);
+    if (cv.value == null || cv.confidence <= 0) return card;
+    const blended = cv.confidence * cv.value + (1 - cv.confidence) * card.fairValue.totalEstimate;
+    const total = Math.round((floorXch != null ? Math.max(floorXch, blended) : blended) * 1000) / 1000;
+    const fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: Math.round(total * xchUsdRate * 100) / 100 };
+    // Re-score the deal against the blended value, but only for clean single-NFT XCH listings.
+    const xchOnly = !!card.listingRequested && card.listingRequested.length === 1 && card.listingRequested[0].code === "XCH";
+    const dealScore = card.listing && card.dexieOfferId && xchOnly && card.listing.priceXch > 0
+      ? computeDealScore(total, card.listing.priceXch)
+      : card.dealScore;
+    return { ...card, fairValue, dealScore, valueBasis: cv.basis, valueConfidence: Math.round(cv.confidence * 100) / 100 };
+  });
+  return result(nfts);
 }
