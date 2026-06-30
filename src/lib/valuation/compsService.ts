@@ -38,9 +38,12 @@ async function build(colId: string): Promise<CompsModel | null> {
   const recent = [...sales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, MAX_NFTS);
   const now = Date.now();
 
+  let supply = 0; // collection size, for rank percentile + rank-distance bandwidth
   const built: (Sale | null)[] = await pool(recent, CONC, async (s) => {
     const d = await getNftDetail(s.id).catch(() => null);
     if (!d) return null;
+    const cnt = (d.collection as { nft_count?: number } | undefined)?.nft_count;
+    if (typeof cnt === "number" && cnt > supply) supply = cnt;
     const rank = Number(d.openrarity_rank);
     if (!Number.isFinite(rank) || rank <= 0) return null;
     const traits = (d.data?.metadata_json?.attributes ?? [])
@@ -51,7 +54,9 @@ async function build(colId: string): Promise<CompsModel | null> {
   });
 
   const usable = built.filter((x): x is Sale => x !== null);
-  return buildCompsModel(usable);
+  // Fallback supply if the API didn't give nft_count: the largest rank we saw is a lower bound.
+  if (supply <= 0) supply = usable.reduce((m, x) => Math.max(m, x.rank), 0);
+  return buildCompsModel(usable, supply);
 }
 
 /**

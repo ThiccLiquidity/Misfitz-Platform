@@ -213,7 +213,11 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
     const cv = comps.valueOf(card.rarityRank, traits);
     if (cv.value == null || cv.confidence <= 0) return card;
-    const blended = cv.confidence * cv.value + (1 - cv.confidence) * card.fairValue.totalEstimate;
+    const base = card.fairValue.totalEstimate;
+    const effConf = cv.confidence * cv.confidence;                 // squared: thin data pulls far less
+    const cap = base * (effConf < 0.5 ? 3 : 5);                    // comps can't pull >3-5× the base
+    const compsValue = Math.min(cv.value, cap);
+    const blended = effConf * compsValue + (1 - effConf) * base;
     const total = Math.round((floorXch != null ? Math.max(floorXch, blended) : blended) * 1000) / 1000;
     const fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: Math.round(total * xchUsdRate * 100) / 100 };
     // Re-score the deal against the blended value, but only for clean single-NFT XCH listings.
@@ -221,7 +225,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     const dealScore = card.listing && card.dexieOfferId && xchOnly && card.listing.priceXch > 0
       ? computeDealScore(total, card.listing.priceXch)
       : card.dealScore;
-    return { ...card, fairValue, dealScore, valueBasis: cv.basis, valueConfidence: Math.round(cv.confidence * 100) / 100 };
+    return { ...card, fairValue, dealScore, valueBasis: cv.basis, valueConfidence: Math.round(effConf * 100) / 100 };
   });
   return result(nfts);
 }

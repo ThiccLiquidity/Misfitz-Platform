@@ -215,12 +215,16 @@ export async function enrichNftsByIds(
       const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
       const cv = model.valueOf(card.rarityRank, traits);
       if (cv.value == null || cv.confidence <= 0) continue;
-      const blended = cv.confidence * cv.value + (1 - cv.confidence) * card.fairValue.totalEstimate;
+      const base = card.fairValue.totalEstimate;
+      const effConf = cv.confidence * cv.confidence;           // squared confidence
+      const cap = base * (effConf < 0.5 ? 3 : 5);              // comps pull cap
+      const compsValue = Math.min(cv.value, cap);
+      const blended = effConf * compsValue + (1 - effConf) * base;
       const floor = floorByCollection[outCol[i]];
       const total = round(typeof floor === "number" ? Math.max(floor, blended) : blended, 3);
       card.fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: round(total * xchUsdRate, 2) };
       card.valueBasis = cv.basis;
-      card.valueConfidence = round(cv.confidence, 2);
+      card.valueConfidence = round(effConf, 2);
     }
   }
   return out;
