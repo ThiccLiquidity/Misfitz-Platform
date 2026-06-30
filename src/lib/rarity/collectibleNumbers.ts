@@ -11,8 +11,8 @@ export interface CollectibleNumber {
   weight: number; // value-bump factor applied to floor (desirability premium), capped per tier
 }
 
-// Value weight per tier — generous badges, disciplined value (only grails meaningfully move price).
-export const TIER_WEIGHTS: Record<CollectibleTier, number> = { 1: 0.4, 2: 0.1, 3: 0.03, 4: 0 };
+// Value weight per tier — generous badges, disciplined value (grails move price; even 'fun' numbers get a small nudge).
+export const TIER_WEIGHTS: Record<CollectibleTier, number> = { 1: 0.4, 2: 0.1, 3: 0.03, 4: 0.02 };
 
 interface Match {
   tier: CollectibleTier;
