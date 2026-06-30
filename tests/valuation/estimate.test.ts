@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { estimateFairValue, rarityFactorForPercentile, robustFloor } from "../../src/lib/valuation/estimate";
 
 test("rarity factor decreases as items get more common", () => {
-  assert.equal(rarityFactorForPercentile(0.5), 4.0);
-  assert.equal(rarityFactorForPercentile(10), 1.0);
-  assert.equal(rarityFactorForPercentile(20), 0.4);  // uncommon keeps a premium
+  assert.equal(rarityFactorForPercentile(0.05), 14); // mythic — grail
+  assert.equal(rarityFactorForPercentile(0.5), 7);   // legendary
+  assert.equal(rarityFactorForPercentile(2), 2.0);   // epic
+  assert.equal(rarityFactorForPercentile(10), 0.8);  // rare
+  assert.equal(rarityFactorForPercentile(20), 0.2);  // uncommon keeps a small premium
   assert.equal(rarityFactorForPercentile(50), 0);    // common sits at floor
   assert.equal(rarityFactorForPercentile(90), 0);
 });

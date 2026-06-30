@@ -19,16 +19,19 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-// Whole-NFT rarity premium as a multiple of floor, by rank percentile (lower = rarer). Commons (the
-// floor tier, >30th percentile) get NO premium — they ARE what sets the floor. Premium ramps up from
-// uncommon. Stepwise + explainable; calibrate to a collection's real listing spread later.
+// Whole-NFT rarity premium as a multiple of floor, by rank percentile (lower = rarer). Tier-aligned
+// and steep at the elite end (grails are worth many multiples of floor); commons sit at floor.
+// Stepwise + explainable; these multipliers are the main valuation dial.
 export function rarityFactorForPercentile(percentile: number): number {
-  if (percentile <= 1) return 4.0;
-  if (percentile <= 5) return 2.0;
-  if (percentile <= 10) return 1.0;   // rare
-  if (percentile <= 25) return 0.4;   // uncommon (upper)
-  if (percentile <= 30) return 0.15;  // uncommon (lower)
-  return 0;                           // common -> sits at the floor, no premium (it IS the floor tier)
+  // Tier-aligned (mythic 0.1% · legendary 0.5% · epic 2.5% · rare 10% · uncommon 30% · common).
+  // Steep at the very top: grails (mythic/legendary) command a large multiple of floor, while the
+  // bulk of a collection sits at/near floor. Commons get no premium (they ARE the floor tier).
+  if (percentile <= 0.1) return 14;   // mythic — grail
+  if (percentile <= 0.5) return 7;    // legendary
+  if (percentile <= 2.5) return 2.0;  // epic
+  if (percentile <= 10)  return 0.8;  // rare
+  if (percentile <= 30)  return 0.2;  // uncommon
+  return 0;                           // common -> sits at the floor
 }
 
 // Median of the cheapest `k` active asks — a robust floor that one troll/fat-finger listing can't

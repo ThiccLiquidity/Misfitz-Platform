@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
@@ -63,6 +63,25 @@ export function NftDetailModal({
     fullPageHref === undefined
       ? `/collections/${nft.collectionSlug}/nfts/${nft.launcherId}`
       : fullPageHref;
+
+  const [copyState, setCopyState] = useState<"idle" | "loading" | "copied" | "none">("idle");
+  async function copyOfferFile(e: React.MouseEvent) {
+    e.stopPropagation();
+    setCopyState("loading");
+    try {
+      const res = await fetch(`/api/offer?nft=${encodeURIComponent(nft.launcherId)}`);
+      const data = res.ok ? ((await res.json()) as { offer?: string | null }) : null;
+      if (data?.offer) {
+        await navigator.clipboard.writeText(data.offer);
+        setCopyState("copied");
+      } else {
+        setCopyState("none");
+      }
+    } catch {
+      setCopyState("none");
+    }
+    setTimeout(() => setCopyState("idle"), 2600);
+  }
 
   const accentColor = resolveAccent(tier.accent, isLight);
   const panelBg     = isLight ? "rgba(255,255,255,0.97)" : "rgba(18,18,24,0.97)";
@@ -217,6 +236,31 @@ export function NftDetailModal({
               >
                 {nft.listing ? `Buy · ${formatXch(nft.listing.priceXch)} on MintGarden ↗` : "View on MintGarden ↗"}
               </a>
+            </div>
+          )}
+
+          {/* Copy offer file — pastes the seller's Dexie offer string into the user's wallet to accept */}
+          {nft.listing && (
+            <div className="px-4 pb-1">
+              <button
+                type="button"
+                onClick={copyOfferFile}
+                disabled={copyState === "loading"}
+                className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80 disabled:opacity-60"
+                style={{
+                  background: copyState === "copied" ? "rgba(40,180,90,0.16)" : isLight ? "rgba(10,30,80,0.06)" : "rgba(255,255,255,0.05)",
+                  border: `1px solid ${copyState === "copied" ? "rgba(80,200,120,0.5)" : isLight ? "rgba(60,120,220,0.3)" : "rgba(255,255,255,0.14)"}`,
+                  color: copyState === "copied" ? "#5fce7a" : isLight ? "#0a1e50" : "rgba(255,255,255,0.85)",
+                }}
+              >
+                {copyState === "loading"
+                  ? "Fetching offer…"
+                  : copyState === "copied"
+                    ? "✓ Offer file copied — paste in your wallet"
+                    : copyState === "none"
+                      ? "No offer file found on Dexie"
+                      : "📋 Copy offer file"}
+              </button>
             </div>
           )}
 

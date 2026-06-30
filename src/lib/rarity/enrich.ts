@@ -85,9 +85,12 @@ function mockListing(fairValueXch: number, seed: string): ListingData {
 }
 
 export function computeDealScore(fairValueXch: number, listingXch: number): DealScore {
-  if (listingXch <= 0) return { score: 50, label: "FAIR DEAL" };
-  const ratio = fairValueXch / listingXch; // >1 = below fair value = good buy
-  const score = clamp(Math.round(ratio * 70), 0, 100);
+  if (listingXch <= 0 || fairValueXch <= 0) return { score: 50, label: "FAIR DEAL" };
+  // Centered on fair value: discount = how far the ask sits below our estimate (0 = at fair value).
+  // Paying exactly fair value scores 50 (FAIR); a real discount is needed for GREAT, and an ask above
+  // fair value drops below 50 toward OVERPRICED.
+  const discount = 1 - listingXch / fairValueXch; // >0 = below fair (good), <0 = above fair
+  const score = clamp(Math.round(50 + discount * 120), 0, 100);
   const label =
     score >= 80 ? "GREAT DEAL" : score >= 60 ? "GOOD DEAL" : score >= 40 ? "FAIR DEAL" : "OVERPRICED";
   return { score, label };

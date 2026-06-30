@@ -83,9 +83,8 @@ export async function fetchCollectionFloor(
   return withCache(`floor_${dexieCollectionId}`, 5 * 60_000, async () => {
     try {
       const url = new URL(`${DEXIE_BASE}/offers`);
-      url.searchParams.set("status", "1");              // active only
+      url.searchParams.set("status", "0");              // 0 = active on Dexie (1 is "pending")
       url.searchParams.set("offered", dexieCollectionId);
-      url.searchParams.set("requested", "xch");
       url.searchParams.set("sort", "price_asc");        // cheapest first → floor
       url.searchParams.set("page_size", "1");
 
@@ -148,9 +147,8 @@ export async function fetchCollectionListingCount(dexieCollectionId: string): Pr
   return withCache(`listings_${dexieCollectionId}`, 5 * 60_000, async () => {
     try {
       const url = new URL(`${DEXIE_BASE}/offers`);
-      url.searchParams.set("status", "1");               // active only
+      url.searchParams.set("status", "0");               // 0 = active on Dexie
       url.searchParams.set("offered", dexieCollectionId);
-      url.searchParams.set("requested", "xch");
       url.searchParams.set("page_size", "20");            // enough to distinguish thin vs liquid
       const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) return 0;
@@ -178,9 +176,8 @@ export async function fetchNftListing(
   return withCache(`listing_${launcherId}`, 2 * 60_000, async () => {
     try {
       const url = new URL(`${DEXIE_BASE}/offers`);
-      url.searchParams.set("status", "1");
+      url.searchParams.set("status", "0");         // 0 = active on Dexie
       url.searchParams.set("offered", launcherId);
-      url.searchParams.set("requested", "xch");
       url.searchParams.set("sort", "price_asc");   // lowest ask first
       url.searchParams.set("page_size", "1");
 
@@ -214,4 +211,35 @@ export async function fetchMarketContext(
     xchUsdRate: rateRaw ?? XCH_USD_FALLBACK,
     floorXch,
   };
+}
+
+// ── NFT offer file (for "copy offer") ─────────────────────────────────────────
+// The active Dexie offer for a listed NFT carries the full `offer1...` string a buyer pastes into
+// their wallet to accept the trade. We surface it for copy (never execute the trade ourselves).
+// Cached 2 min. Returns null for non-nft1 ids, when nothing is listed on Dexie, or on error.
+export async function fetchNftOffer(launcherId: string): Promise<{ offer: string; priceXch: number } | null> {
+  if (!launcherId.startsWith("nft1")) return null;
+  return withCache(`offerfile_${launcherId}`, 2 * 60_000, async () => {
+    try {
+      const url = new URL(`${DEXIE_BASE}/offers`);
+      url.searchParams.set("status", "0");          // active
+      url.searchParams.set("offered", launcherId);
+      url.searchParams.set("sort", "price_asc");    // cheapest active offer
+      url.searchParams.set("page_size", "5");
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (!res.ok) return null;
+      const json = (await res.json()) as {
+        offers?: { offer?: string; price?: number; requested?: { id?: string }[] }[];
+      };
+      // Prefer an offer that requests XCH (a plain sale), cheapest first.
+      const o =
+        (json?.offers ?? []).find(
+          (of) => typeof of.offer === "string" && (of.requested ?? []).some((r) => r.id === "xch"),
+        ) ?? (json?.offers ?? []).find((of) => typeof of.offer === "string");
+      if (!o || typeof o.offer !== "string") return null;
+      return { offer: o.offer, priceXch: typeof o.price === "number" ? o.price : 0 };
+    } catch {
+      return null;
+    }
+  });
 }
