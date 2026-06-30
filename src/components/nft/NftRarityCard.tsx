@@ -154,20 +154,19 @@ export function NftRarityCard({
           {isDetail && (
             <div className="tcg-art-clean-label">Art as minted</div>
           )}
-          {/* For-sale tell — a small price pill so you can spot listings without opening the card. */}
+          {/* For-sale tell — slim, minimal price pill, centered at the top of the card. */}
           {nft.listing && !isDetail && (
             <div
               style={{
                 position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5,
-                display: "inline-flex", alignItems: "center", gap: 4,
-                background: "rgba(18,140,72,0.94)", color: "#eafff1",
-                fontSize: 10, fontWeight: 800, letterSpacing: "0.02em",
-                padding: "4px 8px", borderRadius: 999,
-                border: "1px solid rgba(120,230,160,0.55)", boxShadow: "0 1px 6px rgba(0,0,0,0.45)",
+                whiteSpace: "nowrap",
+                background: "rgba(16,138,70,0.92)", color: "#eafff1",
+                fontSize: 10, fontWeight: 700, letterSpacing: "0.02em", lineHeight: 1.5,
+                padding: "1px 9px", borderRadius: 999,
+                border: "1px solid rgba(120,230,160,0.5)", boxShadow: "0 1px 5px rgba(0,0,0,0.4)",
               }}
             >
-              <span aria-hidden style={{ fontSize: 9, lineHeight: 1, display: "inline-block" }}>🏷️</span>
-              <span style={{ lineHeight: 1, display: "inline-block" }}>{formatXch(nft.listing.priceXch)}</span>
+              {formatXch(nft.listing.priceXch)}
             </div>
           )}
         </div>
