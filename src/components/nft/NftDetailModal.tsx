@@ -227,7 +227,7 @@ export function NftDetailModal({
               </span>
               {nft.dealScore ? (
                 <>
-                  <DealScoreGauge score={nft.dealScore.score} label={funLabel(nft.dealScore.label)} />
+                  <DealScoreGauge score={nft.dealScore.score} />
                   <span className="text-[10px] font-bold" style={{ color: colorForLabel(nft.dealScore.label) }}>
                     {funLabel(nft.dealScore.label)}
                   </span>

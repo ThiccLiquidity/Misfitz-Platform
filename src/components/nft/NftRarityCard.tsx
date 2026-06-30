@@ -158,7 +158,7 @@ export function NftRarityCard({
           {nft.listing && !isDetail && (
             <div
               style={{
-                position: "absolute", top: 6, left: 6, zIndex: 5,
+                position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5,
                 display: "inline-flex", alignItems: "center", gap: 4,
                 background: "rgba(18,140,72,0.94)", color: "#eafff1",
                 fontSize: 10, fontWeight: 800, letterSpacing: "0.02em",
@@ -207,7 +207,7 @@ export function NftRarityCard({
                 <span className={`tcg-stat-lbl tcg-lbl-${id} ${lbl}`}>Deal Score</span>
                 {nft.dealScore ? (
                   <>
-                    <DealScoreGauge score={nft.dealScore.score} label={funLabel(nft.dealScore.label)} />
+                    <DealScoreGauge score={nft.dealScore.score} />
                     <span
                       className={`tcg-stat-sub font-bold ${lbl}`}
                       style={{ color: colorForLabel(nft.dealScore.label) }}
