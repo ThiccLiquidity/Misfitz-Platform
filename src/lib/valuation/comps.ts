@@ -70,7 +70,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   const halfLife = opts.halfLifeDays ?? 120;
   const reliabilityK = opts.reliabilityK ?? 12;
   const minTraitN = opts.minTraitN ?? 3;
-  const [clampLo, clampHi] = opts.traitFactorClamp ?? [0.6, 3.0];
+  const [clampLo, clampHi] = opts.traitFactorClamp ?? [1.0, 3.0]; // traits only ADD to the curve
   const supply = Math.max(1, Math.floor(totalSupply) || 0);
   const bandwidth = opts.bandwidth ?? Math.max(supply * 0.005, 50);
   const pullK = opts.pullK ?? 0.12;
@@ -116,6 +116,16 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
 
   // ── Build the monotonic value curve over a grid (sale ranks + a percentile grid) ────────────────
   const baseAt = (rank: number) => floor + floor * rarityFactor(clamp((rank / supply) * 100, 0, 100));
+  // Global market level: median of (sale price / our baseline) across ALL sales. Lets any sale move the
+  // whole curve a little — a top-rarity sale lifts even the lower ranks — by scaling the rarity premium
+  // (the floor stays the floor). Local sales still anchor twins precisely on top of this.
+  let globalScale = 1;
+  if (floor > 0) {
+    const ratios = points.map((p) => ({ x: p.price / baseAt(p.rank), w: p.w })).filter((r) => Number.isFinite(r.x) && r.x > 0);
+    const gs = weightedMedian(ratios);
+    if (gs != null) globalScale = clamp(gs, 0.5, 4);
+  }
+  const scaledBaseAt = (rank: number) => floor + (baseAt(rank) - floor) * globalScale;
   const gridSet = new Set<number>();
   for (const p of points) gridSet.add(Math.round(p.rank));
   for (let pc = 1; pc <= 100; pc++) gridSet.add(Math.max(1, Math.round((pc / 100) * supply)));
@@ -123,7 +133,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   const vpts = grid.map((rank) => {
     const pull = localPull(rank);
     const lc = rankCurve(rank);
-    const v = lc != null ? pull * lc + (1 - pull) * baseAt(rank) : baseAt(rank);
+    const v = lc != null ? pull * lc + (1 - pull) * scaledBaseAt(rank) : scaledBaseAt(rank);
     return { rank, val: Math.max(floor, v), w: 0.05 + pull }; // sale-backed points weighted higher
   });
   // Monotonic non-increasing in rank via cumulative MAX from the common end: a sale at a rank lifts
@@ -135,7 +145,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   for (let i = byRank.length - 1; i >= 0; i--) { runMax = Math.max(runMax, byRank[i].val); mono[i] = { rank: byRank[i].rank, val: runMax }; }
 
   function curveValue(rank: number): number {
-    if (mono.length === 0) return Math.max(floor, baseAt(rank));
+    if (mono.length === 0) return Math.max(floor, scaledBaseAt(rank));
     if (rank <= mono[0].rank) return mono[0].val;
     if (rank >= mono[mono.length - 1].rank) return mono[mono.length - 1].val;
     let lo = 0, hi = mono.length - 1;

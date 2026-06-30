@@ -325,8 +325,15 @@ export function NftDetailModal({
           {/* Value breakdown */}
           {nft.fairValue && (
             <div className="px-4 py-3">
-              <div className="mb-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: lblColor }}>
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: lblColor }}>
                 Where this value comes from
+                <span
+                  title="Estimated value = a market-sales curve fit by rarity rank (recency-weighted, and never valuing a rarer NFT below a less-rare recent sale), plus a trait-demand premium and any collector-number premium on top."
+                  className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-black"
+                  style={{ border: `1px solid ${lblColor}`, color: lblColor }}
+                >
+                  i
+                </span>
               </div>
 
               {nft.valueCurve != null ? (
@@ -335,12 +342,10 @@ export function NftDetailModal({
                     <span className="text-xs" style={{ color: subColor }}>Market curve{nft.rarityRank ? ` (rank #${nft.rarityRank})` : ""}</span>
                     <span className="text-xs font-semibold" style={{ color: valColor }}>{nft.valueCurve.toFixed(2)} XCH</span>
                   </div>
-                  {Math.abs(traitEffect) >= 0.005 && (
+                  {traitEffect >= 0.005 && (
                     <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
                       <span className="text-xs" style={{ color: subColor }}>Trait demand</span>
-                      <span className="text-xs font-semibold" style={{ color: traitEffect >= 0 ? "#5fce7a" : "#e0a35a" }}>
-                        {traitEffect >= 0 ? "+" : "−"}{Math.abs(traitEffect).toFixed(2)} XCH
-                      </span>
+                      <span className="text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
                     </div>
                   )}
                   {numberPremium > 0.005 && (
@@ -352,16 +357,6 @@ export function NftDetailModal({
                   <div className="flex items-baseline justify-between pt-2">
                     <span className="text-xs font-black uppercase tracking-wide" style={{ color: lblColor }}>Estimated value</span>
                     <span className="text-sm font-black" style={{ color: valColor }}>{nft.fairValue.totalEstimate.toFixed(2)} XCH</span>
-                  </div>
-                  <div className="mt-2.5 rounded-lg px-3 py-2 text-[11px] leading-snug" style={{ border: "1px solid rgba(95,206,122,0.4)", background: "rgba(40,180,90,0.10)" }}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold uppercase tracking-widest" style={{ color: "#5fce7a" }}>📈 Market-fitted</span>
-                      {typeof nft.valueConfidence === "number" && (
-                        <span className="font-bold" style={{ color: nft.valueConfidence >= 0.5 ? "#5fce7a" : valColor }}>{Math.round(nft.valueConfidence * 100)}% sales support</span>
-                      )}
-                    </div>
-                    <div className="mt-1" style={{ color: subColor }}>{nft.valueBasis}</div>
-                    <div className="mt-1 text-[10px]" style={{ color: lblColor }}>Rank-fitted from real recent sales of similar-rarity NFTs; nothing rarer is valued below a less-rare sale.</div>
                   </div>
                 </>
               ) : (
