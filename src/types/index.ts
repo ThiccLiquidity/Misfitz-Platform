@@ -72,6 +72,11 @@ export interface NftData {
   // and never set the collection floor. Verify the real terms on MintGarden before buying.
   listingUnverified?: boolean | null;
   dealScore: DealScore | null;
+  // Comparable-sales valuation (src/lib/valuation). When the comps model has evidence near this NFT,
+  // fairValue.totalEstimate is blended toward the sales-implied value; these describe that influence.
+  // valueConfidence 0..1 = how much real sales backed it; valueBasis = short human explanation.
+  valueBasis?: string | null;
+  valueConfidence?: number | null;
   // Special/collectible mint-number badge (VALUATION.md Part 2). Optional — only live-mapped NFTs
   // with a special number carry it. tier 1 = grail … 4 = fun.
   collectible?: { tier: number; label: string } | null;

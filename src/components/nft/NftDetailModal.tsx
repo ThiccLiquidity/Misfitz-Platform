@@ -319,6 +319,15 @@ export function NftDetailModal({
                   </div>
                 );
               })}
+              {nft.valueBasis && (
+                <div className="mt-2 flex items-center gap-1.5 text-[10px]" style={{ color: subColor }}>
+                  <span className="font-bold uppercase tracking-widest" style={{ color: lblColor }}>Comps</span>
+                  <span>{nft.valueBasis}</span>
+                  {typeof nft.valueConfidence === "number" && (
+                    <span style={{ color: lblColor }}>· {Math.round(nft.valueConfidence * 100)}% confidence</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -325,3 +325,59 @@ export async function fetchCollectionActiveOffers(colId: string, maxPages = 40):
     return map;
   });
 }
+
+// ── Completed clean-XCH sales (comparable-sales valuation) ──────────────────────────────────────
+// Real settled prices, the evidence behind the comps model. status=4 = completed; requested=xch is
+// REQUIRED for Dexie to honor the date sort and filters the denomination. We keep only single-NFT,
+// XCH-ONLY sales (a bundle or XCH+CAT sale isn't a clean per-NFT price). Most-recent sale per NFT.
+// Cached 30 min. Returns [] for non-col1 ids or on error.
+export interface CompletedSale {
+  id: string;    // sold NFT launcher id (hex)
+  price: number; // clean XCH price
+  date: string;  // ISO completion date
+}
+
+export async function fetchCollectionCompletedSales(colId: string, maxPages = 30): Promise<CompletedSale[]> {
+  if (!colId.startsWith("col1")) return [];
+  return withCache(`colsales_${colId}`, 30 * 60_000, async () => {
+    const byNft = new Map<string, CompletedSale>(); // most-recent sale per NFT (date-desc, first wins)
+    const fetchPage = async (page: number): Promise<{ offers: DexieOfferRaw[]; count: number }> => {
+      const url = new URL(`${DEXIE_BASE}/offers`);
+      url.searchParams.set("status", "4");                // completed (sold)
+      url.searchParams.set("offered", colId);
+      url.searchParams.set("requested", "xch");           // required for sort; fixes denomination
+      url.searchParams.set("sort", "date_completed");     // most recent first
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("page_size", "100");
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (!res.ok) return { offers: [], count: 0 };
+      const json = (await res.json()) as { offers?: (DexieOfferRaw & { date_completed?: string; date_found?: string })[]; count?: number };
+      return { offers: json?.offers ?? [], count: json?.count ?? 0 };
+    };
+    const ingest = (offers: (DexieOfferRaw & { date_completed?: string; date_found?: string })[]) => {
+      for (const o of offers) {
+        const req = (o.requested ?? []);
+        const xchOnly = req.length === 1 && (req[0].code ?? req[0].id ?? "").toLowerCase() === "xch";
+        const nfts = (o.offered ?? []).filter((x) => x.is_nft && x.id);
+        if (!xchOnly || nfts.length !== 1 || typeof o.price !== "number" || o.price <= 0) continue;
+        const id = nfts[0].id as string;
+        if (!byNft.has(id)) byNft.set(id, { id, price: o.price, date: o.date_completed || o.date_found || "" });
+      }
+    };
+    try {
+      const first = await fetchPage(1);
+      ingest(first.offers as never);
+      const totalPages = Math.min(maxPages, Math.ceil((first.count || 0) / 100));
+      const rest: number[] = [];
+      for (let p = 2; p <= totalPages; p++) rest.push(p);
+      const LIMIT = 6;
+      for (let i = 0; i < rest.length; i += LIMIT) {
+        const batch = await Promise.all(rest.slice(i, i + LIMIT).map((p) => fetchPage(p).catch(() => ({ offers: [], count: 0 }))));
+        for (const b of batch) ingest(b.offers as never);
+      }
+    } catch {
+      /* partial is fine */
+    }
+    return [...byNft.values()];
+  });
+}

@@ -2,6 +2,8 @@ import { getCollection, listCollectionNfts } from "@/lib/data-sources/mintgarden
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { computeDealScore } from "@/lib/rarity/enrich";
+import { getCompsModel } from "@/lib/valuation/compsService";
+import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
 import type { NftData } from "@/types";
 
@@ -145,6 +147,33 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   }
   const floorXch = floorCandidates.length ? Math.min(...floorCandidates) : floorFallback;
   const cards = cardsFrom(items, col, floorXch, xchUsdRate);
+
+  // Comparable-sales blend (behind a flag; old estimate is the fallback). The model is cached/built in
+  // the background — getCompsModel returns null on a cold cache so this NEVER blocks the request. Where
+  // real sales sit near an NFT's rank, we pull its value toward the sales-implied number, weighted by
+  // confidence; thin evidence leaves the existing estimate essentially untouched. Done before the deal
+  // overlay so deal scores reflect the blended value.
+  if (isCompsEnabled()) {
+    const comps = await getCompsModel(id).catch(() => null);
+    if (comps) {
+      for (const card of cards) {
+        if (card.rarityRank == null || !card.fairValue) continue;
+        const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
+        const cv = comps.valueOf(card.rarityRank, traits);
+        if (cv.value == null || cv.confidence <= 0) continue;
+        const w = cv.confidence;
+        const blended = w * cv.value + (1 - w) * card.fairValue.totalEstimate;
+        const clamped = floorXch != null ? Math.max(floorXch, blended) : blended;
+        card.fairValue = {
+          ...card.fairValue,
+          totalEstimate: Math.round(clamped * 1000) / 1000,
+          totalEstimateUsd: Math.round(clamped * xchUsdRate * 100) / 100,
+        };
+        card.valueBasis = cv.basis;
+        card.valueConfidence = Math.round(cv.confidence * 100) / 100;
+      }
+    }
+  }
 
   // Listings come from Dexie (authoritative, full asset terms):
   //   • Single-NFT, XCH-only offer  → real listing + deal score.
