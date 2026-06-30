@@ -63,6 +63,9 @@ export interface MgListItem {
   collection_id: string; // col1...
   collection_name: string;
   owner_address_encoded_id?: string | null;
+  // Safety flags (same gate as detail) so the fast path can drop blocked NFTs before display.
+  is_blocked?: boolean | null;
+  collection_blocked_content?: boolean | null;
 }
 
 // Cursor-paginated list envelope.

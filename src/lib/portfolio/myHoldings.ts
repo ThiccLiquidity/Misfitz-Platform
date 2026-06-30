@@ -1,5 +1,9 @@
 import type { NftData } from "@/types";
 import { getAddressPortfolio } from "./service";
+import { fetchOwnerListings } from "@/lib/data-sources/mintgarden/owner";
+import { mapListItemToCard } from "@/lib/data-sources/mintgarden/map";
+import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor } from "@/lib/market/dexie";
+import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { getCollectionBySlug, listNftsForCollection } from "@/lib/db/queries";
 import { enrichNfts } from "@/lib/rarity/enrich";
 import { fetchMarketContext, XCH_USD_FALLBACK } from "@/lib/market/dexie";
@@ -58,8 +62,9 @@ function summarize(nfts: NftData[], xchUsdRate: number, addresses: string[], tru
   };
 }
 
-// Live: aggregate across addresses, dedupe NFTs held across them.
-export async function getMyHoldings(addresses: string[]): Promise<MyHoldings> {
+// FULL/eager: per-NFT detail for every holding (traits + estimated ranks + refined value). Used by
+// the enrichment API route to stream the complete data after the fast grid is already on screen.
+export async function getMyHoldingsFull(addresses: string[]): Promise<MyHoldings> {
   if (addresses.length === 0) return EMPTY;
   const portfolios = await Promise.all(addresses.map((a) => getAddressPortfolio(a).catch(() => null)));
   const nfts: NftData[] = [];
@@ -78,6 +83,70 @@ export async function getMyHoldings(addresses: string[]): Promise<MyHoldings> {
       }
     }
   }
+  return summarize(nfts, xchUsdRate, addresses, truncated, false);
+}
+
+// FAST/initial: build the binder from the slim holdings list + one metadata fetch per collection —
+// no per-NFT detail. Renders in ~1s; YourBinder then calls the enrichment route to fill in traits and
+// our own estimated ranks. Floor is resolved per collection (Dexie ask -> MintGarden -> Dexie sales ->
+// cheapest current listing among holdings) so values are consistent from the first paint.
+export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings> {
+  if (addresses.length === 0) return EMPTY;
+
+  const [rate, ...owners] = await Promise.all([
+    fetchXchUsdRate(),
+    ...addresses.map((a) => fetchOwnerListings(a).catch(() => null)),
+  ]);
+  const xchUsdRate = rate ?? XCH_USD_FALLBACK;
+
+  const items: MgListItem[] = [];
+  const collections = new Map<string, MgCollection>();
+  const seen = new Set<string>();
+  let truncated = false;
+  for (const o of owners) {
+    if (!o) continue;
+    truncated = truncated || o.truncated;
+    for (const [id, c] of o.collections) if (!collections.has(id)) collections.set(id, c);
+    for (const it of o.items) {
+      if (seen.has(it.encoded_id)) continue;
+      seen.add(it.encoded_id);
+      items.push(it);
+    }
+  }
+
+  // Resolve one floor per collection (matches service.ts precedence; holdings anchor = cheapest
+  // current listing among held cards, since the fast path has no per-NFT sale history yet).
+  const colIds = Array.from(collections.keys());
+  const anchorsByCol = new Map<string, number[]>();
+  for (const it of items) {
+    if (typeof it.price === "number" && it.price > 0) {
+      const arr = anchorsByCol.get(it.collection_id) ?? [];
+      arr.push(it.price);
+      anchorsByCol.set(it.collection_id, arr);
+    }
+  }
+  const [dexieFloors, saleFloors] = await Promise.all([
+    Promise.all(colIds.map((id) => fetchCollectionFloor(id).catch(() => null))),
+    Promise.all(colIds.map((id) => fetchCollectionSaleFloor(id).catch(() => null))),
+  ]);
+  const floorByCol = new Map<string, number | null>();
+  colIds.forEach((id, i) => {
+    const dexie = dexieFloors[i];
+    const mg = collections.get(id)?.floor_price ?? null;
+    const sale = saleFloors[i];
+    const anchors = anchorsByCol.get(id) ?? [];
+    const hold = anchors.length ? Math.min(...anchors) : null;
+    floorByCol.set(
+      id,
+      typeof dexie === "number" ? dexie : mg !== null ? mg : typeof sale === "number" ? sale : hold,
+    );
+  });
+
+  const nfts: NftData[] = items.map((it) => {
+    const m = mapListItemToCard(it, collections.get(it.collection_id), floorByCol.get(it.collection_id) ?? null, xchUsdRate);
+    return { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
+  });
+
   return summarize(nfts, xchUsdRate, addresses, truncated, false);
 }
 

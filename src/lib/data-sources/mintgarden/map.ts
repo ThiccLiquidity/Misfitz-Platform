@@ -203,6 +203,74 @@ export function mapDetailToNftData(
   return { nft, collectionId: collection.id, collectionName: collection.name, collectionFloorXch: floorXch, totalSupply };
 }
 
+// FAST mapping for progressive binder loading: a card built from a holdings LIST item + its
+// collection metadata (supply/floor), WITHOUT the per-NFT detail fetch. Gives image, name, listing,
+// the indexer's rank (when present) and a floor-anchored value immediately; traits + our own
+// estimated rank are filled in later by the full mapper (mapDetailToNftData) during enrichment.
+export interface MappedCard {
+  nft: NftData;
+  collectionId: string;
+  collectionName: string;
+  totalSupply: number;
+}
+
+export function mapListItemToCard(
+  item: MgListItem,
+  collection: MgCollection | undefined,
+  floorXch: number | null,
+  xchUsdRate = XCH_USD_FALLBACK,
+): MappedCard {
+  const rarityRank = parseRank(item.openrarity_rank);
+  const totalSupply = collection?.nft_count ?? 0;
+  const listingXch = typeof item.price === "number" && item.price > 0 ? item.price : null;
+  const nameNum = (item.name ?? "").match(/#?(\d+)\s*$/);
+  const mintNumber = nameNum ? parseInt(nameNum[1], 10) : null;
+  const collectible = collectibleNumber(mintNumber, totalSupply);
+
+  const fairValue: FairValueEstimate | null =
+    floorXch !== null
+      ? estimateFairValue({
+          floorXch,
+          rarityRank,
+          totalSupply,
+          desirabilityWeight: collectible?.weight ?? 0,
+          xchUsdRate,
+        })
+      : null;
+
+  const listing: ListingData | null =
+    listingXch !== null ? { priceXch: listingXch, priceUsd: round(listingXch * xchUsdRate, 2) } : null;
+
+  const rankPercentile = rarityRank && totalSupply > 0 ? (rarityRank / totalSupply) * 100 : null;
+  const rarityScore = rankPercentile !== null ? round(100 - rankPercentile, 1) : null;
+  const dealScore =
+    fairValue && listing ? computeDealScore(fairValue.totalEstimate, listing.priceXch) : null;
+
+  const nft: NftData = {
+    id: item.id,
+    launcherId: item.encoded_id,
+    collectionSlug: item.collection_id,
+    name: item.name,
+    imageUrl: item.thumbnail_uri ?? "",
+    traits: [],
+    rarityRank,
+    rankEstimated: false,
+    currentOwnerAddress: item.owner_address_encoded_id ?? null,
+    fairValue,
+    rarityScore,
+    listing,
+    dealScore,
+    collectible: collectible ? { tier: collectible.tier, label: collectible.label } : null,
+  };
+
+  return {
+    nft,
+    collectionId: item.collection_id,
+    collectionName: item.collection_name ?? collection?.name ?? item.collection_id,
+    totalSupply,
+  };
+}
+
 // Slim mapping from a list item (no traits/floor available) — used for collection browsing.
 export function mapListItemToNftData(item: MgListItem, xchUsdRate = XCH_USD_FALLBACK): NftData {
   const rarityRank = parseRank(item.openrarity_rank);

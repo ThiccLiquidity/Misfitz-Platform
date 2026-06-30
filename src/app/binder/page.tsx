@@ -1,5 +1,5 @@
 import { isValidChiaAddress } from "@/lib/wallet/message";
-import { getMyHoldings, getDemoHoldings } from "@/lib/portfolio/myHoldings";
+import { getMyHoldingsFast, getDemoHoldings } from "@/lib/portfolio/myHoldings";
 import { YourBinder } from "@/components/binder/YourBinder";
 import { AddressForm } from "@/components/portfolio/AddressForm";
 
@@ -12,7 +12,7 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
   const raw = searchParams.address?.trim()?.toLowerCase();
   const addresses = raw && isValidChiaAddress(raw) ? [raw] : [];
 
-  let holdings = addresses.length ? await getMyHoldings(addresses) : null;
+  let holdings = addresses.length ? await getMyHoldingsFast(addresses) : null;
   if (!holdings || holdings.nfts.length === 0) {
     holdings = await getDemoHoldings();
   }
@@ -25,7 +25,7 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
           <AddressForm initial={raw ?? ""} path="/binder" buttonLabel="Open binder" />
         </div>
       </div>
-      <YourBinder holdings={holdings} />
+      <YourBinder key={addresses.join(",") || "demo"} holdings={holdings} />
     </div>
   );
 }

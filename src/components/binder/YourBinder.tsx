@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CollectionData, NftData } from "@/types";
 import { BinderView } from "./BinderView";
 import { BinderCollectionPicker } from "./BinderCollectionPicker";
@@ -29,6 +29,28 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [sort, setSort] = useState<SortKey>("rank-asc");
   const [traitFilters, setTraitFilters] = useState<TraitFilters>({});
 
+  // Progressive loading: the page hands us a FAST binder (list + per-collection metadata). Once
+  // mounted we pull the FULL holdings (per-NFT traits + our estimated ranks + refined values) from
+  // the enrichment route and merge them in by NFT id, so cards sharpen up after they're on screen.
+  const [nfts, setNfts] = useState<NftData[]>(holdings.nfts);
+  const [enriching, setEnriching] = useState(!holdings.demo && holdings.addresses.length > 0);
+
+  useEffect(() => {
+    if (holdings.demo || holdings.addresses.length === 0) return;
+    let cancelled = false;
+    setEnriching(true);
+    fetch(`/api/binder?address=${encodeURIComponent(holdings.addresses.join(","))}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { nfts?: NftData[] } | null) => {
+        if (cancelled || !data?.nfts) return;
+        const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
+        setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setEnriching(false); });
+    return () => { cancelled = true; };
+  }, [holdings.addresses, holdings.demo]);
+
   const oneCollection = collectionId !== "all";
 
   function pickCollection(id: string) {
@@ -38,8 +60,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   }
 
   const scoped = useMemo(
-    () => (oneCollection ? holdings.nfts.filter((n) => n.collectionSlug === collectionId) : holdings.nfts),
-    [holdings.nfts, collectionId, oneCollection],
+    () => (oneCollection ? nfts.filter((n) => n.collectionSlug === collectionId) : nfts),
+    [nfts, collectionId, oneCollection],
   );
 
   const traitOptions = useMemo(() => {
@@ -108,6 +130,9 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <div className="text-subtle mt-1 text-xs">
             {holdings.collections.length} collection{holdings.collections.length === 1 ? "" : "s"}{holdings.truncated ? " · capped" : ""}
           </div>
+          {enriching && (
+            <div className="mt-1 text-[11px] text-violet-300/80 animate-pulse">Refining rarity…</div>
+          )}
         </div>
       </div>
 
@@ -122,7 +147,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         </div>
         <BinderCollectionPicker
           collections={holdings.collections}
-          totalCount={holdings.nfts.length}
+          totalCount={nfts.length}
           selectedId={collectionId}
           onSelect={pickCollection}
         />
@@ -136,7 +161,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             onChange={(e) => pickCollection(e.target.value)}
             className="text-title flex-1 rounded-lg border border-white/15 bg-card-bg px-3 py-2 text-xs font-semibold outline-none"
           >
-            <option value="all">All collections ({holdings.nfts.length})</option>
+            <option value="all">All collections ({nfts.length})</option>
             {holdings.collections.map((c) => (
               <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
             ))}
