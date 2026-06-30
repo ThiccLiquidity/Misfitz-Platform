@@ -19,19 +19,31 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-// Whole-NFT rarity premium as a multiple of floor, by rank percentile (lower = rarer). Tier-aligned
-// and steep at the elite end (grails are worth many multiples of floor); commons sit at floor.
-// Stepwise + explainable; these multipliers are the main valuation dial.
+// Whole-NFT rarity premium as a multiple of floor, by rank percentile in PERCENT (lower = rarer).
+// A SMOOTH curve (not steps): nearly flat across the commons, then progressively steeper toward the
+// elite end. Calibrated through tier anchors and log-interpolated between them, so there are no jumps
+// at tier boundaries and value rises continuously with rarity.
+const RARITY_ANCHORS: [number, number][] = [
+  [0.1, 14],  // mythic — grail
+  [0.5, 7],   // legendary
+  [2.5, 2.0], // epic
+  [10, 0.8],  // rare
+  [30, 0.2],  // uncommon
+  [50, 0],    // commons sit at the floor
+  [100, 0],
+];
 export function rarityFactorForPercentile(percentile: number): number {
-  // Tier-aligned (mythic 0.1% · legendary 0.5% · epic 2.5% · rare 10% · uncommon 30% · common).
-  // Steep at the very top: grails (mythic/legendary) command a large multiple of floor, while the
-  // bulk of a collection sits at/near floor. Commons get no premium (they ARE the floor tier).
-  if (percentile <= 0.1) return 14;   // mythic — grail
-  if (percentile <= 0.5) return 7;    // legendary
-  if (percentile <= 2.5) return 2.0;  // epic
-  if (percentile <= 10)  return 0.8;  // rare
-  if (percentile <= 30)  return 0.2;  // uncommon
-  return 0;                           // common -> sits at the floor
+  const p = Math.max(0.0001, Math.min(100, percentile));
+  if (p <= RARITY_ANCHORS[0][0]) return RARITY_ANCHORS[0][1]; // rarer than the top anchor -> cap
+  for (let i = 1; i < RARITY_ANCHORS.length; i++) {
+    const [plo, rlo] = RARITY_ANCHORS[i - 1];
+    const [phi, rhi] = RARITY_ANCHORS[i];
+    if (p <= phi) {
+      const t = (Math.log(p) - Math.log(plo)) / (Math.log(phi) - Math.log(plo));
+      return rlo + t * (rhi - rlo); // log-linear interpolation -> smooth, monotonic
+    }
+  }
+  return 0;
 }
 
 // Median of the cheapest `k` active asks — a robust floor that one troll/fat-finger listing can't

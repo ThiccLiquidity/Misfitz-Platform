@@ -41,7 +41,9 @@ export interface CompsOptions {
   reliabilityK?: number;          // trait reliability constant n/(n+K) (default 12)
   minTraitN?: number;             // ignore trait premiums below this many sales (default 3)
   traitFactorClamp?: [number, number]; // clamp exp(logScore) (default [0.6, 3.0])
-  bandwidth?: number;             // rank-distance decay scale; default max(supply×0.01, 100)
+  bandwidth?: number;             // rank-distance decay scale; default max(supply×0.005, 50)
+  pullK?: number;                 // local-pull saturation constant (default 0.35)
+  maxPull?: number;               // max weight comps can take in the blend (default 0.88)
 }
 
 function key(k: string, v: string): string { return `${k.trim().toLowerCase()}=${v.trim().toLowerCase()}`; }
@@ -72,7 +74,9 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   const [clampLo, clampHi] = opts.traitFactorClamp ?? [0.6, 3.0];
 
   const supply = Math.max(1, Math.floor(totalSupply) || 0);
-  const bandwidth = opts.bandwidth ?? Math.max(supply * 0.01, 100);
+  const bandwidth = opts.bandwidth ?? Math.max(supply * 0.005, 50); // sharp: a true rarity twin dominates
+  const pullK = opts.pullK ?? 0.35;       // saturation constant for the local pull
+  const maxPull = opts.maxPull ?? 0.88;   // never fully trust comps over our own curve
 
   const usable = sales.filter((s) => Number.isFinite(s.rank) && s.rank > 0 && Number.isFinite(s.price) && s.price > 0);
   if (usable.length === 0) return null;
@@ -115,15 +119,14 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     return traitStats.get(key(k, v)) ?? { mult: 1, n: 0, reliability: 0, penalty: 1 };
   }
 
-  // ── Confidence: weighted count of recent sales near this rank, squashed to 0..1 ──────────────
-  function confidenceAt(rank: number): number {
-    let wsum = 0;
-    const win = Math.max(100, bandwidth);
-    for (const p of points) {
-      const dist = Math.abs(p.rank - rank);
-      if (dist <= win) wsum += p.w * (1 - dist / win);
-    }
-    return clamp(wsum / 6, 0, 1);
+  // ── Local pull: how hard nearby RECENT sales should pull the estimate toward themselves. A single
+  // near-identical (Δrank≈0) very-recent sale saturates this toward maxPull, so the estimate snaps
+  // close to that real sale price; far/old sales contribute little. This is the "anchor the curve to
+  // real sales" weight used directly in the blend.
+  function localPull(rank: number): number {
+    let tw = 0; // total recency × rank-proximity weight near this rank
+    for (const p of points) tw += p.w * Math.exp(-Math.abs(p.rank - rank) / bandwidth);
+    return clamp(tw / (tw + pullK), 0, maxPull);
   }
 
   function valueOf(rank: number | null, traits?: Trait[]): CompsValue {
@@ -143,7 +146,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     }
     const traitFactor = clamp(Math.exp(logScore), clampLo, clampHi);
     const value = base * traitFactor;
-    const confidence = confidenceAt(rank);
+    const confidence = localPull(rank);
 
     drivers.sort((a, b) => Math.abs(b.contrib) - Math.abs(a.contrib));
     const top = drivers[0];
