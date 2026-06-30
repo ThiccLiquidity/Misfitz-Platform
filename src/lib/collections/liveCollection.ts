@@ -155,7 +155,9 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       card.listingAssets = offer.requested.map((r) => r.code);
       card.listingRequested = offer.requested;
       card.dexieOfferId = offer.offerId;
-      card.dealScore = card.fairValue && offer.priceXch > 0
+      // Only a clean XCH-only offer gets a deal score. Dexie's price is just the XCH leg, so an offer
+      // that also wants a CAT (e.g. 0.25 XCH + 420k BEPE) would score absurdly high on the XCH alone.
+      card.dealScore = offer.xchOnly && card.fairValue && offer.priceXch > 0
         ? computeDealScore(card.fairValue.totalEstimate, offer.priceXch)
         : null;
     } else {

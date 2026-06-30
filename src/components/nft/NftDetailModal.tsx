@@ -216,9 +216,9 @@ export function NftDetailModal({
               </div>
               {(nft.listingAssets ?? []).some((a) => a !== "XCH") && (
                 <div className="mt-1.5 text-amber-300">
-                  ⚠ This offer also requires a CAT token. Total cost ≈{" "}
-                  <span className="font-bold">{formatXch(nft.listing.priceXch)}</span> XCH-equivalent (Dexie&apos;s rate) —
-                  verify the CAT value before buying.
+                  ⚠ This offer ALSO requires the CAT token(s) above — the{" "}
+                  <span className="font-bold">{formatXch(nft.listing.priceXch)}</span> is only the XCH part of the price.
+                  We don&apos;t value CATs, so no deal score is shown; check the full offer on Dexie before buying.
                 </div>
               )}
             </div>
