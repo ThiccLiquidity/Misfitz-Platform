@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 
-// Tells the user WHICH wallet(s) are being pulled, on the binder loading screen. Reads the URL after
-// mount (no useSearchParams, so no Suspense requirement) — purely cosmetic, safe if it renders empty.
+// Sub-line on the binder loading screen telling the user which wallet(s) are being read. Reads the URL
+// after mount (no useSearchParams -> no Suspense requirement); purely cosmetic, safe if it renders the
+// generic fallback.
 function shortId(id: string) {
-  if (id.startsWith("did:chia")) return `did:chia…${id.slice(-6)}`;
-  return `${id.slice(0, 8)}…${id.slice(-6)}`;
+  if (id.startsWith("did:chia")) return `${id.slice(0, 10)}…${id.slice(-5)}`;
+  return `${id.slice(0, 9)}…${id.slice(-5)}`;
 }
 
 export function BinderLoadingNote() {
@@ -19,9 +20,7 @@ export function BinderLoadingNote() {
   }, []);
   return (
     <div className="text-subtle text-sm">
-      {label
-        ? `Pulling NFTs for ${label} from the chain — this can take a few seconds.`
-        : "Pulling your NFTs from the chain — this can take a few seconds."}
+      {label ? `Reading ${label} from the Chia blockchain…` : "Reading your wallet from the Chia blockchain…"}
     </div>
   );
 }
