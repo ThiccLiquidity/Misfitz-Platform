@@ -114,19 +114,20 @@ body {
 }
 
 @keyframes red-glow {
+  /* "ember" — warm flame glow that flickers, not an alarm-red box. */
   0%,100% {
     box-shadow:
-      0 0 0 1px rgba(255,0,0,.9),
-      0 0 14px 4px rgba(255,0,0,.8),
-      0 0 32px 10px rgba(180,0,0,.55),
-      0 0 60px 18px rgba(255,30,30,.3);
+      0 0 0 1px rgba(255,110,40,.85),
+      0 0 14px 4px rgba(255,90,25,.65),
+      0 0 36px 12px rgba(200,50,0,.5),
+      0 0 66px 22px rgba(255,150,50,.28);
   }
   50% {
     box-shadow:
-      0 0 0 1px rgba(255,60,60,.95),
-      0 0 20px 6px rgba(255,50,50,.85),
-      0 0 44px 14px rgba(200,0,0,.6),
-      0 0 80px 24px rgba(255,0,0,.35);
+      0 0 0 1px rgba(255,160,60,.95),
+      0 0 24px 8px rgba(255,120,35,.8),
+      0 0 52px 18px rgba(225,70,0,.55),
+      0 0 94px 30px rgba(255,180,70,.34);
   }
 }
 
@@ -173,7 +174,7 @@ body {
 }
 .tcg-outer-rare {
   background: conic-gradient(from var(--angle),
-    #ff2020, #8b0000, #ff5555, #cc0000, #ff3333, #8b0000, #ff4444, #ff2020);
+    #ff8a1f, #b81800, #ffb347, #e83000, #ff9a33, #8b0e00, #ff5a1f, #ff8a1f);
   animation: border-spin 3s linear infinite, red-glow 2.5s ease-in-out infinite;
 }
 .tcg-outer-uncommon { background: #3fae5a; }
@@ -213,7 +214,7 @@ body {
 .tcg-art-bg-mythic    { background: radial-gradient(ellipse at 40% 45%, #1e0038 0%, #0d0020 65%, #050010 100%); }
 .tcg-art-bg-legendary { background: radial-gradient(ellipse at 40% 45%, #1c1100 0%, #0d0900 65%, #040400 100%); }
 .tcg-art-bg-epic      { background: radial-gradient(ellipse at 40% 45%, #06102a 0%, #030a1c 65%, #010510 100%); }
-.tcg-art-bg-rare      { background: radial-gradient(ellipse at 40% 45%, #1a0000 0%, #0a0000 65%, #040000 100%); }
+.tcg-art-bg-rare      { background: radial-gradient(ellipse at 50% 112%, #c23a12 0%, #6a1500 34%, #220700 68%, #0c0200 100%); }
 .tcg-art-bg-uncommon  { background: radial-gradient(ellipse at 40% 45%, #061408 0%, #030a04 65%, #010402 100%); }
 .tcg-art-bg-common    { background: radial-gradient(ellipse at 40% 45%, #040c1e 0%, #020610 65%, #010308 100%); }
 
@@ -917,7 +918,7 @@ body {
   animation: border-spin 3.5s linear infinite !important;
 }
 /* Lower tiers: solid tier color (no spin) */
-[data-theme="light"] .tcg-art-bg-rare      { background: radial-gradient(ellipse at 50% 50%, #cc1818 0%, #aa0808 55%, #880000 100%) !important; }
+[data-theme="light"] .tcg-art-bg-rare      { background: radial-gradient(ellipse at 50% 70%, #ff8a3a 0%, #e2521a 45%, #b83100 100%) !important; }
 [data-theme="light"] .tcg-art-bg-uncommon  { background: radial-gradient(ellipse at 50% 50%, #228840 0%, #186a30 55%, #0e4820 100%) !important; }
 [data-theme="light"] .tcg-art-bg-common    { background: radial-gradient(ellipse at 50% 50%, #2255aa 0%, #1a3d88 55%, #102870 100%) !important; }
 
