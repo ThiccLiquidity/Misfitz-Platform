@@ -1422,43 +1422,43 @@ body {
    (dark) theme whether or not an explicit data-theme is set.
    ═══════════════════════════════════════════════════════════════════════ */
 
-:root:not([data-theme="light"]) .tcg-stat-lbl,
-:root:not([data-theme="light"]) .tcg-lbl-mythic,
-:root:not([data-theme="light"]) .tcg-lbl-legendary,
-:root:not([data-theme="light"]) .tcg-lbl-epic,
-:root:not([data-theme="light"]) .tcg-lbl-rare,
-:root:not([data-theme="light"]) .tcg-lbl-uncommon,
-:root:not([data-theme="light"]) .tcg-lbl-common {
+[data-theme="dark"] .tcg-stat-lbl,
+[data-theme="dark"] .tcg-lbl-mythic,
+[data-theme="dark"] .tcg-lbl-legendary,
+[data-theme="dark"] .tcg-lbl-epic,
+[data-theme="dark"] .tcg-lbl-rare,
+[data-theme="dark"] .tcg-lbl-uncommon,
+[data-theme="dark"] .tcg-lbl-common {
   color: rgba(255, 255, 255, 0.72) !important;
   font-size: inherit !important;
 }
 
-:root:not([data-theme="light"]) .tcg-stat-val {
+[data-theme="dark"] .tcg-stat-val {
   color: #ffffff !important;
   font-size: inherit !important;
 }
 
-:root:not([data-theme="light"]) .tcg-stat-sub,
-:root:not([data-theme="light"]) .tcg-sub-mythic,
-:root:not([data-theme="light"]) .tcg-sub-legendary,
-:root:not([data-theme="light"]) .tcg-sub-epic,
-:root:not([data-theme="light"]) .tcg-sub-rare,
-:root:not([data-theme="light"]) .tcg-sub-uncommon,
-:root:not([data-theme="light"]) .tcg-sub-common {
+[data-theme="dark"] .tcg-stat-sub,
+[data-theme="dark"] .tcg-sub-mythic,
+[data-theme="dark"] .tcg-sub-legendary,
+[data-theme="dark"] .tcg-sub-epic,
+[data-theme="dark"] .tcg-sub-rare,
+[data-theme="dark"] .tcg-sub-uncommon,
+[data-theme="dark"] .tcg-sub-common {
   color: rgba(255, 255, 255, 0.55) !important;
   font-size: inherit !important;
 }
 
-:root:not([data-theme="light"]) .tcg-trait-type {
+[data-theme="dark"] .tcg-trait-type {
   color: rgba(255, 255, 255, 0.66) !important;
   font-size: inherit !important;
 }
-:root:not([data-theme="light"]) .tcg-trait-val {
+[data-theme="dark"] .tcg-trait-val {
   color: #ffffff !important;
   font-size: inherit !important;
   font-weight: 700 !important;
 }
-:root:not([data-theme="light"]) .tcg-trait-pct {
+[data-theme="dark"] .tcg-trait-pct {
   font-size: inherit !important;
 }
 
