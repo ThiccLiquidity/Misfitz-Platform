@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import type { NftData, CollectionData, Trait, FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
-import { DealScoreGauge, colorForLabel } from "./DealScoreGauge";
+import { DealScoreGauge, colorForLabel, funLabel } from "./DealScoreGauge";
 import { formatUsd, formatXch, truncateAddress } from "@/lib/format";
 import {
   getRarityTier,
@@ -290,12 +290,12 @@ export function NftDetailView({ nft, collection }: NftDetailViewProps) {
                 </span>
                 {nft.dealScore ? (
                   <>
-                    <DealScoreGauge score={nft.dealScore.score} label={nft.dealScore.label} />
+                    <DealScoreGauge score={nft.dealScore.score} label={funLabel(nft.dealScore.label)} />
                     <span
                       className="text-[10px] font-bold"
                       style={{ color: colorForLabel(nft.dealScore.label) }}
                     >
-                      {nft.dealScore.label}
+                      {funLabel(nft.dealScore.label)}
                     </span>
                   </>
                 ) : (

@@ -9,7 +9,7 @@ import {
   type TierId,
 } from "@/lib/rarity/tiers";
 import { formatUsd, formatXch, truncateAddress } from "@/lib/format";
-import { DealScoreGauge, colorForLabel } from "./DealScoreGauge";
+import { DealScoreGauge, colorForLabel, funLabel } from "./DealScoreGauge";
 import type React from "react";
 
 // ─────────────────────────────────────────────────────────────
@@ -182,12 +182,12 @@ export function NftRarityCard({
                 <span className={`tcg-stat-lbl tcg-lbl-${id} ${lbl}`}>Deal Score</span>
                 {nft.dealScore ? (
                   <>
-                    <DealScoreGauge score={nft.dealScore.score} label={nft.dealScore.label} />
+                    <DealScoreGauge score={nft.dealScore.score} label={funLabel(nft.dealScore.label)} />
                     <span
                       className={`tcg-stat-sub font-bold ${lbl}`}
                       style={{ color: colorForLabel(nft.dealScore.label) }}
                     >
-                      {nft.dealScore.label}
+                      {funLabel(nft.dealScore.label)}
                     </span>
                   </>
                 ) : (

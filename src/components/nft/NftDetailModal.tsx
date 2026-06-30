@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
-import { DealScoreGauge, colorForLabel } from "./DealScoreGauge";
+import { DealScoreGauge, colorForLabel, funLabel } from "./DealScoreGauge";
 import { formatUsd, formatXch } from "@/lib/format";
 import type { RarityTierThresholds } from "@/lib/rarity/tiers";
 import { getRarityTier, resolveTierThresholds } from "@/lib/rarity/tiers";
@@ -195,9 +195,9 @@ export function NftDetailModal({
               </span>
               {nft.dealScore ? (
                 <>
-                  <DealScoreGauge score={nft.dealScore.score} label={nft.dealScore.label} />
+                  <DealScoreGauge score={nft.dealScore.score} label={funLabel(nft.dealScore.label)} />
                   <span className="text-[10px] font-bold" style={{ color: colorForLabel(nft.dealScore.label) }}>
-                    {nft.dealScore.label}
+                    {funLabel(nft.dealScore.label)}
                   </span>
                 </>
               ) : (

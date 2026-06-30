@@ -9,6 +9,18 @@ interface DealScoreGaugeProps {
 const ARC_RADIUS = 42;
 const ARC_LENGTH = Math.PI * ARC_RADIUS; // half-circle circumference
 
+// Display-only playful label for the deal score. Internal labels stay stable (used as color keys);
+// this just changes what the user reads.
+export function funLabel(label?: string): string {
+  switch (label) {
+    case "GREAT DEAL":  return "Send it 🚀";
+    case "GOOD DEAL":   return "Cop it 🤝";
+    case "FAIR DEAL":   return "Fair play ⚖️";
+    case "OVERPRICED":  return "Champagne taste 🥂";
+    default:            return label ?? "";
+  }
+}
+
 export function colorForLabel(label?: string): string {
   switch (label) {
     case "GREAT DEAL":
