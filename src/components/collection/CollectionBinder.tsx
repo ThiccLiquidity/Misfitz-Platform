@@ -101,6 +101,18 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   }, [nfts, tier, traitFilters, sort, forSaleOnly, priceMin, priceMax, collectorOnly, collectorTier]);
 
   const listedCount = useMemo(() => nfts.reduce((c, n) => c + (n.listing ? 1 : 0), 0), [nfts]);
+  // Market cap (industry standard) = floor × supply. Traitfolio cap = sum of our estimates, scaled to
+  // full supply when the load is capped, for a more realistic second number.
+  const marketCap = useMemo(
+    () => (view.floorXch != null ? view.floorXch * view.totalSupply : null),
+    [view.floorXch, view.totalSupply],
+  );
+  const traitfolioCap = useMemo(() => {
+    const sum = nfts.reduce((s, n) => s + (n.fairValue?.totalEstimate ?? 0), 0);
+    if (sum <= 0 || nfts.length === 0) return null;
+    const scale = nfts.length < view.totalSupply ? view.totalSupply / nfts.length : 1;
+    return Math.round(sum * scale);
+  }, [nfts, view.totalSupply]);
   const collectorCount = useMemo(
     () => nfts.reduce((c, n) => c + (n.collectible != null && n.collectible.tier <= collectorTier ? 1 : 0), 0),
     [nfts, collectorTier],
@@ -203,6 +215,10 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             <span>{view.totalSupply.toLocaleString()} items</span>
             <span>Floor <span className="text-title font-semibold">{view.floorXch != null ? formatXch(view.floorXch) : "—"}</span></span>
             <span>Volume <span className="text-title font-semibold">{view.volumeXch != null ? formatXch(Math.round(view.volumeXch)) : "—"}</span></span>
+            <span>Market cap <span className="text-title font-semibold">{marketCap != null ? formatXch(Math.round(marketCap)) : "—"}</span></span>
+            {traitfolioCap != null && (
+              <span style={{ color: "#caa23a" }}>Traitfolio cap <span className="font-semibold" style={{ color: "#ffe06a" }}>{formatXch(traitfolioCap)}</span></span>
+            )}
             {indexing && <span className="text-violet-300/90 animate-pulse">Finding the rarest across all {view.totalSupply.toLocaleString()}…</span>}
             {fullLoaded && capped && <span className="text-amber-300/90">showing rarest {nfts.length.toLocaleString()}</span>}
           </div>

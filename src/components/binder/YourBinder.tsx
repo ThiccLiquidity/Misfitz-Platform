@@ -125,6 +125,11 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     () => Math.round(filtered.reduce((s, n) => s + (n.fairValue?.totalEstimate ?? 0), 0) * 100) / 100,
     [filtered],
   );
+  // Floor value = what the holdings would fetch at each collection's floor (n.fairValue.floorValue).
+  const floorValue = useMemo(
+    () => Math.round(filtered.reduce((s, n) => s + (n.fairValue?.floorValue ?? 0), 0) * 100) / 100,
+    [filtered],
+  );
 
   const sidebarProps = {
     tierFilter: tier, onTierFilter: setTier,
@@ -147,12 +152,19 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
       {/* Full-width value header */}
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] px-6 py-6">
-        <div>
-          <div className="text-subtle text-xs uppercase tracking-widest">
-            {oneCollection ? "This collection's value" : "Your collection value"}
+        <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+          {/* Floor value — what it'd fetch at each collection's floor */}
+          <div>
+            <div className="text-subtle text-xs uppercase tracking-widest">Floor value</div>
+            <div className="text-title mt-1 text-3xl font-black">{formatXch(floorValue)}</div>
+            <div className="text-subtle text-sm">≈ {formatUsd(Math.round(floorValue * holdings.xchUsdRate * 100) / 100)}</div>
           </div>
-          <div className="text-title mt-1 text-4xl font-black">{formatXch(shownValue)}</div>
-          <div className="text-subtle text-sm">≈ {formatUsd(Math.round(shownValue * holdings.xchUsdRate * 100) / 100)}</div>
+          {/* Traitfolio value — our trait-aware estimate (the headline number) */}
+          <div>
+            <div className="text-xs font-bold uppercase tracking-widest" style={{ color: "#f0c000" }}>Traitfolio value</div>
+            <div className="mt-1 text-4xl font-black" style={{ color: "#ffe06a" }}>{formatXch(shownValue)}</div>
+            <div className="text-subtle text-sm">≈ {formatUsd(Math.round(shownValue * holdings.xchUsdRate * 100) / 100)}</div>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-title text-2xl font-bold">{filtered.length}</div>
