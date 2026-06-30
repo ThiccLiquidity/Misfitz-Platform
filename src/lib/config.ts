@@ -4,7 +4,8 @@
 // sales-derived values into the fair-value estimate, weighted by confidence, with the existing
 // floor+premium estimate as the graceful fallback. OFF = exactly the prior behaviour.
 //
-// Toggle via env: set VALUATION_COMPS_ENABLED=true in .env.local (default OFF). Server-only flag.
+// Default ON. To turn it OFF, set VALUATION_COMPS_ENABLED="false" (env) — or just say so and I flip
+// this one line. Server-only flag.
 export function isCompsEnabled(): boolean {
-  return process.env.VALUATION_COMPS_ENABLED === "true";
+  return process.env.VALUATION_COMPS_ENABLED !== "false";
 }
