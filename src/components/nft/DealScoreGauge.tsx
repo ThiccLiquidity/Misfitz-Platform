@@ -51,15 +51,16 @@ export function DealScoreGauge({ score, label }: DealScoreGaugeProps) {
           <stop offset="1" stopColor="#22c55e" />
         </linearGradient>
       </defs>
-      {/* track */}
+      {/* full spectrum bar — always shows red→blue→green, faint */}
       <path
         d="M 8 50 A 42 42 0 0 1 92 50"
         fill="none"
-        stroke="var(--rc-divider)"
+        stroke="url(#tf-dealgrad)"
         strokeWidth="8"
         strokeLinecap="round"
+        opacity="0.28"
       />
-      {/* filled spectrum up to the score */}
+      {/* bright spectrum filled up to the score */}
       <path
         d="M 8 50 A 42 42 0 0 1 92 50"
         fill="none"

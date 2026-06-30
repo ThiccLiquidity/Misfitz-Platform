@@ -8,6 +8,7 @@ import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatXch, formatUsd, formatXchShort, formatUsdShort } from "@/lib/format";
+import { useThemeMode } from "@/components/theme/ThemeProvider";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import type { CollectionView } from "@/lib/collections/liveCollection";
 
@@ -24,6 +25,8 @@ function tokenNum(n: NftData): number {
 export function CollectionBinder({ view }: { view: CollectionView }) {
   // Start with the SSR first page (mint order), then swap to the whole collection sorted rarest-first.
   const [nfts, setNfts] = useState<NftData[]>(view.nfts);
+  const { mode: themeMode } = useThemeMode();
+  const statLight = themeMode === "light";
   const [fullLoaded, setFullLoaded] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [indexing, setIndexing] = useState(view.totalSupply > view.nfts.length);
@@ -236,9 +239,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
               className="rounded-xl px-4 py-2.5"
               style={{ background: "rgba(201,162,39,0.06)", border: "1px solid rgba(201,162,39,0.22)" }}
             >
-              <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.5)" }}>{st.label}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: statLight ? "#7a5510" : "#e8cf94" }}>{st.label}</div>
               <div className="text-xl font-black leading-tight sm:text-2xl" style={{ color: st.accent ?? "var(--title)" }}>{st.xch}</div>
-              {st.usd && <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.42)" }}>{st.usd}</div>}
+              {st.usd && <div className="mt-0.5 text-[13px] font-semibold" style={{ color: statLight ? "#6a4d0e" : "#d9c896" }}>{st.usd}</div>}
             </div>
           ))}
         </div>
