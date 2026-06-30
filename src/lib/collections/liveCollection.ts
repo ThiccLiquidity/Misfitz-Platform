@@ -231,6 +231,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       valueConfidence: Math.round(cv.confidence * 100) / 100,
       valueCurve: cv.curve != null ? Math.round(cv.curve * 1000) / 1000 : null,
       valueTraitMult: Math.round(cv.traitMult * 1000) / 1000,
+      valueTraitTop: cv.traitTop ?? null,
     };
   });
   return result(nfts);

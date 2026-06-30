@@ -21,6 +21,7 @@ export interface CompsValue {
   traitMult: number;     // trait-demand multiplier (>= 1)
   confidence: number;    // 0..1 local sales support
   basis: string;
+  traitTop?: string | null; // the single hottest trait driving the demand bump (e.g. "Background:Gold"), if any
 }
 
 export interface CompsModel {
@@ -31,6 +32,8 @@ export interface CompsModel {
   curveValue(rank: number): number;
   traitDemand(traits?: Trait[]): { mult: number; top?: { kv: string; ratio: number; n: number } };
   valueOf(rank: number | null, traits?: Trait[]): CompsValue;
+  // Collection-wide: trait values selling hotter than their prevalence right now (normalized type/value).
+  hotTraits(): { type: string; value: string; ratio: number }[];
 }
 
 export interface CompsOptions {
@@ -154,6 +157,25 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     return { mult: clamp(Math.exp(logSum), 1, maxTraitDemand), top };
   }
 
+  // Collection-wide hot list for the filter bar: trait values with recent sale-share clearly above
+  // their prevalence. Keys are normalized (lowercase) to match against trait options reliably.
+  function hotTraits(): { type: string; value: string; ratio: number }[] {
+    if (totalRecentW <= 0 || !traitFreq) return [];
+    const out: { type: string; value: string; ratio: number }[] = [];
+    for (const [kv, rec] of traitRecent) {
+      if (rec.n < minTraitN) continue;
+      const eq = kv.indexOf("=");
+      if (eq < 0) continue;
+      const type = kv.slice(0, eq);
+      const value = kv.slice(eq + 1);
+      const freq = freqOf(type, value);
+      if (freq == null) continue;
+      const ratio = (rec.w / totalRecentW) / (freq / supply);
+      if (ratio > 1.15) out.push({ type, value, ratio }); // threshold: only clearly-hot surface a flame
+    }
+    return out.sort((a, b) => b.ratio - a.ratio);
+  }
+
   function valueOf(rank: number | null, traits?: Trait[]): CompsValue {
     if (rank == null || !Number.isFinite(rank)) return { value: null, curve: null, traitMult: 1, confidence: 0, basis: "no rank" };
     const curve = curveValue(rank);
@@ -162,8 +184,8 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     const basis = td.top
       ? `curve ≈ ${Math.round(curve * 100) / 100} XCH · ${td.top.kv} hot ×${td.mult.toFixed(2)} (n=${td.top.n})`
       : `curve ≈ ${Math.round(curve * 100) / 100} XCH (rarity curve fit to recent sales)`;
-    return { value, curve, traitMult: td.mult, confidence: supportAt(rank), basis };
+    return { value, curve, traitMult: td.mult, confidence: supportAt(rank), basis, traitTop: td.top ? td.top.kv : null };
   }
 
-  return { totalSupply: supply, sampleSize: usable.length, bandwidth, globalScale, curveValue, traitDemand, valueOf };
+  return { totalSupply: supply, sampleSize: usable.length, bandwidth, globalScale, curveValue, traitDemand, valueOf, hotTraits };
 }

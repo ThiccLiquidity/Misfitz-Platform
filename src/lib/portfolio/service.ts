@@ -224,6 +224,7 @@ export async function enrichNftsByIds(
       card.valueConfidence = round(cv.confidence, 2);
       card.valueCurve = cv.curve != null ? round(cv.curve, 3) : null;
       card.valueTraitMult = round(cv.traitMult, 3);
+      card.valueTraitTop = cv.traitTop ?? null;
     }
   }
   return out;

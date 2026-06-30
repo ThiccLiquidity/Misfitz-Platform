@@ -82,6 +82,8 @@ export interface NftData {
   // valueCurve × valueTraitMult + collector-number premium.
   valueCurve?: number | null;
   valueTraitMult?: number | null;
+  // The single hottest trait driving the trait-demand bump (e.g. "Background:Gold"), for display only.
+  valueTraitTop?: string | null;
   // Special/collectible mint-number badge (VALUATION.md Part 2). Optional — only live-mapped NFTs
   // with a special number carry it. tier 1 = grail … 4 = fun.
   collectible?: { tier: number; label: string } | null;

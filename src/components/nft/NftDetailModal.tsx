@@ -33,6 +33,14 @@ const FV_ROWS: { key: keyof FairValueEstimate; label: string }[] = [
   { key: "traitPremium",        label: "Trait demand"     },
 ];
 
+// "Background:Gold" -> "Gold (Background)" for the trait-demand row.
+function hotTraitLabel(kv?: string | null): string | null {
+  if (!kv) return null;
+  const i = kv.indexOf(":");
+  if (i < 0) return kv;
+  return `${kv.slice(i + 1)} (${kv.slice(0, i)})`;
+}
+
 interface NftDetailModalProps {
   nft: NftData;
   collectionName: string;
@@ -342,9 +350,11 @@ export function NftDetailModal({
                     <span className="text-xs font-semibold" style={{ color: valColor }}>{nft.valueCurve.toFixed(2)} XCH</span>
                   </div>
                   {traitEffect >= 0.005 && (
-                    <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
-                      <span className="text-xs" style={{ color: subColor }}>Trait demand</span>
-                      <span className="text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
+                    <div className="flex items-baseline justify-between gap-2 py-1" style={{ borderBottom: `1px solid ${divider}` }}>
+                      <span className="min-w-0 truncate text-xs" style={{ color: subColor }}>
+                        Trait demand{hotTraitLabel(nft.valueTraitTop) ? ` · \uD83D\uDD25 ${hotTraitLabel(nft.valueTraitTop)}` : ""}
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
                     </div>
                   )}
                   {numberPremium > 0.005 && (
