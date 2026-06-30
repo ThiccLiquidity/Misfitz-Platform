@@ -116,7 +116,13 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         const data = res.ok ? ((await res.json()) as { nfts?: NftData[] }) : null;
         if (data?.nfts) {
           const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
-          setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
+          // Take traits/rank/value from enrichment, but KEEP the Dexie-verified listing + deal from the
+          // full-collection overlay (enrichment maps listing from MintGarden, which would revert it).
+          setNfts((prev) => prev.map((n) => {
+            const e = byId.get(n.launcherId);
+            if (!e) return n;
+            return { ...e, listing: n.listing, listingAssets: n.listingAssets, listingRequested: n.listingRequested, dexieOfferId: n.dexieOfferId, dealScore: n.dealScore };
+          }));
         }
       } catch { /* keep fast card */ }
     }

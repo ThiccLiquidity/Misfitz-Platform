@@ -61,10 +61,12 @@ export interface NftData {
   // "neighborhood" but have very different trait-rarity makeups.
   rarityScore: number | null;
   listing: ListingData | null;
-  // Requested asset codes for this listing's offer (e.g. ["XCH"] or ["XCH","SBX"]). When it contains
-  // anything besides XCH, the "price" is only the XCH part — so we suppress dealScore and warn. Null =
-  // not verified against Dexie (no deal claim made).
+  // Listing sourced from Dexie (the offer marketplace). listing.priceXch is the XCH-EQUIVALENT total
+  // (Dexie folds in any CAT value). listingAssets/listingRequested describe what the buyer must give
+  // (e.g. XCH + a CAT); dexieOfferId links to the offer page. Null when not listed on Dexie.
   listingAssets?: string[] | null;
+  listingRequested?: { code: string; amount: number }[] | null;
+  dexieOfferId?: string | null;
   dealScore: DealScore | null;
   // Special/collectible mint-number badge (VALUATION.md Part 2). Optional — only live-mapped NFTs
   // with a special number carry it. tier 1 = grail … 4 = fun.

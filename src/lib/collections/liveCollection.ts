@@ -1,6 +1,6 @@
 import { getCollection, listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionActiveOffers, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
 import type { NftData } from "@/types";
@@ -66,7 +66,16 @@ export async function getCollectionView(id: string, size = 60): Promise<Collecti
     volumeXch: typeof col.volume === "number" ? col.volume : null,
     verified: col.creator?.verification_state === 1,
     xchUsdRate,
-    nfts: cardsFrom(page.items ?? [], col, floorXch, xchUsdRate),
+    // SSR cards show rank + value + image immediately, but NOT listings/deals — those are Dexie-verified
+    // in getAllCollectionCards (/all) so a MintGarden XCH-only price can never flash as a misleading deal.
+    nfts: cardsFrom(page.items ?? [], col, floorXch, xchUsdRate).map((n) => ({
+      ...n,
+      listing: null,
+      dealScore: null,
+      listingAssets: null,
+      listingRequested: null,
+      dexieOfferId: null,
+    })),
     cursor: page.next ?? null,
   };
 }
@@ -109,7 +118,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
   // Kick off the floor + Dexie active-offers fetches in parallel with the (sequential) NFT paging.
   const floorPromise = resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null);
-  const offersPromise = fetchCollectionActiveOffers(id).catch(() => new Map());
+  const offersPromise = fetchCollectionActiveOffers(id).catch(() => new Map<string, CollectionOffer>());
 
   const items: MgListItem[] = [];
   let cursor: string | null | undefined = undefined;
@@ -123,24 +132,37 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
   } while (cursor);
 
-  const [floorXch, offerMap] = await Promise.all([floorPromise, offersPromise]);
+  const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
+
+  // Floor = cheapest CLEAN single-NFT XCH offer (what you can actually grab in plain XCH). This keeps a
+  // hidden-CAT offer's tiny XCH portion from masquerading as the floor. Falls back to the Dexie/MG floor.
+  let cleanFloor: number | null = null;
+  for (const o of offerMap.values()) {
+    if (o.xchOnly && !o.multiNft && o.priceXch > 0) {
+      cleanFloor = cleanFloor === null ? o.priceXch : Math.min(cleanFloor, o.priceXch);
+    }
+  }
+  const floorXch = cleanFloor ?? floorFallback;
   const cards = cardsFrom(items, col, floorXch, xchUsdRate);
 
-  // Overlay real Dexie offers: accurate XCH price + asset list. Only CLEAN single-NFT, XCH-only offers
-  // get a deal score — anything that also wants a CAT (or bundles NFTs) is flagged, never scored, so a
-  // hidden-CAT listing can't masquerade as a great deal.
+  // Listings are Dexie-authoritative. priceXch is the XCH-EQUIVALENT total (CAT value already folded in
+  // by Dexie), so the deal score is honest even for offers that also want a CAT. Bundle offers (multiple
+  // NFTs) get no per-NFT deal score. Cards with no Dexie offer are simply not "for sale" here.
   for (const card of cards) {
     const offer = offerMap.get(card.id);
-    if (offer) {
+    if (offer && !offer.multiNft) {
       card.listing = { priceXch: offer.priceXch, priceUsd: Math.round(offer.priceXch * xchUsdRate * 100) / 100 };
-      card.listingAssets = offer.assets;
-      const cleanXch = !offer.multiNft && offer.assets.length === 1 && offer.assets[0] === "XCH";
-      card.dealScore = cleanXch && card.fairValue && offer.priceXch > 0
+      card.listingAssets = offer.requested.map((r) => r.code);
+      card.listingRequested = offer.requested;
+      card.dexieOfferId = offer.offerId;
+      card.dealScore = card.fairValue && offer.priceXch > 0
         ? computeDealScore(card.fairValue.totalEstimate, offer.priceXch)
         : null;
     } else {
-      // Listed on MintGarden but not verified on Dexie — keep any price but make no deal claim.
+      card.listing = null;
       card.listingAssets = null;
+      card.listingRequested = null;
+      card.dexieOfferId = null;
       card.dealScore = null;
     }
   }

@@ -249,15 +249,18 @@ export async function fetchNftOffer(launcherId: string): Promise<{ offer: string
 // one that also wants a CAT (which would make the "deal" misleading). Keyed by the offered NFT's
 // launcher id (hex) so we can overlay onto our cards. Cached 5 min; capped pages for huge collections.
 export interface CollectionOffer {
-  priceXch: number;
-  assets: string[];   // requested asset codes, e.g. ["XCH"] or ["XCH","SBX"]
+  offerId: string;    // Dexie offer id (for the dexie.space/offers/{id} link)
+  priceXch: number;   // Dexie price = XCH-EQUIVALENT total (already folds in any CAT value)
+  requested: { code: string; amount: number }[]; // full breakdown (XCH + any CATs)
+  xchOnly: boolean;   // requested is exactly XCH (a clean XCH buy)
   multiNft: boolean;  // offer bundles more than one NFT
 }
 
 interface DexieOfferRaw {
+  id?: string;
   price?: number;
   offered?: { is_nft?: boolean; id?: string }[];
-  requested?: { id?: string; code?: string }[];
+  requested?: { id?: string; code?: string; amount?: number }[];
 }
 
 export async function fetchCollectionActiveOffers(colId: string, maxPages = 15): Promise<Map<string, CollectionOffer>> {
@@ -280,12 +283,15 @@ export async function fetchCollectionActiveOffers(colId: string, maxPages = 15):
       for (const o of offers) {
         const nfts = (o.offered ?? []).filter((x) => x.is_nft && x.id);
         if (nfts.length === 0) continue;
-        const assets = (o.requested ?? [])
-          .map((r) => (r.code ?? r.id ?? "").toUpperCase())
-          .filter(Boolean);
+        const requested = (o.requested ?? [])
+          .map((r) => ({ code: (r.code ?? r.id ?? "").toUpperCase(), amount: typeof r.amount === "number" ? r.amount : 0 }))
+          .filter((r) => r.code);
+        const xchOnly = requested.length === 1 && requested[0].code === "XCH";
         const offer: CollectionOffer = {
+          offerId: o.id ?? "",
           priceXch: typeof o.price === "number" ? o.price : 0,
-          assets,
+          requested,
+          xchOnly,
           multiNft: nfts.length > 1,
         };
         for (const nft of nfts) if (nft.id && !map.has(nft.id)) map.set(nft.id, offer); // cheapest wins

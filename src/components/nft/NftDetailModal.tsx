@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
@@ -63,25 +63,6 @@ export function NftDetailModal({
     fullPageHref === undefined
       ? `/collections/${nft.collectionSlug}/nfts/${nft.launcherId}`
       : fullPageHref;
-
-  const [copyState, setCopyState] = useState<"idle" | "loading" | "copied" | "none">("idle");
-  async function copyOfferFile(e: React.MouseEvent) {
-    e.stopPropagation();
-    setCopyState("loading");
-    try {
-      const res = await fetch(`/api/offer?nft=${encodeURIComponent(nft.launcherId)}`);
-      const data = res.ok ? ((await res.json()) as { offer?: string | null }) : null;
-      if (data?.offer) {
-        await navigator.clipboard.writeText(data.offer);
-        setCopyState("copied");
-      } else {
-        setCopyState("none");
-      }
-    } catch {
-      setCopyState("none");
-    }
-    setTimeout(() => setCopyState("idle"), 2600);
-  }
 
   const accentColor = resolveAccent(tier.accent, isLight);
   const panelBg     = isLight ? "rgba(255,255,255,0.97)" : "rgba(18,18,24,0.97)";
@@ -219,58 +200,59 @@ export function NftDetailModal({
             </div>
           </div>
 
-          {/* Multi-asset warning — the listing wants a CAT (or bundle) on top of XCH */}
-          {(nft.listingAssets ?? []).some((a) => a !== "XCH") && (
-            <div className="mx-4 mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-300">
-              ⚠ This offer also requires{" "}
-              <span className="font-bold">{(nft.listingAssets ?? []).filter((a) => a !== "XCH").join(", ")}</span>{" "}
-              in addition to XCH. The price shown is the XCH portion only — this is <span className="font-bold">not</span>{" "}
-              a clean XCH buy, so no deal score is given. Verify the full offer before purchasing.
+          {/* What the buyer must give — full breakdown (XCH + any CATs), with the CAT warning */}
+          {nft.listing && (nft.listingRequested?.length ?? 0) > 0 && (
+            <div
+              className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px] leading-snug"
+              style={{ border: `1px solid ${divider}`, background: isLight ? "rgba(10,30,80,0.04)" : "rgba(255,255,255,0.03)" }}
+            >
+              <span className="font-bold uppercase tracking-widest" style={{ color: lblColor }}>You pay</span>
+              <div className="mt-1 flex flex-wrap gap-x-3" style={{ color: subColor }}>
+                {nft.listingRequested!.map((r) => (
+                  <span key={r.code}>
+                    <span className="font-semibold" style={{ color: valColor }}>{r.amount}</span> {r.code}
+                  </span>
+                ))}
+              </div>
+              {(nft.listingAssets ?? []).some((a) => a !== "XCH") && (
+                <div className="mt-1.5 text-amber-300">
+                  ⚠ This offer also requires a CAT token. Total cost ≈{" "}
+                  <span className="font-bold">{formatXch(nft.listing.priceXch)}</span> XCH-equivalent (Dexie&apos;s rate) —
+                  verify the CAT value before buying.
+                </div>
+              )}
             </div>
           )}
 
-          {/* Buy / View on MintGarden — external link (we never execute trades in-app) */}
-          {nft.launcherId.startsWith("nft1") && (
+          {/* Take the offer on Dexie — review + accept there (safer than copy/paste). No in-app trades. */}
+          {nft.listing && nft.dexieOfferId && (
             <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>
+              <a
+                href={`https://dexie.space/offers/${nft.dexieOfferId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
+                style={{ background: "rgba(40,180,90,0.16)", border: "1px solid rgba(80,200,120,0.5)", color: "#5fce7a" }}
+              >
+                View &amp; take offer on Dexie ↗
+              </a>
+            </div>
+          )}
+
+          {/* View the NFT on MintGarden */}
+          {nft.launcherId.startsWith("nft1") && (
+            <div className={`px-4 pb-1 ${nft.listing && nft.dexieOfferId ? "pt-2" : "pt-3"}`} style={nft.listing && nft.dexieOfferId ? {} : { borderTop: `1px solid ${divider}` }}>
               <a
                 href={`https://mintgarden.io/nfts/${nft.launcherId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-                style={{
-                  background: nft.listing ? "rgba(40,180,90,0.16)" : `${accentColor}18`,
-                  border: `1px solid ${nft.listing ? "rgba(80,200,120,0.5)" : `${accentColor}44`}`,
-                  color: nft.listing ? "#5fce7a" : accentColor,
-                }}
+                style={{ background: `${accentColor}14`, border: `1px solid ${accentColor}33`, color: accentColor }}
               >
-                {nft.listing ? `Buy · ${formatXch(nft.listing.priceXch)} on MintGarden ↗` : "View on MintGarden ↗"}
+                View NFT on MintGarden ↗
               </a>
-            </div>
-          )}
-
-          {/* Copy offer file — pastes the seller's Dexie offer string into the user's wallet to accept */}
-          {nft.listing && (
-            <div className="px-4 pb-1">
-              <button
-                type="button"
-                onClick={copyOfferFile}
-                disabled={copyState === "loading"}
-                className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80 disabled:opacity-60"
-                style={{
-                  background: copyState === "copied" ? "rgba(40,180,90,0.16)" : isLight ? "rgba(10,30,80,0.06)" : "rgba(255,255,255,0.05)",
-                  border: `1px solid ${copyState === "copied" ? "rgba(80,200,120,0.5)" : isLight ? "rgba(60,120,220,0.3)" : "rgba(255,255,255,0.14)"}`,
-                  color: copyState === "copied" ? "#5fce7a" : isLight ? "#0a1e50" : "rgba(255,255,255,0.85)",
-                }}
-              >
-                {copyState === "loading"
-                  ? "Fetching offer…"
-                  : copyState === "copied"
-                    ? "✓ Offer file copied — paste in your wallet"
-                    : copyState === "none"
-                      ? "No offer file found on Dexie"
-                      : "📋 Copy offer file"}
-              </button>
             </div>
           )}
 
