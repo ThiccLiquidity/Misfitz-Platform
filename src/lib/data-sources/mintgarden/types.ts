@@ -3,8 +3,11 @@
 // live responses (nft detail, collection, and the cursor-paginated list endpoints).
 
 export interface MgAttribute {
-  trait_type: string;
-  value: string | number;
+  // CHIP-0007 uses `trait_type`, but many Chia collections store the label under `type` or `name`.
+  trait_type?: string;
+  type?: string;
+  name?: string;
+  value?: string | number | null;
 }
 
 export interface MgEncodedRef {

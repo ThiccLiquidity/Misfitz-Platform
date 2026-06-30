@@ -84,12 +84,19 @@ function traitRarityPercent(
 export function mapTraits(detail: MgNftDetail): Trait[] {
   const attrs = detail.data?.metadata_json?.attributes ?? [];
   return attrs
-    .filter((a) => a && a.trait_type !== undefined && a.value !== undefined)
-    .map((a) => ({
-      trait_type: String(a.trait_type),
-      value: a.value,
-      rarityPercent: traitRarityPercent(detail.collection, String(a.trait_type), a.value),
-    }));
+    .map((a): Trait | null => {
+      if (!a) return null;
+      // Accept CHIP-0007 `trait_type` plus the `type` / `name` variants other Chia collections use.
+      const rawLabel = a.trait_type ?? a.type ?? a.name;
+      if (rawLabel === undefined || rawLabel === null) return null;
+      if (a.value === undefined || a.value === null) return null;
+      const label = String(rawLabel).trim();
+      // Skip non-trait metadata rows some mints stuff into attributes (e.g. a description blob).
+      if (!label || label.toLowerCase() === "description") return null;
+      const value = a.value as string | number;
+      return { trait_type: label, value, rarityPercent: traitRarityPercent(detail.collection, label, value) };
+    })
+    .filter((t): t is Trait => t !== null);
 }
 
 export function mapCollection(c: MgCollection): CollectionData {
