@@ -154,7 +154,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1320 }}>
         <FilterSidebar {...sidebarProps} />
         <div className="min-w-0 flex-1" style={{ maxWidth: 960 }}>
-          <BinderView collection={SHELL} nfts={displayed} />
+          <BinderView collection={SHELL} nfts={displayed} hideFullPageLink />
           {displayed.length < filtered.length && (
             <div className="mt-5 flex justify-center">
               <button type="button" onClick={() => setVisible((v) => v + PAGE)}
@@ -168,7 +168,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
 
       {/* Mobile */}
       <div className="md:hidden">
-        <BinderView collection={SHELL} nfts={displayed} />
+        <BinderView collection={SHELL} nfts={displayed} hideFullPageLink />
         {displayed.length < filtered.length && (
           <div className="mt-4 flex justify-center">
             <button type="button" onClick={() => setVisible((v) => v + PAGE)}

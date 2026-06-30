@@ -183,7 +183,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1440 }}>
         <FilterSidebar {...sidebarProps} />
         <div className="min-w-0 flex-1" style={{ maxWidth: 880 }}>
-          <BinderView key={binderKey} collection={SHELL} nfts={filtered} />
+          <BinderView key={binderKey} collection={SHELL} nfts={filtered} hideFullPageLink />
         </div>
         <BinderCollectionPicker
           collections={holdings.collections}
@@ -216,7 +216,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             <option value="deal-desc">Best deals first</option>
           </select>
         </div>
-        <BinderView key={`m-${binderKey}`} collection={SHELL} nfts={filtered} />
+        <BinderView key={`m-${binderKey}`} collection={SHELL} nfts={filtered} hideFullPageLink />
       </div>
     </div>
   );

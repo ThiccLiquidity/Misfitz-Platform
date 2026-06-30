@@ -8,5 +8,5 @@ export const dynamic = "force-dynamic";
 export default async function CollectionLivePage({ params }: { params: { id: string } }) {
   const view = await getCollectionView(params.id);
   if (!view) notFound();
-  return <CollectionBinder view={view} />;
+  return <CollectionBinder key={view.id} view={view} />;
 }

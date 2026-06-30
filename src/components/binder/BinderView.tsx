@@ -14,6 +14,9 @@ const FLIP_DURATION_MS = 700;
 interface BinderViewProps {
   collection: CollectionData;
   nfts: NftData[];
+  // Live NFTs (wallet / live collection) have no on-platform detail page yet, so hide the modal's
+  // "View Full Page" link (it would 404 against the DB-only /collections/[slug]/nfts route).
+  hideFullPageLink?: boolean;
 }
 
 // Two-page spread binder with a CSS 3D page-flip mechanic (approved prototype §11).
@@ -35,7 +38,7 @@ interface BinderViewProps {
 //
 // z-index: spine(3) > right-area(2) > flipper(1) > underlay(0)
 // During animation: right-area raised to z-100 so flipper passes OVER spine rings.
-export function BinderView({ collection, nfts }: BinderViewProps) {
+export function BinderView({ collection, nfts, hideFullPageLink = false }: BinderViewProps) {
   const { mode } = useThemeMode();
   const tokens = getThemeTokens(mode, collection.theme);
   const cssVars = themeTokensToCssVars(tokens);
@@ -325,6 +328,7 @@ export function BinderView({ collection, nfts }: BinderViewProps) {
           totalSupply={collection.totalSupply}
           rarityTiers={collection.rarityTiers}
           onClose={() => setOpenLauncherId(null)}
+          fullPageHref={hideFullPageLink ? null : undefined}
         />
       )}
     </div>
