@@ -49,5 +49,5 @@ test("custom collection number is a grail; weights match tier", () => {
   assert.equal(c!.tier, 1);
   assert.equal(c!.label, "Collector's Number");
   assert.equal(collectibleNumber(1)!.weight, 0.4);
-  assert.equal(collectibleNumber(50)!.weight, 0); // tier 4 = badge only
+  assert.equal(collectibleNumber(50)!.weight, 0.02); // tier 4 = small 'fun' premium
 });
