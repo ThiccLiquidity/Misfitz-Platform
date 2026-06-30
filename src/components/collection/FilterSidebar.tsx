@@ -29,6 +29,12 @@ interface FilterSidebarProps {
   priceMax?: string;
   onPriceRange?: (min: string, max: string) => void;
   listedCount?: number;
+  /** Collector-number (numerology) filter — only rendered when onCollectorOnly is provided. */
+  collectorOnly?: boolean;
+  onCollectorOnly?: (v: boolean) => void;
+  collectorTier?: number; // keep collectible badges with tier <= this (1=grail … 4=fun)
+  onCollectorTier?: (t: number) => void;
+  collectorCount?: number;
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -153,6 +159,7 @@ export function FilterSidebar({
   sheet = false,
   hideTraits = false,
   forSaleOnly, onForSaleOnly, priceMin, priceMax, onPriceRange, listedCount,
+  collectorOnly, onCollectorOnly, collectorTier = 4, onCollectorTier, collectorCount,
 }: FilterSidebarProps) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
@@ -211,6 +218,37 @@ export function FilterSidebar({
               onChange={(e) => onPriceRange?.(priceMin ?? "", e.target.value)} style={selectStyle(isLight)} />
           </div>
           <span className="text-subtle text-[10px]">Price range (XCH)</span>
+        </div>
+      )}
+
+      {/* ── Collector numbers (numerology) ─────────────── */}
+      {onCollectorOnly && (
+        <div className="flex flex-col gap-2">
+          <span className="mb-0.5 text-[10px] font-black uppercase tracking-widest"
+            style={{ color: isLight ? "#7a5500" : "rgba(255,255,255,0.7)" }}>
+            Collector numbers
+          </span>
+          <button type="button" onClick={() => onCollectorOnly(!collectorOnly)}
+            className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
+            style={{
+              border: collectorOnly
+                ? "1.5px solid rgba(240,192,0,0.65)"
+                : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
+              background: collectorOnly ? "rgba(240,192,0,0.14)" : "transparent",
+              color: collectorOnly ? "#f0c000" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
+            }}>
+            <span>★ Collector #s only</span>
+            <span>{collectorOnly ? `ON · ${(collectorCount ?? 0).toLocaleString()}` : "OFF"}</span>
+          </button>
+          {collectorOnly && (
+            <select value={collectorTier} onChange={(e) => onCollectorTier?.(Number(e.target.value))} style={selectStyle(isLight)}>
+              <option value={4}>All special numbers</option>
+              <option value={3}>Notable &amp; better</option>
+              <option value={2}>Strong &amp; grails</option>
+              <option value={1}>Grails only ★</option>
+            </select>
+          )}
+          <span className="text-subtle text-[10px]">e.g. 69, 420, 777, 1, palindromes, runs</span>
         </div>
       )}
 

@@ -34,6 +34,8 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [forSaleOnly, setForSaleOnly] = useState(false);
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
+  const [collectorOnly, setCollectorOnly] = useState(false);
+  const [collectorTier, setCollectorTier] = useState(4); // keep collectible badges with tier <= this
 
   const SHELL: CollectionData = useMemo(() => ({
     slug: view.id, name: view.name, description: view.description, bannerUrl: view.bannerUrl,
@@ -81,6 +83,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
       });
     }
 
+    // Collector numbers (numerology): keep only special mint numbers at/above the chosen strength.
+    if (collectorOnly) r = r.filter((n) => n.collectible != null && n.collectible.tier <= collectorTier);
+
     const s = [...r];
     switch (sort) {
       case "rank-asc":   s.sort((a, b) => pct(a) - pct(b)); break;
@@ -92,14 +97,18 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
       case "token-desc": s.sort((a, b) => tokenNum(b) - tokenNum(a)); break;
     }
     return s;
-  }, [nfts, tier, traitFilters, sort, forSaleOnly, priceMin, priceMax]);
+  }, [nfts, tier, traitFilters, sort, forSaleOnly, priceMin, priceMax, collectorOnly, collectorTier]);
 
   const listedCount = useMemo(() => nfts.reduce((c, n) => c + (n.listing ? 1 : 0), 0), [nfts]);
+  const collectorCount = useMemo(
+    () => nfts.reduce((c, n) => c + (n.collectible != null && n.collectible.tier <= collectorTier ? 1 : 0), 0),
+    [nfts, collectorTier],
+  );
 
   const displayed = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
 
   // Reset the window when the filter/sort changes so you always see the top of the new order.
-  useEffect(() => { setVisible(PAGE); }, [tier, sort, traitFilters, forSaleOnly, priceMin, priceMax]);
+  useEffect(() => { setVisible(PAGE); }, [tier, sort, traitFilters, forSaleOnly, priceMin, priceMax, collectorOnly, collectorTier]);
 
   // ── Enrich just the visible cards (traits + estimated ranks), tracked so we never re-fetch one ──
   const enrichedRef = useRef<Set<string>>(new Set());
@@ -167,6 +176,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     priceMin, priceMax,
     onPriceRange: (min: string, max: string) => { setPriceMin(min); setPriceMax(max); },
     listedCount,
+    collectorOnly, onCollectorOnly: setCollectorOnly,
+    collectorTier, onCollectorTier: setCollectorTier,
+    collectorCount,
   };
 
   const moreCount = Math.min(PAGE, filtered.length - displayed.length);
