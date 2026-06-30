@@ -320,12 +320,24 @@ export function NftDetailModal({
                 );
               })}
               {nft.valueBasis && (
-                <div className="mt-2 flex items-center gap-1.5 text-[10px]" style={{ color: subColor }}>
-                  <span className="font-bold uppercase tracking-widest" style={{ color: lblColor }}>Comps</span>
-                  <span>{nft.valueBasis}</span>
-                  {typeof nft.valueConfidence === "number" && (
-                    <span style={{ color: lblColor }}>· {Math.round(nft.valueConfidence * 100)}% confidence</span>
-                  )}
+                <div
+                  className="mt-2.5 rounded-lg px-3 py-2 text-[11px] leading-snug"
+                  style={{ border: "1px solid rgba(95,206,122,0.4)", background: "rgba(40,180,90,0.10)" }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold uppercase tracking-widest" style={{ color: "#5fce7a" }}>📊 Sales comps</span>
+                    {typeof nft.valueConfidence === "number" && (
+                      <span className="font-bold" style={{ color: nft.valueConfidence >= 0.5 ? "#5fce7a" : valColor }}>
+                        {Math.round(nft.valueConfidence * 100)}% confidence
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1" style={{ color: subColor }}>{nft.valueBasis}</div>
+                  <div className="mt-1 text-[10px]" style={{ color: lblColor }}>
+                    {typeof nft.valueConfidence === "number" && nft.valueConfidence < 0.5
+                      ? "Few recent sales near this rarity — value leans on our estimate."
+                      : "Backed by real recent sales of similar NFTs."}
+                  </div>
                 </div>
               )}
             </div>
