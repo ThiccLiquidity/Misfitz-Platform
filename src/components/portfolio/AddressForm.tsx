@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // Client input for the binder / value view: navigates to ?address=… so the result is a shareable,
 // server-rendered URL. Accepts an xch1… address or a did:chia… profile id. useTransition tracks the
@@ -9,6 +10,8 @@ import { useRouter } from "next/navigation";
 // stay stuck, since navigating to the same route never unmounts this form).
 export function AddressForm({ initial = "", path = "/portfolio", buttonLabel = "Value my NFTs" }: { initial?: string; path?: string; buttonLabel?: string }) {
   const router = useRouter();
+  const { mode } = useThemeMode();
+  const isLight = mode === "light";
   const [address, setAddress] = useState(initial);
   const [pending, startTransition] = useTransition();
 
@@ -28,7 +31,8 @@ export function AddressForm({ initial = "", path = "/portfolio", buttonLabel = "
         onChange={(e) => setAddress(e.target.value)}
         placeholder="Paste a Chia address (xch1…) or DID (did:chia…)"
         spellCheck={false}
-        className="text-title flex-1 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 font-mono text-sm outline-none focus:border-emerald-400/40"
+        className="text-title flex-1 rounded-lg px-4 py-3 font-mono text-sm outline-none"
+        style={{ background: isLight ? "#ffffff" : "rgba(255,255,255,0.03)", border: isLight ? "1px solid rgba(41,128,200,0.35)" : "1px solid rgba(255,255,255,0.10)" }}
       />
       <button
         type="submit"

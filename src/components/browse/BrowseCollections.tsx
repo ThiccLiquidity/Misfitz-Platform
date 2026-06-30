@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import type { CollectionSummary } from "@/types";
 import { CollectionCard } from "./CollectionCard";
+import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // Discovery grid: trending collections by default, live search as you type (debounced).
 export function BrowseCollections({ trending }: { trending: CollectionSummary[] }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CollectionSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const { mode } = useThemeMode();
+  const isLight = mode === "light";
 
   useEffect(() => {
     const q = query.trim();
@@ -39,7 +42,11 @@ export function BrowseCollections({ trending }: { trending: CollectionSummary[] 
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search collections…"
           spellCheck={false}
-          className="text-title w-full rounded-lg border border-white/10 bg-white/[0.03] py-3 pl-9 pr-4 text-sm outline-none focus:border-emerald-400/40"
+          className="text-title w-full rounded-lg py-3 pl-9 pr-4 text-sm outline-none"
+          style={{
+            background: isLight ? "#ffffff" : "rgba(255,255,255,0.03)",
+            border: isLight ? "1px solid rgba(41,128,200,0.35)" : "1px solid rgba(255,255,255,0.10)",
+          }}
         />
       </div>
 
@@ -49,7 +56,7 @@ export function BrowseCollections({ trending }: { trending: CollectionSummary[] 
       </div>
 
       {showing.length === 0 && !loading ? (
-        <div className="text-subtle rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm">
+        <div className="text-subtle rounded-xl px-4 py-8 text-center text-sm" style={{ background: isLight ? "rgba(41,128,200,0.06)" : "rgba(255,255,255,0.03)", border: isLight ? "1px solid rgba(41,128,200,0.25)" : "1px solid rgba(255,255,255,0.10)" }}>
           {results ? "No collections matched that search." : "Couldn’t load collections right now."}
         </div>
       ) : (

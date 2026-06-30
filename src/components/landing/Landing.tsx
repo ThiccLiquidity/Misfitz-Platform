@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 // Landing (logged-out home). Browsing/shopping is the headline product; portfolio tracking is the
 // supporting act. HTML (not a baked image) so layout/hierarchy is real and maintainable.
@@ -27,15 +28,9 @@ export function Landing() {
           <Wordmark className="text-xl sm:text-2xl" />
         </Link>
         <div className="flex items-center gap-5 text-sm font-semibold" style={{ color: "var(--subtle)" }}>
-          <Link href="/binder" className="hidden transition hover:text-title sm:inline">Track a wallet</Link>
-          <Link href="/login" className="transition hover:text-title">Log in</Link>
-          <Link
-            href="/signup"
-            className="rounded-full px-4 py-2 text-[var(--vault-bg)] shadow-sm transition hover:opacity-90"
-            style={{ background: "var(--card-border)" }}
-          >
-            Sign up
-          </Link>
+          <Link href="/browse" className="hidden transition hover:text-title sm:inline">Browse</Link>
+          <Link href="/binder" className="transition hover:text-title">Your Binder</Link>
+          <ThemeToggle />
         </div>
       </nav>
 
