@@ -119,7 +119,7 @@ export function NftDetailModal({
         {/* Full-screen lightbox — just the NFT art, big and clean. Click anywhere / ✕ to close. */}
         {lightbox && (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/92 p-4 sm:p-10"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/[0.97] p-4 backdrop-blur-md sm:p-10"
             onClick={(e) => { e.stopPropagation(); setLightbox(false); }}
             role="dialog"
             aria-modal="true"
