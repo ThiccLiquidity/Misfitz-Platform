@@ -21,6 +21,7 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
   const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
   const autoloadedRef = useRef(false);
 
@@ -40,8 +41,12 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
   }
   function addDraft() {
     const add = parseOwnerIds(draft);
+    if (add.length === 0) {
+      setError("That doesn\u2019t look like a Chia wallet. Paste an xch1\u2026 address or a did:chia\u2026 profile id (copied in full).");
+      return;
+    }
+    setError("");
     setDraft("");
-    if (add.length === 0) return;
     go([...new Set([...loaded, ...add])]);
   }
   const removeWallet = (id: string) => go(loaded.filter((x) => x !== id));
@@ -102,7 +107,7 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => { setDraft(e.target.value); if (error) setError(""); }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDraft(); } }}
           placeholder="Paste a Chia address (xch1…) or DID (did:chia…) — add as many as you like"
           spellCheck={false}
@@ -112,13 +117,19 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
         <button
           type="button"
           onClick={addDraft}
-          disabled={parseOwnerIds(draft).length === 0}
+          disabled={draft.trim().length === 0}
           className="rounded-lg px-5 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-40"
           style={{ background: isLight ? "#2980c8" : "rgba(56,189,248,0.95)" }}
         >
           Add
         </button>
       </div>
+
+      {error && (
+        <p className="mt-2 text-[12px] font-semibold" style={{ color: isLight ? "#aa1111" : "#f87171" }}>
+          {error}
+        </p>
+      )}
 
       {/* Loaded wallet chips */}
       {loaded.length > 0 && (
