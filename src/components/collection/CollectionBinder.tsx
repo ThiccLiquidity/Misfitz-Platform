@@ -121,7 +121,12 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           setNfts((prev) => prev.map((n) => {
             const e = byId.get(n.launcherId);
             if (!e) return n;
-            return { ...e, listing: n.listing, listingAssets: n.listingAssets, listingRequested: n.listingRequested, dexieOfferId: n.dexieOfferId, dealScore: n.dealScore };
+            // Enrichment maps fairValue/listing from MintGarden (no comps, no Dexie terms), so keep the
+            // full-collection overlay's comps-blended value + basis + Dexie-verified listing/deal.
+            const comps = n.valueBasis
+              ? { fairValue: n.fairValue, valueBasis: n.valueBasis, valueConfidence: n.valueConfidence }
+              : {};
+            return { ...e, ...comps, listing: n.listing, listingAssets: n.listingAssets, listingRequested: n.listingRequested, dexieOfferId: n.dexieOfferId, dealScore: n.dealScore };
           }));
         }
       } catch { /* keep fast card */ }
