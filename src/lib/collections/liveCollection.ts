@@ -212,20 +212,23 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     if (card.rarityRank == null || !card.fairValue) return card;
     const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
     const cv = comps.valueOf(card.rarityRank, traits);
-    if (cv.value == null || cv.confidence <= 0) return card;
-    const base = card.fairValue.totalEstimate;
-    const effConf = cv.confidence;                                 // use confidence directly; structural guards (log-space, clamp, reliability, penalty, pull-cap) already prevent blow-ups
-    const cap = base * (effConf < 0.5 ? 3 : 5);                    // comps can't pull >3-5× the base
-    const compsValue = Math.min(cv.value, cap);
-    const blended = effConf * compsValue + (1 - effConf) * base;
-    const total = Math.round((floorXch != null ? Math.max(floorXch, blended) : blended) * 1000) / 1000;
+    if (cv.value == null) return card;
+    // The market curve (curve × trait amplifier) REPLACES floor+rarity+comps; the collector-number
+    // premium is the only thing added on top.
+    const numberPremium = card.fairValue.desirabilityPremium ?? 0;
+    const total = Math.round(Math.max(floorXch ?? 0, cv.value + numberPremium) * 1000) / 1000;
     const fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: Math.round(total * xchUsdRate * 100) / 100 };
-    // Re-score the deal against the blended value, but only for clean single-NFT XCH listings.
     const xchOnly = !!card.listingRequested && card.listingRequested.length === 1 && card.listingRequested[0].code === "XCH";
     const dealScore = card.listing && card.dexieOfferId && xchOnly && card.listing.priceXch > 0
       ? computeDealScore(total, card.listing.priceXch)
       : card.dealScore;
-    return { ...card, fairValue, dealScore, valueBasis: cv.basis, valueConfidence: Math.round(effConf * 100) / 100 };
+    return {
+      ...card, fairValue, dealScore,
+      valueBasis: cv.basis,
+      valueConfidence: Math.round(cv.confidence * 100) / 100,
+      valueCurve: cv.curve != null ? Math.round(cv.curve * 1000) / 1000 : null,
+      valueTraitMult: Math.round(cv.traitFactor * 1000) / 1000,
+    };
   });
   return result(nfts);
 }

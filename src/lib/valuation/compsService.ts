@@ -6,7 +6,8 @@
 // for the most-recently-sold NFTs. Detail fetches are individually TTL-cached in the client, and the
 // finished model is cached here for 45 min, so steady-state cost is ~zero. valueOf() is pure arithmetic.
 
-import { fetchCollectionCompletedSales } from "@/lib/market/dexie";
+import { fetchCollectionCompletedSales, fetchCollectionFloor } from "@/lib/market/dexie";
+import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale } from "@/lib/valuation/comps";
 
@@ -31,7 +32,10 @@ async function pool<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>): P
 }
 
 async function build(colId: string): Promise<CompsModel | null> {
-  const sales = await fetchCollectionCompletedSales(colId);
+  const [sales, floorXch] = await Promise.all([
+    fetchCollectionCompletedSales(colId),
+    fetchCollectionFloor(colId).catch(() => null),
+  ]);
   if (sales.length === 0) return null;
 
   // Most-recent sales first, capped — these dominate the recency-weighted model anyway.
@@ -56,7 +60,10 @@ async function build(colId: string): Promise<CompsModel | null> {
   const usable = built.filter((x): x is Sale => x !== null);
   // Fallback supply if the API didn't give nft_count: the largest rank we saw is a lower bound.
   if (supply <= 0) supply = usable.reduce((m, x) => Math.max(m, x.rank), 0);
-  return buildCompsModel(usable, supply);
+  return buildCompsModel(usable, supply, {
+    floor: typeof floorXch === "number" ? floorXch : 0,
+    rarityFactor: rarityFactorForPercentile,
+  });
 }
 
 /**

@@ -214,17 +214,15 @@ export async function enrichNftsByIds(
       if (!model || card.rarityRank == null || !card.fairValue) continue;
       const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
       const cv = model.valueOf(card.rarityRank, traits);
-      if (cv.value == null || cv.confidence <= 0) continue;
-      const base = card.fairValue.totalEstimate;
-      const effConf = cv.confidence;                          // confidence used directly (guards below prevent blow-ups)
-      const cap = base * (effConf < 0.5 ? 3 : 5);              // comps pull cap
-      const compsValue = Math.min(cv.value, cap);
-      const blended = effConf * compsValue + (1 - effConf) * base;
+      if (cv.value == null) continue;
+      const numberPremium = card.fairValue.desirabilityPremium ?? 0; // collector number on top of curve
       const floor = floorByCollection[outCol[i]];
-      const total = round(typeof floor === "number" ? Math.max(floor, blended) : blended, 3);
+      const total = round(Math.max(typeof floor === "number" ? floor : 0, cv.value + numberPremium), 3);
       card.fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: round(total * xchUsdRate, 2) };
       card.valueBasis = cv.basis;
-      card.valueConfidence = round(effConf, 2);
+      card.valueConfidence = round(cv.confidence, 2);
+      card.valueCurve = cv.curve != null ? round(cv.curve, 3) : null;
+      card.valueTraitMult = round(cv.traitFactor, 3);
     }
   }
   return out;

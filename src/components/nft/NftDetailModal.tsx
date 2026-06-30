@@ -53,12 +53,10 @@ export function NftDetailModal({
   const { mode } = useThemeMode();
   const isLight = mode === "light";
   const [lightbox, setLightbox] = useState(false);
-  // Base estimate = sum of the floor+premium breakdown rows (pre-comps). The headline totalEstimate is
-  // the comps-blended number, so the difference is exactly what the sales comps moved it by.
-  const fvBase = nft.fairValue
-    ? FV_ROWS.reduce((sum, { key }) => { const v = nft.fairValue![key]; return sum + (typeof v === "number" ? v : 0); }, 0)
-    : 0;
-  const compsAdj = nft.fairValue ? nft.fairValue.totalEstimate - fvBase : 0;
+  // Market-curve breakdown pieces (when the sales-fitted curve is active).
+  const traitEffect = nft.valueCurve != null && typeof nft.valueTraitMult === "number"
+    ? nft.valueCurve * (nft.valueTraitMult - 1) : 0;
+  const numberPremium = nft.fairValue?.desirabilityPremium ?? 0;
 
   const thresholds = useMemo(() => resolveTierThresholds(rarityTiers), [rarityTiers]);
   const tier = useMemo(
@@ -324,77 +322,66 @@ export function NftDetailModal({
             </div>
           )}
 
-          {/* Fair Value Breakdown */}
+          {/* Value breakdown */}
           {nft.fairValue && (
             <div className="px-4 py-3">
-              <div
-                className="mb-2 text-[10px] font-bold uppercase tracking-widest"
-                style={{ color: lblColor }}
-              >
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: lblColor }}>
                 Where this value comes from
               </div>
-              {FV_ROWS.map(({ key, label }) => {
-                const value = nft.fairValue![key];
-                return (
-                  <div
-                    key={key}
-                    className="flex items-baseline justify-between py-1"
-                    style={{ borderBottom: `1px solid ${divider}` }}
-                  >
-                    <span className="text-xs" style={{ color: subColor }}>{label}</span>
-                    <span
-                      className="text-xs font-semibold"
-                      style={{ color: typeof value === "number" ? valColor : subColor }}
-                    >
-                      {typeof value === "number" ? `${value.toFixed(2)} XCH` : "—"}
-                    </span>
-                  </div>
-                );
-              })}
-              {/* Sales-comps adjustment — signed, so the rows reconcile to the headline estimate. */}
-              {nft.valueBasis && Math.abs(compsAdj) >= 0.005 && (
-                <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
-                  <span className="text-xs font-semibold" style={{ color: compsAdj >= 0 ? "#5fce7a" : "#e0a35a" }}>
-                    Sales comps {compsAdj >= 0 ? "▲" : "▼"}
-                  </span>
-                  <span className="text-xs font-bold" style={{ color: compsAdj >= 0 ? "#5fce7a" : "#e0a35a" }}>
-                    {compsAdj >= 0 ? "+" : "−"}{Math.abs(compsAdj).toFixed(2)} XCH
-                  </span>
-                </div>
-              )}
-              {/* Bold final — what the rows add up to (the headline Est. Value). */}
-              <div className="flex items-baseline justify-between pt-2">
-                <span className="text-xs font-black uppercase tracking-wide" style={{ color: lblColor }}>Estimated value</span>
-                <span className="text-sm font-black" style={{ color: valColor }}>{nft.fairValue!.totalEstimate.toFixed(2)} XCH</span>
-              </div>
 
-              {nft.valueBasis && (
-                <div
-                  className="mt-2.5 rounded-lg px-3 py-2 text-[11px] leading-snug"
-                  style={{ border: "1px solid rgba(95,206,122,0.4)", background: "rgba(40,180,90,0.10)" }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold uppercase tracking-widest" style={{ color: "#5fce7a" }}>📊 Sales comps</span>
-                    {typeof nft.valueConfidence === "number" && (
-                      <span className="font-bold" style={{ color: nft.valueConfidence >= 0.5 ? "#5fce7a" : valColor }}>
-                        {Math.round(nft.valueConfidence * 100)}% confidence
+              {nft.valueCurve != null ? (
+                <>
+                  <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
+                    <span className="text-xs" style={{ color: subColor }}>Market curve{nft.rarityRank ? ` (rank #${nft.rarityRank})` : ""}</span>
+                    <span className="text-xs font-semibold" style={{ color: valColor }}>{nft.valueCurve.toFixed(2)} XCH</span>
+                  </div>
+                  {Math.abs(traitEffect) >= 0.005 && (
+                    <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
+                      <span className="text-xs" style={{ color: subColor }}>Trait demand</span>
+                      <span className="text-xs font-semibold" style={{ color: traitEffect >= 0 ? "#5fce7a" : "#e0a35a" }}>
+                        {traitEffect >= 0 ? "+" : "−"}{Math.abs(traitEffect).toFixed(2)} XCH
                       </span>
-                    )}
+                    </div>
+                  )}
+                  {numberPremium > 0.005 && (
+                    <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
+                      <span className="text-xs" style={{ color: subColor }}>Collector number</span>
+                      <span className="text-xs font-semibold" style={{ color: "#5fce7a" }}>+{numberPremium.toFixed(2)} XCH</span>
+                    </div>
+                  )}
+                  <div className="flex items-baseline justify-between pt-2">
+                    <span className="text-xs font-black uppercase tracking-wide" style={{ color: lblColor }}>Estimated value</span>
+                    <span className="text-sm font-black" style={{ color: valColor }}>{nft.fairValue.totalEstimate.toFixed(2)} XCH</span>
                   </div>
-                  {/* Before → after, so the effect is unmistakable. */}
-                  <div className="mt-1 font-semibold" style={{ color: valColor }}>
-                    {fvBase.toFixed(2)} → {nft.fairValue!.totalEstimate.toFixed(2)} XCH
-                    <span className="ml-1 font-normal" style={{ color: subColor }}>
-                      ({compsAdj >= 0 ? "+" : "−"}{Math.abs(compsAdj).toFixed(2)} from real sales)
-                    </span>
+                  <div className="mt-2.5 rounded-lg px-3 py-2 text-[11px] leading-snug" style={{ border: "1px solid rgba(95,206,122,0.4)", background: "rgba(40,180,90,0.10)" }}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold uppercase tracking-widest" style={{ color: "#5fce7a" }}>📈 Market-fitted</span>
+                      {typeof nft.valueConfidence === "number" && (
+                        <span className="font-bold" style={{ color: nft.valueConfidence >= 0.5 ? "#5fce7a" : valColor }}>{Math.round(nft.valueConfidence * 100)}% sales support</span>
+                      )}
+                    </div>
+                    <div className="mt-1" style={{ color: subColor }}>{nft.valueBasis}</div>
+                    <div className="mt-1 text-[10px]" style={{ color: lblColor }}>Rank-fitted from real recent sales of similar-rarity NFTs; nothing rarer is valued below a less-rare sale.</div>
                   </div>
-                  <div className="mt-1" style={{ color: subColor }}>{nft.valueBasis}</div>
-                  <div className="mt-1 text-[10px]" style={{ color: lblColor }}>
-                    {typeof nft.valueConfidence === "number" && nft.valueConfidence < 0.5
-                      ? "Few recent sales near this rarity — value leans mostly on our estimate."
-                      : "Real recent sales of similar NFTs are pulling the estimate toward market."}
+                </>
+              ) : (
+                <>
+                  {FV_ROWS.map(({ key, label }) => {
+                    const value = nft.fairValue![key];
+                    return (
+                      <div key={key} className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
+                        <span className="text-xs" style={{ color: subColor }}>{label}</span>
+                        <span className="text-xs font-semibold" style={{ color: typeof value === "number" ? valColor : subColor }}>
+                          {typeof value === "number" ? `${value.toFixed(2)} XCH` : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-baseline justify-between pt-2">
+                    <span className="text-xs font-black uppercase tracking-wide" style={{ color: lblColor }}>Estimated value</span>
+                    <span className="text-sm font-black" style={{ color: valColor }}>{nft.fairValue.totalEstimate.toFixed(2)} XCH</span>
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}

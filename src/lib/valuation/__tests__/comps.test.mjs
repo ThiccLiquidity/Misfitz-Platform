@@ -88,3 +88,14 @@ test("recency: a fresh high sale outweighs a stale low one at the same rank", ()
   const m = buildCompsModel(sales, 1000);
   assert.ok(m.rankCurve(500) >= 19, `expected fresh ~20, got ${m.rankCurve(500)}`);
 });
+
+test("value curve is MONOTONIC: nothing rarer than a sale prices below it", () => {
+  const sales = [{ rank: 800, price: 60, ageDays: 1 }];
+  for (let r = 2000; r <= 9000; r += 100) sales.push({ rank: r, price: 8, ageDays: 25 });
+  const m = buildCompsModel(sales, 9985, { floor: 8, rarityFactor: (pct) => (pct <= 10 ? 0.8 : 0) });
+  const v800 = m.curveValue(800);
+  assert.ok(v800 >= 50, `rank-800 should be pulled up near the 60 sale, got ${v800}`);
+  assert.ok(m.curveValue(400) >= v800 - 1e-6, "rarer (400) >= 800");
+  assert.ok(m.curveValue(100) >= v800 - 1e-6, "rarer (100) >= 800");
+  assert.ok(m.curveValue(8000) <= v800 + 1e-6, "common (8000) <= 800");
+});

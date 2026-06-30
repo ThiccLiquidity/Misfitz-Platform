@@ -29,10 +29,10 @@ export default async function CompsStatusPage({ searchParams }: { searchParams: 
   try {
     const model = await getCompsModel(id, { wait: true });
     if (model) {
-      modelInfo = `built — ${model.sampleSize} sales used, ${model.withTraits} with traits`;
+      modelInfo = `built — ${model.sampleSize} sales used, bandwidth ${Math.round(model.bandwidth)} ranks`;
       for (const rank of [50, 300, 843, 2000, 5000, 9000]) {
         const v = model.valueOf(rank, []);
-        samples.push({ rank, value: v.value, confidence: v.confidence, basis: v.basis });
+        samples.push({ rank, value: v.curve, confidence: v.confidence, basis: v.basis });
       }
     } else {
       modelInfo = "model is null (no usable sales joined to ranks)";

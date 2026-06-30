@@ -77,6 +77,11 @@ export interface NftData {
   // valueConfidence 0..1 = how much real sales backed it; valueBasis = short human explanation.
   valueBasis?: string | null;
   valueConfidence?: number | null;
+  // Sales-fitted market curve (src/lib/valuation/comps). valueCurve = the rank-fitted curve score
+  // (floor+rarity+comps merged); valueTraitMult = trait amplifier applied on top. totalEstimate =
+  // valueCurve × valueTraitMult + collector-number premium.
+  valueCurve?: number | null;
+  valueTraitMult?: number | null;
   // Special/collectible mint-number badge (VALUATION.md Part 2). Optional — only live-mapped NFTs
   // with a special number carry it. tier 1 = grail … 4 = fun.
   collectible?: { tier: number; label: string } | null;

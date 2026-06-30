@@ -1,27 +1,27 @@
-// Comparable-sales valuation model (pure, no imports — directly unit-testable with `node --test`).
+// Sales-fitted VALUE CURVE (pure, unit-testable). One value per rarity rank, fit from the market:
 //
-// Pipeline (see Traitfolio-Valuation-Formula-Technical.md):
-//   rankCurve(rank)  — recency × rank-distance weighted median of real sale prices.
-//   traitFactor      — LOG-SPACE stack of per-trait multipliers, each damped by reliability and a
-//                      rank-correlation penalty, then exp() and clamped to [0.6, 3.0]. This stops a few
-//                      thin/correlated trait sales from exploding the high end.
-//   compsValue       — rankCurve × traitFactor.
-//   confidence       — nearby-sales support (0..1). The caller squares it and caps the comps pull
-//                      before blending with the floor+premium base estimate.
+//   • Plot every recent clean sale as (rank, price), recency-weighted.
+//   • Anchor the common end to the floor; fill gaps with the rarity baseline (floor + floor×R).
+//   • Each rank's "raw" value = recency × rank-proximity weighted AVERAGE of nearby sales, blended
+//     with the baseline where sales are thin (the curve finds the AVERAGE on its way through sales).
+//   • Enforce MONOTONICITY (isotonic / antitonic regression): rarer is never valued below a less-rare
+//     recent sale, and the curve keeps climbing toward the top. Sales tug it up AND down, but it stays
+//     a smooth, monotonic curve.
+//
+//   value(NFT) = curveValue(rank) × traitAmplifier(traits)   (+ collector-number premium, added by caller)
+//
+// The curve merges floor + rarity + comps into a single "curve score". Trait demand sits ON TOP.
 
 export interface Trait { k: string; v: string }
 
-export interface Sale {
-  rank: number;     // OpenRarity rank (1 = rarest)
-  price: number;    // clean XCH sale price
-  ageDays: number;  // days since the sale (recency weighting)
-  traits?: Trait[];
-}
+export interface Sale { rank: number; price: number; ageDays: number; traits?: Trait[] }
 
 export interface CompsValue {
-  value: number | null; // sales-implied compsValue in XCH (NOT yet blended/capped), or null
-  confidence: number;   // 0..1 raw nearby-sales support (caller squares this)
-  basis: string;        // short human note
+  value: number | null;   // curveValue × traitFactor, or null
+  curve: number | null;   // the rank-fitted curve value (pre-trait)
+  traitFactor: number;    // trait amplifier applied (1 = none)
+  confidence: number;     // 0..maxPull — local recent-sales support at this rank
+  basis: string;
 }
 
 export interface TraitStat { mult: number; n: number; reliability: number; penalty: number }
@@ -29,24 +29,27 @@ export interface TraitStat { mult: number; n: number; reliability: number; penal
 export interface CompsModel {
   totalSupply: number;
   sampleSize: number;
-  withTraits: number;
   bandwidth: number;
-  rankCurve(rank: number): number | null;
+  rankCurve(rank: number): number | null;   // raw local sales value (pre-monotonic)
+  curveValue(rank: number): number;          // monotonic merged curve score
   traitMult(k: string, v: string): TraitStat;
   valueOf(rank: number | null, traits?: Trait[]): CompsValue;
 }
 
 export interface CompsOptions {
-  halfLifeDays?: number;          // recency half-life (default 120)
-  reliabilityK?: number;          // trait reliability constant n/(n+K) (default 12)
-  minTraitN?: number;             // ignore trait premiums below this many sales (default 3)
-  traitFactorClamp?: [number, number]; // clamp exp(logScore) (default [0.6, 3.0])
-  bandwidth?: number;             // rank-distance decay scale; default max(supply×0.005, 50)
-  pullK?: number;                 // local-pull saturation constant (default 0.35)
-  maxPull?: number;               // max weight comps can take in the blend (default 0.88)
+  halfLifeDays?: number;
+  reliabilityK?: number;
+  minTraitN?: number;
+  traitFactorClamp?: [number, number];
+  bandwidth?: number;
+  pullK?: number;
+  maxPull?: number;
+  floor?: number;                                  // collection floor (anchors the common end)
+  rarityFactor?: (percentilePct: number) => number; // baseline rarity multiple (× floor), percentile in %
 }
 
 function key(k: string, v: string): string { return `${k.trim().toLowerCase()}=${v.trim().toLowerCase()}`; }
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
 function weightedMedian(pairs: { x: number; w: number }[]): number | null {
   const pts = pairs.filter((p) => p.w > 0);
@@ -58,25 +61,22 @@ function weightedMedian(pairs: { x: number; w: number }[]): number | null {
   for (const p of sorted) { acc += p.w; if (acc >= total / 2) return p.x; }
   return sorted[sorted.length - 1].x;
 }
-
 function plainMedian(xs: number[]): number {
-  const s = [...xs].sort((a, b) => a - b);
-  const m = s.length >> 1;
+  const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1;
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
-
-const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
 export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsOptions = {}): CompsModel | null {
   const halfLife = opts.halfLifeDays ?? 120;
   const reliabilityK = opts.reliabilityK ?? 12;
   const minTraitN = opts.minTraitN ?? 3;
   const [clampLo, clampHi] = opts.traitFactorClamp ?? [0.6, 3.0];
-
   const supply = Math.max(1, Math.floor(totalSupply) || 0);
-  const bandwidth = opts.bandwidth ?? Math.max(supply * 0.005, 50); // sharp: a true rarity twin dominates
-  const pullK = opts.pullK ?? 0.35;       // saturation constant for the local pull
-  const maxPull = opts.maxPull ?? 0.88;   // never fully trust comps over our own curve
+  const bandwidth = opts.bandwidth ?? Math.max(supply * 0.005, 50);
+  const pullK = opts.pullK ?? 0.12;
+  const maxPull = opts.maxPull ?? 0.95;
+  const floor = opts.floor && opts.floor > 0 ? opts.floor : 0;
+  const rarityFactor = opts.rarityFactor ?? (() => 0);
 
   const usable = sales.filter((s) => Number.isFinite(s.rank) && s.rank > 0 && Number.isFinite(s.price) && s.price > 0);
   if (usable.length === 0) return null;
@@ -84,78 +84,89 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   const weightOf = (ageDays: number) => Math.pow(0.5, Math.max(0, ageDays) / halfLife);
   const points = usable.map((s) => ({ rank: s.rank, price: s.price, w: weightOf(s.ageDays), traits: s.traits ?? [] }));
 
-  // ── Rank curve: recency × rank-distance decay weighted median ───────────────────────────────
-  function rankCurve(rank: number): number | null {
-    const pairs = points.map((p) => ({ x: p.price, w: p.w * Math.exp(-Math.abs(p.rank - rank) / bandwidth) }));
-    return weightedMedian(pairs);
-  }
+  const rankCurve = (rank: number): number | null =>
+    weightedMedian(points.map((p) => ({ x: p.price, w: p.w * Math.exp(-Math.abs(p.rank - rank) / bandwidth) })));
 
-  // ── Per-trait stats: raw multiplier (vs rank curve), reliability, rank-correlation penalty ──
+  const localPull = (rank: number): number => {
+    let tw = 0;
+    for (const p of points) tw += p.w * Math.exp(-Math.abs(p.rank - rank) / bandwidth);
+    return clamp(tw / (tw + pullK), 0, maxPull);
+  };
+
+  // Per-trait stats (vs the local rank value), with reliability + rank-correlation penalty.
   const acc = new Map<string, { ratios: { x: number; w: number }[]; pcts: number[] }>();
-  let withTraits = 0;
   for (const p of points) {
-    if (p.traits.length > 0) withTraits++;
     const base = rankCurve(p.rank);
     if (!base || base <= 0) continue;
     const pct = p.rank / supply;
     for (const t of p.traits) {
       const kk = key(t.k, t.v);
-      let d = acc.get(kk);
-      if (!d) { d = { ratios: [], pcts: [] }; acc.set(kk, d); }
-      d.ratios.push({ x: p.price / base, w: p.w });
-      d.pcts.push(pct);
+      let d = acc.get(kk); if (!d) { d = { ratios: [], pcts: [] }; acc.set(kk, d); }
+      d.ratios.push({ x: p.price / base, w: p.w }); d.pcts.push(pct);
     }
   }
   const traitStats = new Map<string, TraitStat>();
   for (const [kk, d] of acc) {
     const mult = weightedMedian(d.ratios) ?? 1;
     const n = d.ratios.length;
-    const reliability = n / (n + reliabilityK);
-    const medPct = plainMedian(d.pcts); // median rarity-percentile of sold NFTs carrying this trait
-    const penalty = medPct < 0.10 ? 0.5 : medPct < 0.25 ? 0.75 : 1.0; // damp traits that ride on rarity
-    traitStats.set(kk, { mult, n, reliability, penalty });
+    const medPct = plainMedian(d.pcts);
+    traitStats.set(kk, { mult, n, reliability: n / (n + reliabilityK), penalty: medPct < 0.10 ? 0.5 : medPct < 0.25 ? 0.75 : 1.0 });
   }
-  function traitMult(k: string, v: string): TraitStat {
-    return traitStats.get(key(k, v)) ?? { mult: 1, n: 0, reliability: 0, penalty: 1 };
-  }
+  const traitMult = (k: string, v: string): TraitStat => traitStats.get(key(k, v)) ?? { mult: 1, n: 0, reliability: 0, penalty: 1 };
 
-  // ── Local pull: how hard nearby RECENT sales should pull the estimate toward themselves. A single
-  // near-identical (Δrank≈0) very-recent sale saturates this toward maxPull, so the estimate snaps
-  // close to that real sale price; far/old sales contribute little. This is the "anchor the curve to
-  // real sales" weight used directly in the blend.
-  function localPull(rank: number): number {
-    let tw = 0; // total recency × rank-proximity weight near this rank
-    for (const p of points) tw += p.w * Math.exp(-Math.abs(p.rank - rank) / bandwidth);
-    return clamp(tw / (tw + pullK), 0, maxPull);
+  // ── Build the monotonic value curve over a grid (sale ranks + a percentile grid) ────────────────
+  const baseAt = (rank: number) => floor + floor * rarityFactor(clamp((rank / supply) * 100, 0, 100));
+  const gridSet = new Set<number>();
+  for (const p of points) gridSet.add(Math.round(p.rank));
+  for (let pc = 1; pc <= 100; pc++) gridSet.add(Math.max(1, Math.round((pc / 100) * supply)));
+  const grid = [...gridSet].sort((a, b) => a - b);
+  const vpts = grid.map((rank) => {
+    const pull = localPull(rank);
+    const lc = rankCurve(rank);
+    const v = lc != null ? pull * lc + (1 - pull) * baseAt(rank) : baseAt(rank);
+    return { rank, val: Math.max(floor, v), w: 0.05 + pull }; // sale-backed points weighted higher
+  });
+  // Monotonic non-increasing in rank via cumulative MAX from the common end: a sale at a rank lifts
+  // everything rarer to at least its value (your rule: nothing rarer is cheaper), and never lowers the
+  // sale itself. Down-adjustments survive (a low-selling band stays low unless a less-rare rank is higher).
+  const byRank = [...vpts].sort((a, b) => a.rank - b.rank);
+  const mono: { rank: number; val: number }[] = new Array(byRank.length);
+  let runMax = -Infinity;
+  for (let i = byRank.length - 1; i >= 0; i--) { runMax = Math.max(runMax, byRank[i].val); mono[i] = { rank: byRank[i].rank, val: runMax }; }
+
+  function curveValue(rank: number): number {
+    if (mono.length === 0) return Math.max(floor, baseAt(rank));
+    if (rank <= mono[0].rank) return mono[0].val;
+    if (rank >= mono[mono.length - 1].rank) return mono[mono.length - 1].val;
+    let lo = 0, hi = mono.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (mono[mid].rank <= rank) lo = mid; else hi = mid; }
+    const a = mono[lo], b = mono[hi];
+    const t = b.rank === a.rank ? 0 : (rank - a.rank) / (b.rank - a.rank);
+    return a.val + t * (b.val - a.val);
   }
 
   function valueOf(rank: number | null, traits?: Trait[]): CompsValue {
-    if (rank == null || !Number.isFinite(rank)) return { value: null, confidence: 0, basis: "no rank" };
-    const base = rankCurve(rank);
-    if (base == null) return { value: null, confidence: 0, basis: "no comps" };
-
+    if (rank == null || !Number.isFinite(rank)) return { value: null, curve: null, traitFactor: 1, confidence: 0, basis: "no rank" };
+    const curve = curveValue(rank);
     let logScore = 0;
     const drivers: { kv: string; mult: number; n: number; contrib: number }[] = [];
     for (const t of traits ?? []) {
       const m = traitMult(t.k, t.v);
       if (m.n >= minTraitN && m.mult > 0 && m.mult !== 1) {
-        const contrib = Math.log(m.mult) * m.reliability * m.penalty; // log-space, damped
+        const contrib = Math.log(m.mult) * m.reliability * m.penalty;
         logScore += contrib;
         drivers.push({ kv: `${t.k}:${t.v}`, mult: m.mult, n: m.n, contrib });
       }
     }
     const traitFactor = clamp(Math.exp(logScore), clampLo, clampHi);
-    const value = base * traitFactor;
-    const confidence = localPull(rank);
-
+    const value = curve * traitFactor;
     drivers.sort((a, b) => Math.abs(b.contrib) - Math.abs(a.contrib));
     const top = drivers[0];
-    const baseR = Math.round(base * 100) / 100;
     const basis = top
-      ? `rank≈${baseR} XCH, ${top.kv} ${top.mult >= 1 ? "+" : ""}${Math.round((top.mult - 1) * 100)}% (n=${top.n}) · trait ×${traitFactor.toFixed(2)}`
-      : `rank≈${baseR} XCH`;
-    return { value, confidence, basis };
+      ? `market curve ≈ ${Math.round(curve * 100) / 100} XCH · ${top.kv} ×${traitFactor.toFixed(2)} (n=${top.n})`
+      : `market curve ≈ ${Math.round(curve * 100) / 100} XCH (rank-fitted from sales)`;
+    return { value, curve, traitFactor, confidence: localPull(rank), basis };
   }
 
-  return { totalSupply: supply, sampleSize: usable.length, withTraits, bandwidth, rankCurve, traitMult, valueOf };
+  return { totalSupply: supply, sampleSize: usable.length, bandwidth, rankCurve, curveValue, traitMult, valueOf };
 }
