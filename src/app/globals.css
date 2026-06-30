@@ -15,6 +15,14 @@
   --good: #8fce6b;
   --fair: #d9b35c;
   --bad: #e08a6f;
+  /* Deal-score gauge ink/track (DealScoreGauge.tsx). Dark default below; light override follows. */
+  --rc-ink: #f2f4f8;
+  --rc-divider: rgba(255,255,255,0.16);
+}
+
+[data-theme="light"] {
+  --rc-ink: #0a1e38;
+  --rc-divider: rgba(10,40,90,0.18);
 }
 
 body {
@@ -569,6 +577,11 @@ body {
   font-weight: 700;
   color: #fff;
 }
+
+/* Light mode: cards have light backgrounds, so trait text must be dark. Per-tier rules below add
+   tier color where they match; these are the catch-all so trait text is never white-on-white. */
+[data-theme="light"] .tcg-trait-val  { color: #1a2a44 !important; }
+[data-theme="light"] .tcg-trait-type { color: rgba(25,42,68,0.72) !important; }
 .tcg-trait-pct {
   font-size: 6px;
   font-weight: 700;
