@@ -9,7 +9,7 @@ import type { MgNftDetail } from "./types";
 
 export const MAX_HOLDINGS = 120;
 const PAGE_SIZE = 50;
-const DETAIL_CONCURRENCY = 6;
+const DETAIL_CONCURRENCY = 12;
 
 // Minimal concurrency pool — runs `worker` over `items`, at most `limit` in flight.
 async function mapPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {

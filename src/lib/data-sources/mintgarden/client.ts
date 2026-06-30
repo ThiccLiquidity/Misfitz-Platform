@@ -59,12 +59,32 @@ async function getJsonOrNull<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): P
   }
 }
 
+// ── In-process TTL cache ──────────────────────────────────────────────────────
+// NFT details + collection metadata change rarely; caching them makes re-opening a wallet (or the
+// same NFT across views) near-instant and avoids re-fetching shared collections. Survives across
+// requests in the same Node process.
+const _cache = new Map<string, { value: unknown; expiresAt: number }>();
+async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = _cache.get(key);
+  if (hit && Date.now() < hit.expiresAt) return hit.value as T;
+  const value = await fn();
+  _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  return value;
+}
+
+const NFT_DETAIL_TTL = 10 * 60_000;
+const COLLECTION_TTL = 10 * 60_000;
+
 export function getNftDetail(nftId: string): Promise<MgNftDetail> {
-  return getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`);
+  return cached(`nft_${nftId}`, NFT_DETAIL_TTL, () =>
+    getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`),
+  );
 }
 
 export function getCollection(collectionId: string): Promise<MgCollection> {
-  return getJson<MgCollection>(`/collections/${encodeURIComponent(collectionId)}`);
+  return cached(`col_${collectionId}`, COLLECTION_TTL, () =>
+    getJson<MgCollection>(`/collections/${encodeURIComponent(collectionId)}`),
+  );
 }
 
 export function listCollectionNfts(
