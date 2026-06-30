@@ -5,7 +5,7 @@ import { TIER_ORDER, getTierVisual, type TierId } from "@/lib/rarity/tiers";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 export type TierFilter = "all" | TierId;
-export type SortKey = "rank-asc" | "rank-desc" | "deal-desc" | "token-asc" | "token-desc";
+export type SortKey = "rank-asc" | "rank-desc" | "deal-desc" | "price-asc" | "price-desc" | "token-asc" | "token-desc";
 export type TraitFilters = Record<string, string>;
 
 interface FilterSidebarProps {
@@ -22,12 +22,21 @@ interface FilterSidebarProps {
   sheet?: boolean;
   /** Hide the trait dropdowns (e.g. Your Binder until a single collection is picked). */
   hideTraits?: boolean;
+  /** Marketplace/shop controls — only rendered when onForSaleOnly is provided (collection shop). */
+  forSaleOnly?: boolean;
+  onForSaleOnly?: (v: boolean) => void;
+  priceMin?: string;
+  priceMax?: string;
+  onPriceRange?: (min: string, max: string) => void;
+  listedCount?: number;
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "rank-asc",   label: "Rarest first"      },
   { value: "rank-desc",  label: "Most common first"  },
   { value: "deal-desc",  label: "Best deals first"   },
+  { value: "price-asc",  label: "Price: low to high" },
+  { value: "price-desc", label: "Price: high to low" },
   { value: "token-asc",  label: "Token # ↑"          },
   { value: "token-desc", label: "Token # ↓"          },
 ];
@@ -143,6 +152,7 @@ export function FilterSidebar({
   resultCount, totalCount,
   sheet = false,
   hideTraits = false,
+  forSaleOnly, onForSaleOnly, priceMin, priceMax, onPriceRange, listedCount,
 }: FilterSidebarProps) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
@@ -174,6 +184,36 @@ export function FilterSidebar({
         backdropFilter: isLight ? "blur(12px)" : undefined,
       }}
     >
+      {/* ── Marketplace (shop) ─────────────────────────── */}
+      {onForSaleOnly && (
+        <div className="flex flex-col gap-2">
+          <span className="mb-0.5 text-[10px] font-black uppercase tracking-widest"
+            style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.7)" }}>
+            Marketplace
+          </span>
+          <button type="button" onClick={() => onForSaleOnly(!forSaleOnly)}
+            className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
+            style={{
+              border: forSaleOnly
+                ? "1.5px solid rgba(80,200,120,0.65)"
+                : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
+              background: forSaleOnly ? "rgba(40,180,90,0.14)" : "transparent",
+              color: forSaleOnly ? "#5fce7a" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
+            }}>
+            <span>🛒 For sale only</span>
+            <span>{forSaleOnly ? `ON · ${(listedCount ?? 0).toLocaleString()}` : "OFF"}</span>
+          </button>
+          <div className="flex items-center gap-2">
+            <input inputMode="decimal" placeholder="Min" value={priceMin ?? ""}
+              onChange={(e) => onPriceRange?.(e.target.value, priceMax ?? "")} style={selectStyle(isLight)} />
+            <span className="text-subtle text-xs">–</span>
+            <input inputMode="decimal" placeholder="Max" value={priceMax ?? ""}
+              onChange={(e) => onPriceRange?.(priceMin ?? "", e.target.value)} style={selectStyle(isLight)} />
+          </div>
+          <span className="text-subtle text-[10px]">Price range (XCH)</span>
+        </div>
+      )}
+
       {/* ── Tiers ──────────────────────────────────────── */}
       <div className="flex flex-col gap-2">
         <span

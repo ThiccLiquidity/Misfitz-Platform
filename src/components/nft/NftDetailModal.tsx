@@ -200,6 +200,26 @@ export function NftDetailModal({
             </div>
           </div>
 
+          {/* Buy / View on MintGarden — external link (we never execute trades in-app) */}
+          {nft.launcherId.startsWith("nft1") && (
+            <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>
+              <a
+                href={`https://mintgarden.io/nfts/${nft.launcherId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
+                style={{
+                  background: nft.listing ? "rgba(40,180,90,0.16)" : `${accentColor}18`,
+                  border: `1px solid ${nft.listing ? "rgba(80,200,120,0.5)" : `${accentColor}44`}`,
+                  color: nft.listing ? "#5fce7a" : accentColor,
+                }}
+              >
+                {nft.listing ? `Buy · ${formatXch(nft.listing.priceXch)} on MintGarden ↗` : "View on MintGarden ↗"}
+              </a>
+            </div>
+          )}
+
           {/* View Full Page link */}
           {resolvedFullPageHref !== null && (
             <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>

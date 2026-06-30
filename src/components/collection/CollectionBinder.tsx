@@ -30,6 +30,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [tier, setTier] = useState<TierFilter>("all");
   const [sort, setSort] = useState<SortKey>("rank-asc");
   const [traitFilters, setTraitFilters] = useState<TraitFilters>({});
+  const [forSaleOnly, setForSaleOnly] = useState(false);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
 
   const SHELL: CollectionData = useMemo(() => ({
     slug: view.id, name: view.name, description: view.description, bannerUrl: view.bannerUrl,
@@ -56,27 +59,46 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
 
   // ── Filtering + sorting over the WHOLE collection, then render only the visible slice ──
   const filtered = useMemo(() => {
+    const minP = parseFloat(priceMin);
+    const maxP = parseFloat(priceMax);
+    const hasPrice = Number.isFinite(minP) || Number.isFinite(maxP);
+
     let r = nfts;
     if (tier !== "all") r = r.filter((n) => (n.rarityRank ? tierIdForPercentile(pct(n)) === tier : false));
     const activeTraits = Object.entries(traitFilters).filter(([, v]) => v !== "");
     if (activeTraits.length) {
       r = r.filter((n) => activeTraits.every(([t, v]) => n.traits.some((tr) => tr.trait_type === t && String(tr.value) === v)));
     }
+    // Shop filters: only listed NFTs, within the price range.
+    if (forSaleOnly || hasPrice) r = r.filter((n) => n.listing != null);
+    if (hasPrice) {
+      r = r.filter((n) => {
+        const px = n.listing?.priceXch ?? Infinity;
+        if (Number.isFinite(minP) && px < minP) return false;
+        if (Number.isFinite(maxP) && px > maxP) return false;
+        return true;
+      });
+    }
+
     const s = [...r];
     switch (sort) {
       case "rank-asc":   s.sort((a, b) => pct(a) - pct(b)); break;
       case "rank-desc":  s.sort((a, b) => pct(b) - pct(a)); break;
       case "deal-desc":  s.sort((a, b) => (b.dealScore?.score ?? -1) - (a.dealScore?.score ?? -1)); break;
+      case "price-asc":  s.sort((a, b) => (a.listing?.priceXch ?? Infinity) - (b.listing?.priceXch ?? Infinity)); break;
+      case "price-desc": s.sort((a, b) => (b.listing?.priceXch ?? -1) - (a.listing?.priceXch ?? -1)); break;
       case "token-asc":  s.sort((a, b) => tokenNum(a) - tokenNum(b)); break;
       case "token-desc": s.sort((a, b) => tokenNum(b) - tokenNum(a)); break;
     }
     return s;
-  }, [nfts, tier, traitFilters, sort]);
+  }, [nfts, tier, traitFilters, sort, forSaleOnly, priceMin, priceMax]);
+
+  const listedCount = useMemo(() => nfts.reduce((c, n) => c + (n.listing ? 1 : 0), 0), [nfts]);
 
   const displayed = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
 
   // Reset the window when the filter/sort changes so you always see the top of the new order.
-  useEffect(() => { setVisible(PAGE); }, [tier, sort, traitFilters]);
+  useEffect(() => { setVisible(PAGE); }, [tier, sort, traitFilters, forSaleOnly, priceMin, priceMax]);
 
   // ── Enrich just the visible cards (traits + estimated ranks), tracked so we never re-fetch one ──
   const enrichedRef = useRef<Set<string>>(new Set());
@@ -121,6 +143,11 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     traitFilters, onTraitFilter: (t: string, v: string) => setTraitFilters((p) => ({ ...p, [t]: v })),
     traitOptions,
     resultCount: filtered.length, totalCount: nfts.length,
+    forSaleOnly,
+    onForSaleOnly: (v: boolean) => { setForSaleOnly(v); if (v) setSort("deal-desc"); },
+    priceMin, priceMax,
+    onPriceRange: (min: string, max: string) => { setPriceMin(min); setPriceMax(max); },
+    listedCount,
   };
 
   const moreCount = Math.min(PAGE, filtered.length - displayed.length);
