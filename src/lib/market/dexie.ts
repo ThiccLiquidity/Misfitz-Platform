@@ -85,14 +85,21 @@ export async function fetchCollectionFloor(
       const url = new URL(`${DEXIE_BASE}/offers`);
       url.searchParams.set("status", "0");              // 0 = active on Dexie (1 is "pending")
       url.searchParams.set("offered", dexieCollectionId);
-      url.searchParams.set("sort", "price_asc");        // cheapest first → floor
-      url.searchParams.set("page_size", "1");
+      url.searchParams.set("requested", "xch");         // REQUIRED for Dexie to honor price sort
+      url.searchParams.set("sort", "price_asc");        // cheapest first → floor (only works with requested set)
+      url.searchParams.set("page_size", "20");
 
       const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) return null;
-      const json = await res.json() as { offers?: { price?: number }[] };
-      const price = json?.offers?.[0]?.price;
-      return typeof price === "number" ? price : null;
+      const json = await res.json() as { offers?: { price?: number; requested?: { id?: string }[] }[] };
+      // Cheapest CLEAN single-asset XCH offer = floor. Skip multi-asset (XCH+CAT) offers whose XCH leg
+      // would understate the real cost. Sorted ascending, so the first clean one is the floor.
+      for (const o of json?.offers ?? []) {
+        const req = o.requested ?? [];
+        const xchOnly = req.length === 1 && (req[0].id ?? "").toLowerCase() === "xch";
+        if (xchOnly && typeof o.price === "number" && o.price > 0) return o.price;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -250,7 +257,7 @@ export async function fetchNftOffer(launcherId: string): Promise<{ offer: string
 // launcher id (hex) so we can overlay onto our cards. Cached 5 min; capped pages for huge collections.
 export interface CollectionOffer {
   offerId: string;    // Dexie offer id (for the dexie.space/offers/{id} link)
-  priceXch: number;   // Dexie price = XCH-EQUIVALENT total (already folds in any CAT value)
+  priceXch: number;   // Dexie price = the XCH leg of the offer (NOT CAT-inclusive). Trust only when xchOnly.
   requested: { code: string; amount: number }[]; // full breakdown (XCH + any CATs)
   xchOnly: boolean;   // requested is exactly XCH (a clean XCH buy)
   multiNft: boolean;  // offer bundles more than one NFT
@@ -263,7 +270,7 @@ interface DexieOfferRaw {
   requested?: { id?: string; code?: string; amount?: number }[];
 }
 
-export async function fetchCollectionActiveOffers(colId: string, maxPages = 15): Promise<Map<string, CollectionOffer>> {
+export async function fetchCollectionActiveOffers(colId: string, maxPages = 40): Promise<Map<string, CollectionOffer>> {
   if (!colId.startsWith("col1")) return new Map();
   return withCache(`coloffers_${colId}`, 5 * 60_000, async () => {
     const map = new Map<string, CollectionOffer>();
@@ -271,7 +278,8 @@ export async function fetchCollectionActiveOffers(colId: string, maxPages = 15):
       const url = new URL(`${DEXIE_BASE}/offers`);
       url.searchParams.set("status", "0"); // active
       url.searchParams.set("offered", colId);
-      url.searchParams.set("sort", "price_asc"); // cheapest first — the deal-relevant ones
+      url.searchParams.set("requested", "xch"); // REQUIRED — without it Dexie ignores the price sort
+      url.searchParams.set("sort", "price_asc"); // cheapest first — so the page cap keeps the deal-relevant offers
       url.searchParams.set("page", String(page));
       url.searchParams.set("page_size", "100");
       const res = await fetch(url.toString(), { cache: "no-store" });
@@ -279,6 +287,8 @@ export async function fetchCollectionActiveOffers(colId: string, maxPages = 15):
       const json = (await res.json()) as { offers?: DexieOfferRaw[]; count?: number };
       return { offers: json?.offers ?? [], count: json?.count ?? 0 };
     };
+    // NOTE: requested=xch returns any offer that wants XCH, INCLUDING multi-asset (XCH+CAT) offers.
+    // xchOnly below (requested.length===1) is what distinguishes a clean XCH buy from a hidden-CAT trap.
     const ingest = (offers: DexieOfferRaw[]) => {
       for (const o of offers) {
         const nfts = (o.offered ?? []).filter((x) => x.is_nft && x.id);

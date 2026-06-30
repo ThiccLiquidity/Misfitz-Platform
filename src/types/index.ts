@@ -67,6 +67,10 @@ export interface NftData {
   listingAssets?: string[] | null;
   listingRequested?: { code: string; amount: number }[] | null;
   dexieOfferId?: string | null;
+  // True when the price comes from MintGarden's listing but we could NOT read the full offer terms on
+  // Dexie (so a hidden CAT can't be ruled out). Such listings show the price but never a deal score,
+  // and never set the collection floor. Verify the real terms on MintGarden before buying.
+  listingUnverified?: boolean | null;
   dealScore: DealScore | null;
   // Special/collectible mint-number badge (VALUATION.md Part 2). Optional — only live-mapped NFTs
   // with a special number carry it. tier 1 = grail … 4 = fun.

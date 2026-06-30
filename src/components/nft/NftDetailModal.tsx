@@ -230,6 +230,18 @@ export function NftDetailModal({
             </div>
           )}
 
+          {/* Unverified MintGarden listing — price shown, but we couldn't read the full offer terms. */}
+          {nft.listing && nft.listingUnverified && (
+            <div
+              className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px] leading-snug text-amber-300"
+              style={{ border: "1px solid rgba(217,160,60,0.4)", background: isLight ? "rgba(180,120,20,0.06)" : "rgba(217,160,60,0.08)" }}
+            >
+              ⚠ This {formatXch(nft.listing.priceXch)} XCH price is from MintGarden&apos;s listing, but we couldn&apos;t
+              read the full offer terms to confirm it&apos;s XCH-only. It may also require a CAT token, so no deal score is
+              shown. Confirm the real terms on MintGarden before buying.
+            </div>
+          )}
+
           {/* Take the offer on Dexie — review + accept there (safer than copy/paste). No in-app trades. */}
           {nft.listing && nft.dexieOfferId && (
             <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>

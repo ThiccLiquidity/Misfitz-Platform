@@ -134,29 +134,26 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
 
   const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
 
-  // Floor = cheapest CLEAN XCH listing across BOTH books:
-  //   • Dexie active offers that request XCH only (CAT offers excluded — their tiny XCH leg isn't a floor)
-  //   • MintGarden-native listings (item.price) for NFTs NOT on Dexie — these are creator/primary listings
-  //     (CAT "traps" live on Dexie, so a MintGarden-only listing is a clean XCH sale, e.g. a creator
-  //     selling inventory at 0.2 XCH). This is what makes the true floor show up instead of the
-  //     higher secondary-market Dexie floor.
-  const itemById = new Map(items.map((it) => [it.id, it] as const));
+  // Floor = cheapest CLEAN single-NFT XCH offer from Dexie. The scan now queries requested=xch&sort=
+  // price_asc (Dexie only honors the price sort when a requested asset is set), so it actually returns
+  // the cheapest offers — including creator/primary listings (e.g. 0.2 XCH) that the old date-ordered
+  // scan missed past its page cap. Dexie carries the FULL requested[] for every offer, so a hidden-CAT
+  // offer (XCH + CAT) is detected exactly (xchOnly=false) rather than guessed from a price denomination.
   const floorCandidates: number[] = [];
   for (const o of offerMap.values()) {
     if (o.xchOnly && !o.multiNft && o.priceXch > 0) floorCandidates.push(o.priceXch);
   }
-  for (const it of items) {
-    // Only XCH-denominated MintGarden listings count toward the floor — a CAT-denominated leg must not
-    // masquerade as a cheap XCH floor. (token_code is "XCH"/absent for clean offers, a CAT code otherwise.)
-    const mgClean = it.token_code == null || it.token_code === "XCH";
-    if (mgClean && typeof it.price === "number" && it.price > 0 && !offerMap.has(it.id)) floorCandidates.push(it.price);
-  }
   const floorXch = floorCandidates.length ? Math.min(...floorCandidates) : floorFallback;
   const cards = cardsFrom(items, col, floorXch, xchUsdRate);
 
-  // Listings: Dexie is authoritative where it has the NFT (full asset terms). Dexie's price is only the
-  // XCH leg, so an offer that also wants a CAT gets NO deal score and is flagged. NFTs not on Dexie keep
-  // their MintGarden listing (clean XCH) so creator/primary floors are recognized. Bundles get no listing.
+  // Listings come from Dexie (authoritative, full asset terms):
+  //   • Single-NFT, XCH-only offer  → real listing + deal score.
+  //   • Single-NFT, XCH+CAT offer   → listing shown, NO deal score, CAT breakdown flagged (the price is
+  //                                    only the XCH leg; we don't value CATs).
+  //   • Bundle (multi-NFT) offer    → no per-NFT listing.
+  //   • Not on Dexie at all, but MintGarden shows a price → UNVERIFIED listing: we can't see the full
+  //     offer terms (could hide a CAT), so we show the price with NO deal score and never let it set the
+  //     floor. The modal tells the user to confirm the real terms on MintGarden before buying.
   for (const card of cards) {
     const offer = offerMap.get(card.id);
     if (offer && !offer.multiNft) {
@@ -164,6 +161,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       card.listingAssets = offer.requested.map((r) => r.code);
       card.listingRequested = offer.requested;
       card.dexieOfferId = offer.offerId;
+      card.listingUnverified = false;
       card.dealScore = offer.xchOnly && card.fairValue && offer.priceXch > 0
         ? computeDealScore(card.fairValue.totalEstimate, offer.priceXch)
         : null;
@@ -172,24 +170,21 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       card.listingAssets = null;
       card.listingRequested = null;
       card.dexieOfferId = null;
+      card.listingUnverified = false;
+      card.dealScore = null;
+    } else if (card.listing) {
+      // MintGarden shows a price but Dexie has no offer we can read → unverified. Show price, no deal score.
+      card.listingAssets = null;
+      card.listingRequested = null;
+      card.dexieOfferId = null;
+      card.listingUnverified = true;
       card.dealScore = null;
     } else {
-      // Not on Dexie. Keep the MintGarden-native listing only if it's XCH-denominated (clean sale, e.g.
-      // a creator listing at 0.2 XCH). A CAT-denominated listing is dropped — we don't value CATs.
-      const it = itemById.get(card.id);
-      const mgClean = !it || it.token_code == null || it.token_code === "XCH";
-      if (card.listing && mgClean) {
-        card.listingAssets = ["XCH"];
-        card.listingRequested = [{ code: "XCH", amount: card.listing.priceXch }];
-        card.dexieOfferId = null;
-        // card.listing + card.dealScore from cardsFrom (MintGarden XCH price) are kept as-is.
-      } else {
-        card.listing = null;
-        card.listingAssets = null;
-        card.listingRequested = null;
-        card.dexieOfferId = null;
-        card.dealScore = null;
-      }
+      card.listingAssets = null;
+      card.listingRequested = null;
+      card.dexieOfferId = null;
+      card.listingUnverified = false;
+      card.dealScore = null;
     }
   }
 
