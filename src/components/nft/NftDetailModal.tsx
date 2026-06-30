@@ -72,7 +72,7 @@ export function NftDetailModal({
   const accentColor = resolveAccent(tier.accent, isLight);
   const panelBg     = isLight ? "rgba(255,255,255,0.97)" : "rgba(18,18,24,0.97)";
   const panelBorder = isLight ? `1px solid ${accentColor}55` : "1px solid rgba(255,255,255,0.08)";
-  const divider     = isLight ? `${accentColor}33`        : "rgba(255,255,255,0.07)";
+  const divider     = isLight ? `${accentColor}55`        : "rgba(255,255,255,0.07)";
   const lblColor    = isLight ? `${accentColor}cc`        : "rgba(255,255,255,0.42)";  // 80%
   const valColor    = accentColor;                                                       // 100%
   const subColor    = isLight ? `${accentColor}99`        : "rgba(255,255,255,0.32)";  // 60%

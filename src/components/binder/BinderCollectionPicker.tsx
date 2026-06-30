@@ -66,8 +66,8 @@ export function BinderCollectionPicker({
           style={{
             background: active
               ? `linear-gradient(135deg, ${accent}20, ${accent}10)`
-              : isLight ? `linear-gradient(135deg, ${accent}0a, transparent)` : "transparent",
-            border: `1px solid ${active ? `${accent}55` : isLight ? `${accent}33` : "transparent"}`,
+              : isLight ? `linear-gradient(135deg, ${accent}16, transparent)` : "transparent",
+            border: `1px solid ${active ? `${accent}88` : isLight ? `${accent}55` : "transparent"}`,
             boxShadow: active ? `0 0 12px ${accent}33` : "none",
           }}
         >
