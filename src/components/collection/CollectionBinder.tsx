@@ -140,6 +140,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           body: JSON.stringify({ ids, floors, xchUsdRate: view.xchUsdRate }),
         });
         const data = res.ok ? ((await res.json()) as { nfts?: NftData[] }) : null;
+        // Any id that didn't come back (failed detail fetch) is un-marked so it retries later.
+        const returned = new Set((data?.nfts ?? []).map((n) => n.launcherId));
+        for (const id of ids) if (!returned.has(id)) enrichedRef.current.delete(id);
         if (data?.nfts) {
           const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
           // Take traits/rank/value from enrichment, but KEEP the Dexie-verified listing + deal from the
@@ -162,7 +165,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             return { ...merged, dealScore };
           }));
         }
-      } catch { /* keep fast card */ }
+      } catch { for (const id of ids) enrichedRef.current.delete(id); /* allow retry */ }
     }
   }, [view.id, view.floorXch, view.xchUsdRate]);
 

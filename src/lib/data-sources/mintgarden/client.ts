@@ -76,9 +76,18 @@ const NFT_DETAIL_TTL = 10 * 60_000;
 const COLLECTION_TTL = 10 * 60_000;
 
 export function getNftDetail(nftId: string): Promise<MgNftDetail> {
-  return cached(`nft_${nftId}`, NFT_DETAIL_TTL, () =>
-    getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`),
-  );
+  return cached(`nft_${nftId}`, NFT_DETAIL_TTL, async () => {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`);
+      } catch (e) {
+        lastErr = e;
+        await new Promise((r) => setTimeout(r, 250 * (attempt + 1))); // backoff for transient 429s/timeouts
+      }
+    }
+    throw lastErr;
+  });
 }
 
 export function getCollection(collectionId: string): Promise<MgCollection> {
