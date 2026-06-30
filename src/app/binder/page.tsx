@@ -1,21 +1,24 @@
-import { isValidChiaAddress } from "@/lib/wallet/message";
+import { isValidChiaOwnerId } from "@/lib/wallet/message";
 import { getMyHoldingsFast, getDemoHoldings } from "@/lib/portfolio/myHoldings";
 import { YourBinder } from "@/components/binder/YourBinder";
 import { AddressForm } from "@/components/portfolio/AddressForm";
 
-// Your Binder — every NFT you own in one binder, sorted by rarity, with total value. Today it
-// takes a pasted ?address=; saved profile addresses + wallet connect populate it automatically
-// later. Falls back to a seeded demo when no address is given.
+// Your Binder — every NFT you own in one binder, sorted by rarity, with total value. Accepts a pasted
+// xch1… address OR a did:chia… profile id (DID collectors hold across many addresses, so the profile
+// lookup is the only way to see their full collection). Falls back to a seeded demo when nothing is
+// entered; tells the user plainly when an id is invalid or simply holds no NFTs.
 export const dynamic = "force-dynamic";
 
 export default async function BinderPage({ searchParams }: { searchParams: { address?: string } }) {
   const raw = searchParams.address?.trim()?.toLowerCase();
-  const addresses = raw && isValidChiaAddress(raw) ? [raw] : [];
+  const valid = !!raw && isValidChiaOwnerId(raw);
+  const invalid = !!raw && !valid;
+  const addresses = valid ? [raw as string] : [];
 
-  let holdings = addresses.length ? await getMyHoldingsFast(addresses) : null;
-  if (!holdings || holdings.nfts.length === 0) {
-    holdings = await getDemoHoldings();
-  }
+  const holdings = addresses.length ? await getMyHoldingsFast(addresses) : null;
+  const noResults = addresses.length > 0 && (!holdings || holdings.nfts.length === 0);
+  const demo = !raw ? await getDemoHoldings() : null;
+  const showBinder = holdings && holdings.nfts.length > 0 ? holdings : null;
 
   return (
     <div className="py-2">
@@ -25,7 +28,24 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
           <AddressForm initial={raw ?? ""} path="/binder" buttonLabel="Open binder" />
         </div>
       </div>
-      <YourBinder key={addresses.join(",") || "demo"} holdings={holdings} />
+
+      {invalid && (
+        <div className="mx-2 mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          That doesn&apos;t look like a Chia id. Paste an <span className="font-semibold">xch1…</span> address or a{" "}
+          <span className="font-semibold">did:chia…</span> profile id.
+        </div>
+      )}
+
+      {noResults && (
+        <div className="mx-2 mb-4 rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+          No NFTs found for <span className="font-mono">{raw}</span>. If this is a collector who holds through a
+          DID profile, paste their <span className="font-semibold">did:chia…</span> id instead — an address only shows
+          what sits at that one puzzle hash.
+        </div>
+      )}
+
+      {showBinder && <YourBinder key={addresses.join(",")} holdings={showBinder} />}
+      {demo && <YourBinder key="demo" holdings={demo} />}
     </div>
   );
 }

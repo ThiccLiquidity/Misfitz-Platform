@@ -1,5 +1,5 @@
 import type { MgCollection, MgNftDetail, MgListItem, MgPage } from "./types";
-import { addressToPuzzleHashHex } from "@/lib/chia/bech32";
+import { decodeChiaAddress } from "@/lib/chia/bech32";
 
 // Thin typed HTTP client for the public MintGarden API. No SDK, no auth — just fetch + types.
 // Isolated here so MintGardenDataSource and mappers never touch URLs or transport concerns.
@@ -99,20 +99,23 @@ export function listCollectionNfts(
 
 const EMPTY_PAGE: MgPage<MgListItem> = { items: [], next: null, previous: null };
 
-// NFTs held at an address. MintGarden's endpoint is `/address/{hex}/nfts` (singular; the puzzle-hash
-// HEX, not the xch1 string; a required `type`). We decode the address and tolerate empty results so
-// an address that simply holds nothing reads as "no NFTs", never an error.
+// NFTs held by an xch1 ADDRESS or a did:chia PROFILE. Both decode (bech32m) to a 32-byte hex; we pick
+// /address vs /profile by the human-readable part. Tolerates empty results so "holds nothing" reads as
+// "no NFTs", never an error.
 export async function listAddressNfts(
   address: string,
   cursor?: string | null,
   size = 50,
   type = "owned",
 ): Promise<MgPage<MgListItem>> {
-  const hex = addressToPuzzleHashHex(address);
-  if (!hex) return EMPTY_PAGE;
+  const decoded = decodeChiaAddress(address);
+  if (!decoded) return EMPTY_PAGE;
+  // DID profiles hold NFTs across many per-NFT addresses, so a DID must be looked up via /profile,
+  // not /address (which only sees one puzzle hash). xch1 addresses use /address.
+  const endpoint = decoded.hrp.startsWith("did:chia") ? "profile" : "address";
   const q = new URLSearchParams({ type, size: String(size) });
   if (cursor) q.set("page", cursor);
-  const page = await getJsonOrNull<MgPage<MgListItem>>(`/address/${hex}/nfts?${q}`);
+  const page = await getJsonOrNull<MgPage<MgListItem>>(`/${endpoint}/${decoded.hex}/nfts?${q}`);
   if (!page) return EMPTY_PAGE;
   return { items: page.items ?? [], next: page.next ?? null, previous: page.previous ?? null };
 }

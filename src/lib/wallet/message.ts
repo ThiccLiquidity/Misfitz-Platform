@@ -43,3 +43,13 @@ export function isValidChiaAddress(value: unknown): value is string {
   if (v.length < 40 || v.length > 130) return false;
   return BECH32M_CHARSET.test(v.slice(4));
 }
+
+// Accepts either an xch1 address or a did:chia profile id (both are bech32m). Used by the binder,
+// which can resolve a whole collector's holdings from either.
+import { decodeChiaAddress } from "@/lib/chia/bech32";
+export function isValidChiaOwnerId(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const d = decodeChiaAddress(value.trim().toLowerCase());
+  if (!d) return false;
+  return d.hrp === "xch" || d.hrp.startsWith("did:chia");
+}

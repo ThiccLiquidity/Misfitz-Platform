@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMyHoldingsFull, } from "@/lib/portfolio/myHoldings";
 import { enrichNftsByIds } from "@/lib/portfolio/service";
-import { isValidChiaAddress } from "@/lib/wallet/message";
+import { isValidChiaOwnerId } from "@/lib/wallet/message";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 
 // Enrichment endpoint for the progressive binder: returns the FULL holdings (per-NFT traits +
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const addresses = raw
     .split(",")
     .map((a) => a.trim())
-    .filter((a) => isValidChiaAddress(a));
+    .filter((a) => isValidChiaOwnerId(a));
   if (addresses.length === 0) return NextResponse.json({ nfts: [] });
 
   const holdings = await getMyHoldingsFull(addresses);

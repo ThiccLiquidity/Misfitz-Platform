@@ -99,6 +99,18 @@ const TIER_CHIP_STYLES: Record<string, {
   },
 };
 
+// Solid, crisp label colors for dark mode. Gradient-clipped text (background-clip:text) renders soft
+// and fuzzy at small sizes, so we use a bright solid color per tier instead.
+const TIER_SOLID_DARK: Record<string, string> = {
+  all:       "#d6e4ff",
+  mythic:    "#e6a8ff",
+  legendary: "#ffd86b",
+  epic:      "#a8cdff",
+  rare:      "#ff9a9a",
+  uncommon:  "#86e6a0",
+  common:    "#9bb8ff",
+};
+
 // selectStyle is now applied inline so we can theme with isLight
 function selectStyle(isLight: boolean): React.CSSProperties {
   return {
@@ -352,13 +364,9 @@ function TierChip({
             {label}
           </span>
         ) : (
-          // Gradient text in dark mode — vibrant on dark bg
+          // Solid bright color in dark mode — crisp (no gradient-clip fuzz)
           <span style={{
-            background: cfg.textDark,
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            color: "transparent",
+            color: TIER_SOLID_DARK[tierId] ?? "#e6ecff",
             fontWeight: 800,
             fontSize: 13,
             letterSpacing: "0.03em",
