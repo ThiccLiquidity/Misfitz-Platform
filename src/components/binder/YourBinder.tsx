@@ -9,6 +9,7 @@ import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from 
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatUsd, formatXch } from "@/lib/format";
 import type { MyHoldings } from "@/lib/portfolio/myHoldings";
+import { useHiddenCollections } from "@/lib/portfolio/useHiddenCollections";
 
 const SHELL: CollectionData = {
   slug: "my-binder", name: "Your Binder", description: null, bannerUrl: null, iconUrl: null,
@@ -28,6 +29,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [tier, setTier] = useState<TierFilter>("all");
   const [sort, setSort] = useState<SortKey>("rank-asc");
   const [traitFilters, setTraitFilters] = useState<TraitFilters>({});
+  const { hidden, toggle: toggleHidden, clear: clearHidden } = useHiddenCollections();
 
   // Progressive loading: the page hands us a FAST binder (list + per-collection metadata). Once
   // mounted we pull the FULL holdings (per-NFT traits + our estimated ranks + refined values) from
@@ -83,6 +85,18 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
   const oneCollection = collectionId !== "all";
 
+  // Collections the collector hid drop out of the aggregate view, totals, stats, and counts.
+  const visibleNfts = useMemo(() => nfts.filter((n) => !hidden.has(n.collectionSlug)), [nfts, hidden]);
+  const visibleCollections = useMemo(
+    () => holdings.collections.filter((c) => !hidden.has(c.id)),
+    [holdings.collections, hidden],
+  );
+
+  // If the collection in focus gets hidden, fall back to the All view.
+  useEffect(() => {
+    if (collectionId !== "all" && hidden.has(collectionId)) setCollectionId("all");
+  }, [hidden, collectionId]);
+
   function pickCollection(id: string) {
     setCollectionId(id);
     setTraitFilters({});
@@ -90,8 +104,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   }
 
   const scoped = useMemo(
-    () => (oneCollection ? nfts.filter((n) => n.collectionSlug === collectionId) : nfts),
-    [nfts, collectionId, oneCollection],
+    () => (oneCollection ? visibleNfts.filter((n) => n.collectionSlug === collectionId) : visibleNfts),
+    [visibleNfts, collectionId, oneCollection],
   );
 
   const traitOptions = useMemo(() => {
@@ -170,7 +184,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <div className="text-title text-2xl font-bold">{filtered.length}</div>
           <div className="text-subtle text-xs uppercase tracking-widest">NFTs</div>
           <div className="text-subtle mt-1 text-xs">
-            {holdings.collections.length} collection{holdings.collections.length === 1 ? "" : "s"}{holdings.truncated ? " · capped" : ""}
+            {visibleCollections.length} collection{visibleCollections.length === 1 ? "" : "s"}{holdings.truncated ? " · capped" : ""}
           </div>
           {enriching && (
             <div className="mt-1 text-[11px] text-violet-300/90">Refining rarity… {Math.round(progress * 100)}%</div>
@@ -199,9 +213,11 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         </div>
         <BinderCollectionPicker
           collections={holdings.collections}
-          totalCount={nfts.length}
+          totalCount={visibleNfts.length}
           selectedId={collectionId}
           onSelect={pickCollection}
+          hiddenIds={hidden}
+          onToggleHide={toggleHidden}
         />
       </div>
 
@@ -213,8 +229,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             onChange={(e) => pickCollection(e.target.value)}
             className="text-title flex-1 rounded-lg border border-white/15 bg-card-bg px-3 py-2 text-xs font-semibold outline-none"
           >
-            <option value="all">All collections ({nfts.length})</option>
-            {holdings.collections.map((c) => (
+            <option value="all">All collections ({visibleNfts.length})</option>
+            {visibleCollections.map((c) => (
               <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
             ))}
           </select>
@@ -228,6 +244,15 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             <option value="deal-desc">Best deals first</option>
           </select>
         </div>
+        {hidden.size > 0 && (
+          <button
+            type="button"
+            onClick={clearHidden}
+            className="self-start text-[11px] font-semibold text-violet-300/90 underline"
+          >
+            {hidden.size} hidden — show all
+          </button>
+        )}
         <BinderView key={`m-${binderKey}`} collection={SHELL} nfts={filtered} hideFullPageLink />
       </div>
     </div>
