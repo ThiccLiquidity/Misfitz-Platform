@@ -27,14 +27,17 @@ function parseRank(rank: string | number | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-// Mint/edition number for special-number badges: prefer metadata series_number, else parse a
-// trailing "#123" from the name. Null when there's no clean number (e.g. 1/1 art).
+// Mint/edition number for special-number badges. Prefer the number shown in the NAME (e.g. the #162
+// in "MarmaLady #162") so the badge always matches what the user sees on the card — some collections'
+// series_number is an internal mint-order index that disagrees with the displayed token number (e.g.
+// MarmaLady #162 has series_number 13, which wrongly read as "Baker's Dozen"). Fall back to
+// series_number only when the name carries no trailing number. Null when neither exists (e.g. 1/1 art).
 function parseMintNumber(detail: MgNftDetail): number | null {
-  const series = detail.data?.metadata_json?.series_number;
-  if (typeof series === "number" && Number.isInteger(series)) return series;
   const name = detail.data?.metadata_json?.name ?? "";
   const m = name.match(/#?(\d+)\s*$/);
-  return m ? parseInt(m[1], 10) : null;
+  if (m) return parseInt(m[1], 10);
+  const series = detail.data?.metadata_json?.series_number;
+  return typeof series === "number" && Number.isInteger(series) ? series : null;
 }
 
 // Most recent sale price (XCH) from the NFT's events — a value anchor when the collection has no
