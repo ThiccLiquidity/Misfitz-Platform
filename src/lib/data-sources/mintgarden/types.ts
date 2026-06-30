@@ -70,7 +70,8 @@ export interface MgListItem {
   name: string;
   thumbnail_uri: string | null;
   openrarity_rank?: string | number | null;
-  price?: number | null; // listing ask
+  price?: number | null; // listing ask (XCH leg)
+  token_code?: string | null; // price denomination: "XCH" for clean offers, a CAT code otherwise
   collection_id: string; // col1...
   collection_name: string;
   owner_address_encoded_id?: string | null;

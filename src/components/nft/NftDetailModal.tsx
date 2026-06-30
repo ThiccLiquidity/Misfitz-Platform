@@ -72,6 +72,12 @@ export function NftDetailModal({
   const valColor    = accentColor;                                                       // 100%
   const subColor    = isLight ? `${accentColor}99`        : "rgba(255,255,255,0.32)";  // 60%
 
+  // When an NFT is listed on MintGarden's own book (not Dexie), the MintGarden link IS the buy path.
+  const mgIsBuy = !!nft.listing && !nft.dexieOfferId;
+  const mgBuyLabel = mgIsBuy
+    ? `Buy \u00b7 ${formatXch(nft.listing!.priceXch)} XCH on MintGarden \u2197`
+    : "View NFT on MintGarden \u2197";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 py-10"
@@ -249,9 +255,11 @@ export function NftDetailModal({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-                style={{ background: `${accentColor}14`, border: `1px solid ${accentColor}33`, color: accentColor }}
+                style={mgIsBuy
+                  ? { background: "rgba(40,180,90,0.16)", border: "1px solid rgba(80,200,120,0.5)", color: "#5fce7a" }
+                  : { background: `${accentColor}14`, border: `1px solid ${accentColor}33`, color: accentColor }}
               >
-                View NFT on MintGarden ↗
+                {mgBuyLabel}
               </a>
             </div>
           )}
