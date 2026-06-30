@@ -2,7 +2,7 @@ import type { NftData } from "@/types";
 import { getAddressPortfolio } from "./service";
 import { fetchOwnerListings } from "@/lib/data-sources/mintgarden/owner";
 import { mapListItemToCard } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { getCollectionBySlug, listNftsForCollection } from "@/lib/db/queries";
 import { enrichNfts } from "@/lib/rarity/enrich";
@@ -125,10 +125,11 @@ export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings
       anchorsByCol.set(it.collection_id, arr);
     }
   }
-  const [dexieFloors, saleFloors] = await Promise.all([
-    Promise.all(colIds.map((id) => fetchCollectionFloor(id).catch(() => null))),
-    Promise.all(colIds.map((id) => fetchCollectionSaleFloor(id).catch(() => null))),
-  ]);
+  // Non-blocking: read the last cached Dexie floors instantly (they warm/refresh in the background).
+  // The binder renders right away on the MintGarden floor / holdings anchor; the refined Dexie floor
+  // appears on the next load once cached. Keeps a slow Dexie off the binder's critical path.
+  const dexieFloors = colIds.map((id) => fetchCollectionFloorWarm(id));
+  const saleFloors = colIds.map((id) => fetchCollectionSaleFloorWarm(id));
   const floorByCol = new Map<string, number | null>();
   colIds.forEach((id, i) => {
     const dexie = dexieFloors[i];

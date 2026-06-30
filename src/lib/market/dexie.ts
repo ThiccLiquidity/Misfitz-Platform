@@ -188,6 +188,25 @@ export async function fetchCollectionSaleFloor(dexieCollectionId: string): Promi
   });
 }
 
+// ── Non-blocking floor reads (binder) ─────────────────────────────────────────
+// Return the last cached Dexie floor INSTANTLY (fresh or stale) and warm/refresh in the background.
+// Never await the network, so a slow/rate-limited Dexie can't gate the binder render — the caller
+// (getMyHoldingsFast) falls back to the MintGarden floor / holdings anchor until the real floor is
+// cached, then picks it up on the next load. The shop/collection pages keep the blocking variants so
+// their deal scores stay anchored to the true floor.
+export function fetchCollectionFloorWarm(dexieCollectionId: string): number | null {
+  if (!dexieCollectionId.startsWith("col1")) return null;
+  const hit = _cache.get(`floor_${dexieCollectionId}`);
+  if (!hit || Date.now() >= hit.expiresAt) void fetchCollectionFloor(dexieCollectionId).catch(() => {});
+  return hit ? (hit.value as number | null) : null;
+}
+export function fetchCollectionSaleFloorWarm(dexieCollectionId: string): number | null {
+  if (!dexieCollectionId.startsWith("col1")) return null;
+  const hit = _cache.get(`salefloor_${dexieCollectionId}`);
+  if (!hit || Date.now() >= hit.expiresAt) void fetchCollectionSaleFloor(dexieCollectionId).catch(() => {});
+  return hit ? (hit.value as number | null) : null;
+}
+
 // ── Active listing count (liquidity proxy for the confidence chip) ────────────
 
 /**
