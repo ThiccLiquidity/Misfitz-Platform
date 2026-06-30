@@ -214,7 +214,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     const cv = comps.valueOf(card.rarityRank, traits);
     if (cv.value == null || cv.confidence <= 0) return card;
     const base = card.fairValue.totalEstimate;
-    const effConf = cv.confidence * cv.confidence;                 // squared: thin data pulls far less
+    const effConf = cv.confidence;                                 // use confidence directly; structural guards (log-space, clamp, reliability, penalty, pull-cap) already prevent blow-ups
     const cap = base * (effConf < 0.5 ? 3 : 5);                    // comps can't pull >3-5× the base
     const compsValue = Math.min(cv.value, cap);
     const blended = effConf * compsValue + (1 - effConf) * base;

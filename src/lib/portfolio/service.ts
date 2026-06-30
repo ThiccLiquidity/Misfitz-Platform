@@ -216,7 +216,7 @@ export async function enrichNftsByIds(
       const cv = model.valueOf(card.rarityRank, traits);
       if (cv.value == null || cv.confidence <= 0) continue;
       const base = card.fairValue.totalEstimate;
-      const effConf = cv.confidence * cv.confidence;           // squared confidence
+      const effConf = cv.confidence;                          // confidence used directly (guards below prevent blow-ups)
       const cap = base * (effConf < 0.5 ? 3 : 5);              // comps pull cap
       const compsValue = Math.min(cv.value, cap);
       const blended = effConf * compsValue + (1 - effConf) * base;
