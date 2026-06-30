@@ -3,6 +3,7 @@
 // model built, and sample values so we can see exactly where comps is (or isn't) working.
 // First load may take a minute while the model builds; it's cached afterwards.
 
+import { notFound } from "next/navigation";
 import { isCompsEnabled } from "@/lib/config";
 import { fetchCollectionCompletedSales } from "@/lib/market/dexie";
 import { getCompsModel } from "@/lib/valuation/compsService";
@@ -13,6 +14,7 @@ export const revalidate = 0;
 const CHIAPHUNKS = "col13y2d52ewkfp7hfa4eq22fme7enh95c9t37fnumfx9lcjye5cpy4q9t4jep";
 
 export default async function CompsStatusPage({ searchParams }: { searchParams: { id?: string } }) {
+  if (process.env.NODE_ENV === "production") notFound(); // dev-only diagnostic
   const id = searchParams.id || CHIAPHUNKS;
   const enabled = isCompsEnabled();
 
