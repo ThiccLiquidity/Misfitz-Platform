@@ -64,12 +64,26 @@ async function getJsonOrNull<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): P
 // same NFT across views) near-instant and avoids re-fetching shared collections. Survives across
 // requests in the same Node process.
 const _cache = new Map<string, { value: unknown; expiresAt: number }>();
+// In-flight coalescing: when several callers miss the same key at once (e.g. many cards needing the
+// same collection's detail, or two visitors opening the same NFT), they share ONE network call
+// instead of each firing their own. Cuts redundant upstream traffic sharply under load.
+const _inflight = new Map<string, Promise<unknown>>();
 async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = _cache.get(key);
   if (hit && Date.now() < hit.expiresAt) return hit.value as T;
-  const value = await fn();
-  _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
-  return value;
+  const pending = _inflight.get(key);
+  if (pending) return pending as Promise<T>;
+  const p = (async () => {
+    try {
+      const value = await fn();
+      _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+      return value;
+    } finally {
+      _inflight.delete(key); // clear on success OR failure so a failed fetch can be retried
+    }
+  })();
+  _inflight.set(key, p);
+  return p as Promise<T>;
 }
 
 const NFT_DETAIL_TTL = 10 * 60_000;

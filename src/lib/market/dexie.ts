@@ -31,6 +31,9 @@ export interface MarketContext {
 // Upgrade to Redis/Upstash when going multi-instance.
 
 const _cache = new Map<string, { value: unknown; expiresAt: number }>();
+// Coalesce concurrent misses for the same key into one upstream call (e.g. several collection views
+// resolving the same floor at once) so a cache gap can't trigger a thundering herd of Dexie hits.
+const _inflight = new Map<string, Promise<unknown>>();
 
 async function withCache<T>(
   key: string,
@@ -39,9 +42,19 @@ async function withCache<T>(
 ): Promise<T> {
   const hit = _cache.get(key);
   if (hit && Date.now() < hit.expiresAt) return hit.value as T;
-  const value = await fn();
-  _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
-  return value;
+  const pending = _inflight.get(key);
+  if (pending) return pending as Promise<T>;
+  const p = (async () => {
+    try {
+      const value = await fn();
+      _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+      return value;
+    } finally {
+      _inflight.delete(key);
+    }
+  })();
+  _inflight.set(key, p);
+  return p as Promise<T>;
 }
 
 // ── XCH / USD rate ────────────────────────────────────────────────────────────
