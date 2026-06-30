@@ -4,6 +4,8 @@ import { mapDetailToNftData, nftMarketAnchorXch, isDisplayableNft } from "@/lib/
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
+import { getCompsModel } from "@/lib/valuation/compsService";
+import { isCompsEnabled } from "@/lib/config";
 
 // The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / VALUATION.md).
 // Pulls an address's live holdings from MintGarden, values each NFT, groups by collection, and
@@ -190,11 +192,36 @@ export async function enrichNftsByIds(
   );
 
   const out: NftData[] = [];
+  const outCol: string[] = []; // collection (col1...) per out card, for the comps blend
   for (const d of details) {
     if (!d || !isDisplayableNft(d)) continue;
-    const floor = floorByCollection[d.collection.id];
+    const colId = d.collection.id;
+    const floor = floorByCollection[colId];
     const m = mapDetailToNftData(d, xchUsdRate, typeof floor === "number" ? floor : null);
     out.push({ ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName });
+    outCol.push(colId);
+  }
+
+  // Trait-aware comparable-sales blend. Now that each card has its real traits, the comps model can
+  // apply per-trait premiums on top of the rank curve (e.g. a coveted Body trait). One cached model
+  // per collection; thin evidence (low confidence) leaves the existing estimate essentially untouched.
+  if (isCompsEnabled() && out.length > 0) {
+    const cols = [...new Set(outCol)].filter((c) => c.startsWith("col1"));
+    const models = new Map(await Promise.all(cols.map(async (c) => [c, await getCompsModel(c).catch(() => null)] as const)));
+    for (let i = 0; i < out.length; i++) {
+      const model = models.get(outCol[i]);
+      const card = out[i];
+      if (!model || card.rarityRank == null || !card.fairValue) continue;
+      const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
+      const cv = model.valueOf(card.rarityRank, traits);
+      if (cv.value == null || cv.confidence <= 0) continue;
+      const blended = cv.confidence * cv.value + (1 - cv.confidence) * card.fairValue.totalEstimate;
+      const floor = floorByCollection[outCol[i]];
+      const total = round(typeof floor === "number" ? Math.max(floor, blended) : blended, 3);
+      card.fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: round(total * xchUsdRate, 2) };
+      card.valueBasis = cv.basis;
+      card.valueConfidence = round(cv.confidence, 2);
+    }
   }
   return out;
 }

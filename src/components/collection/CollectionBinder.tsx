@@ -8,6 +8,7 @@ import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatXch } from "@/lib/format";
+import { computeDealScore } from "@/lib/rarity/enrich";
 import type { CollectionView } from "@/lib/collections/liveCollection";
 
 const PAGE = 120; // how many cards we render at a time (the rest stay out of the DOM)
@@ -121,12 +122,19 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           setNfts((prev) => prev.map((n) => {
             const e = byId.get(n.launcherId);
             if (!e) return n;
-            // Enrichment maps fairValue/listing from MintGarden (no comps, no Dexie terms), so keep the
-            // full-collection overlay's comps-blended value + basis + Dexie-verified listing/deal.
-            const comps = n.valueBasis
-              ? { fairValue: n.fairValue, valueBasis: n.valueBasis, valueConfidence: n.valueConfidence }
-              : {};
-            return { ...e, ...comps, listing: n.listing, listingAssets: n.listingAssets, listingRequested: n.listingRequested, dexieOfferId: n.dexieOfferId, dealScore: n.dealScore };
+            // The enriched card (e) now carries TRAIT-AWARE comps (value + basis); prefer it. Fall back to
+            // the grid's rank-only comps (n) only if enrichment didn't produce one. Always keep the
+            // Dexie-verified listing/terms from the full-collection overlay (n).
+            const comps = e.valueBasis
+              ? {} // keep e's comps fairValue/valueBasis/valueConfidence (already spread from ...e)
+              : (n.valueBasis ? { fairValue: n.fairValue, valueBasis: n.valueBasis, valueConfidence: n.valueConfidence } : {});
+            const merged = { ...e, ...comps, listing: n.listing, listingAssets: n.listingAssets, listingRequested: n.listingRequested, dexieOfferId: n.dexieOfferId };
+            // Re-score the deal against the displayed (comps-blended) value, clean single-NFT XCH only.
+            const xchOnly = !!n.listingRequested && n.listingRequested.length === 1 && n.listingRequested[0].code === "XCH";
+            const dealScore = n.listing && n.dexieOfferId && xchOnly && n.listing.priceXch > 0 && merged.fairValue
+              ? computeDealScore(merged.fairValue.totalEstimate, n.listing.priceXch)
+              : n.dealScore;
+            return { ...merged, dealScore };
           }));
         }
       } catch { /* keep fast card */ }
