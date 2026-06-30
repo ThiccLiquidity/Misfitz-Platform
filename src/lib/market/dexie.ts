@@ -57,6 +57,21 @@ async function withCache<T>(
   return p as Promise<T>;
 }
 
+// All Dexie / CoinGecko calls go through here. These are awaited server-side while the page renders,
+// and the upstreams have no SLA — without a timeout one slow/stalled response hangs the whole request
+// forever (the "endless spinner"). On timeout we abort; the caller's try/catch then falls back to a
+// null/empty result, so the binder still loads (just without that one number) instead of never loading.
+const MARKET_FETCH_TIMEOUT_MS = 8000;
+async function tfetch(url: string, init?: RequestInit, timeoutMs = MARKET_FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { cache: "no-store", ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── XCH / USD rate ────────────────────────────────────────────────────────────
 
 /**
@@ -66,10 +81,7 @@ async function withCache<T>(
 export async function fetchXchUsdRate(): Promise<number | null> {
   return withCache("xch_usd_rate", 60_000, async () => {
     try {
-      const res = await fetch(
-        `${COINGECKO_BASE}/simple/price?ids=chia&vs_currencies=usd`,
-        { cache: "no-store" },
-      );
+      const res = await tfetch(`${COINGECKO_BASE}/simple/price?ids=chia&vs_currencies=usd`);
       if (!res.ok) return null;
       const json = await res.json() as { chia?: { usd?: number } };
       const rate = json?.chia?.usd;
@@ -102,7 +114,7 @@ export async function fetchCollectionFloor(
       url.searchParams.set("sort", "price_asc");        // cheapest first → floor (only works with requested set)
       url.searchParams.set("page_size", "20");
 
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await tfetch(url.toString());
       if (!res.ok) return null;
       const json = await res.json() as { offers?: { price?: number; requested?: { id?: string }[] }[] };
       // Cheapest CLEAN single-asset XCH offer = floor. Skip multi-asset (XCH+CAT) offers whose XCH leg
@@ -138,7 +150,7 @@ export async function fetchCollectionSaleFloor(dexieCollectionId: string): Promi
       url.searchParams.set("requested", "xch");
       url.searchParams.set("sort", "date_completed");     // most recent first
       url.searchParams.set("page_size", "25");
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await tfetch(url.toString());
       if (!res.ok) return null;
       const json = (await res.json()) as { offers?: { price?: number }[] };
       const prices = (json?.offers ?? [])
@@ -170,7 +182,7 @@ export async function fetchCollectionListingCount(dexieCollectionId: string): Pr
       url.searchParams.set("status", "0");               // 0 = active on Dexie
       url.searchParams.set("offered", dexieCollectionId);
       url.searchParams.set("page_size", "20");            // enough to distinguish thin vs liquid
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await tfetch(url.toString());
       if (!res.ok) return 0;
       const json = (await res.json()) as { offers?: unknown[] };
       return Array.isArray(json?.offers) ? json.offers.length : 0;
@@ -201,7 +213,7 @@ export async function fetchNftListing(
       url.searchParams.set("sort", "price_asc");   // lowest ask first
       url.searchParams.set("page_size", "1");
 
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await tfetch(url.toString());
       if (!res.ok) return null;
       const json = await res.json() as { offers?: { price?: number }[] };
       const price = json?.offers?.[0]?.price;
@@ -246,7 +258,7 @@ export async function fetchNftOffer(launcherId: string): Promise<{ offer: string
       url.searchParams.set("offered", launcherId);
       url.searchParams.set("sort", "price_asc");    // cheapest active offer
       url.searchParams.set("page_size", "5");
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await tfetch(url.toString());
       if (!res.ok) return null;
       const json = (await res.json()) as {
         offers?: { offer?: string; price?: number; requested?: { id?: string }[] }[];
@@ -295,7 +307,7 @@ export async function fetchCollectionActiveOffers(colId: string, maxPages = 40):
       url.searchParams.set("sort", "price_asc"); // cheapest first — so the page cap keeps the deal-relevant offers
       url.searchParams.set("page", String(page));
       url.searchParams.set("page_size", "100");
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await tfetch(url.toString());
       if (!res.ok) return { offers: [], count: 0 };
       const json = (await res.json()) as { offers?: DexieOfferRaw[]; count?: number };
       return { offers: json?.offers ?? [], count: json?.count ?? 0 };
@@ -362,7 +374,7 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
       url.searchParams.set("sort", "date_completed");     // most recent first
       url.searchParams.set("page", String(page));
       url.searchParams.set("page_size", "100");
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await tfetch(url.toString());
       if (!res.ok) return { offers: [], count: 0 };
       const json = (await res.json()) as { offers?: (DexieOfferRaw & { date_completed?: string; date_found?: string })[]; count?: number };
       return { offers: json?.offers ?? [], count: json?.count ?? 0 };
