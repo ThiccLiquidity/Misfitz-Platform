@@ -53,10 +53,12 @@ export function NftDetailModal({
   const { mode } = useThemeMode();
   const isLight = mode === "light";
   const [lightbox, setLightbox] = useState(false);
-  // Market-curve breakdown pieces (when the sales-fitted curve is active).
-  const traitEffect = nft.valueCurve != null && typeof nft.valueTraitMult === "number"
-    ? nft.valueCurve * (nft.valueTraitMult - 1) : 0;
-  const numberPremium = nft.fairValue?.desirabilityPremium ?? 0;
+  // Market-curve breakdown pieces (multiplicative: estimate = curve × traitMult × collectorMult).
+  const curveBase = nft.valueCurve ?? 0;
+  const traitMult = typeof nft.valueTraitMult === "number" ? nft.valueTraitMult : 1;
+  const traitEffect = nft.valueCurve != null ? curveBase * (traitMult - 1) : 0;        // value added by trait demand
+  const numberPremium = nft.valueCurve != null && nft.fairValue
+    ? Math.max(0, nft.fairValue.totalEstimate - curveBase * traitMult) : 0;             // value added by collector number
 
   const thresholds = useMemo(() => resolveTierThresholds(rarityTiers), [rarityTiers]);
   const tier = useMemo(

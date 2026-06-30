@@ -215,8 +215,11 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     if (cv.value == null) return card;
     // The market curve (curve × trait amplifier) REPLACES floor+rarity+comps; the collector-number
     // premium is the only thing added on top.
-    const numberPremium = card.fairValue.desirabilityPremium ?? 0;
-    const total = Math.round(Math.max(floorXch ?? 0, cv.value + numberPremium) * 1000) / 1000;
+    // Collector-number premium is MULTIPLICATIVE on the curve price (weight derived from the additive
+    // desirability premium computed earlier: desirability = floor × weight).
+    const numberWeight = floorXch && floorXch > 0 ? Math.max(0, (card.fairValue.desirabilityPremium ?? 0) / floorXch) : 0;
+    const collectorMult = 1 + numberWeight;
+    const total = Math.round(Math.max(floorXch ?? 0, cv.value * collectorMult) * 1000) / 1000;
     const fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: Math.round(total * xchUsdRate * 100) / 100 };
     const xchOnly = !!card.listingRequested && card.listingRequested.length === 1 && card.listingRequested[0].code === "XCH";
     const dealScore = card.listing && card.dexieOfferId && xchOnly && card.listing.priceXch > 0
@@ -227,7 +230,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       valueBasis: cv.basis,
       valueConfidence: Math.round(cv.confidence * 100) / 100,
       valueCurve: cv.curve != null ? Math.round(cv.curve * 1000) / 1000 : null,
-      valueTraitMult: Math.round(cv.traitFactor * 1000) / 1000,
+      valueTraitMult: Math.round(cv.traitMult * 1000) / 1000,
     };
   });
   return result(nfts);

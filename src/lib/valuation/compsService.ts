@@ -43,11 +43,13 @@ async function build(colId: string): Promise<CompsModel | null> {
   const now = Date.now();
 
   let supply = 0; // collection size, for rank percentile + rank-distance bandwidth
+  let traitFreq: Record<string, Record<string, number>> | undefined;
   const built: (Sale | null)[] = await pool(recent, CONC, async (s) => {
     const d = await getNftDetail(s.id).catch(() => null);
     if (!d) return null;
-    const cnt = (d.collection as { nft_count?: number } | undefined)?.nft_count;
-    if (typeof cnt === "number" && cnt > supply) supply = cnt;
+    const col = d.collection as { nft_count?: number; attributes_frequency_counts?: Record<string, Record<string, number>> } | undefined;
+    if (typeof col?.nft_count === "number" && col.nft_count > supply) supply = col.nft_count;
+    if (!traitFreq && col?.attributes_frequency_counts) traitFreq = col.attributes_frequency_counts;
     const rank = Number(d.openrarity_rank);
     if (!Number.isFinite(rank) || rank <= 0) return null;
     const traits = (d.data?.metadata_json?.attributes ?? [])
@@ -63,6 +65,7 @@ async function build(colId: string): Promise<CompsModel | null> {
   return buildCompsModel(usable, supply, {
     floor: typeof floorXch === "number" ? floorXch : 0,
     rarityFactor: rarityFactorForPercentile,
+    traitFreq,
   });
 }
 

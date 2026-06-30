@@ -215,14 +215,15 @@ export async function enrichNftsByIds(
       const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
       const cv = model.valueOf(card.rarityRank, traits);
       if (cv.value == null) continue;
-      const numberPremium = card.fairValue.desirabilityPremium ?? 0; // collector number on top of curve
       const floor = floorByCollection[outCol[i]];
-      const total = round(Math.max(typeof floor === "number" ? floor : 0, cv.value + numberPremium), 3);
+      const numberWeight = typeof floor === "number" && floor > 0 ? Math.max(0, (card.fairValue.desirabilityPremium ?? 0) / floor) : 0;
+      const collectorMult = 1 + numberWeight; // collector number is multiplicative on the curve price
+      const total = round(Math.max(typeof floor === "number" ? floor : 0, cv.value * collectorMult), 3);
       card.fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: round(total * xchUsdRate, 2) };
       card.valueBasis = cv.basis;
       card.valueConfidence = round(cv.confidence, 2);
       card.valueCurve = cv.curve != null ? round(cv.curve, 3) : null;
-      card.valueTraitMult = round(cv.traitFactor, 3);
+      card.valueTraitMult = round(cv.traitMult, 3);
     }
   }
   return out;
