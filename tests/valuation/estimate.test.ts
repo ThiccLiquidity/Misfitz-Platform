@@ -5,8 +5,9 @@ import { estimateFairValue, rarityFactorForPercentile, robustFloor } from "../..
 test("rarity factor decreases as items get more common", () => {
   assert.equal(rarityFactorForPercentile(0.5), 4.0);
   assert.equal(rarityFactorForPercentile(10), 1.0);
-  assert.equal(rarityFactorForPercentile(50), 0.15);
-  assert.equal(rarityFactorForPercentile(90), 0.05);
+  assert.equal(rarityFactorForPercentile(20), 0.4);  // uncommon keeps a premium
+  assert.equal(rarityFactorForPercentile(50), 0);    // common sits at floor
+  assert.equal(rarityFactorForPercentile(90), 0);
 });
 
 test("robust floor is the median of the cheapest few, ignoring a troll listing", () => {
