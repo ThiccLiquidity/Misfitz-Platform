@@ -10,6 +10,8 @@ import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatXch } from "@/lib/format";
 import type { CollectionView } from "@/lib/collections/liveCollection";
 
+const PAGE = 120; // how many cards we render at a time (the rest stay out of the DOM)
+
 function pct(n: NftData): number {
   return n.rarityRank && n.totalSupply ? (n.rarityRank / n.totalSupply) * 100 : 101;
 }
@@ -19,14 +21,15 @@ function tokenNum(n: NftData): number {
 }
 
 export function CollectionBinder({ view }: { view: CollectionView }) {
+  // Start with the SSR first page (mint order), then swap to the whole collection sorted rarest-first.
   const [nfts, setNfts] = useState<NftData[]>(view.nfts);
-  const [cursor, setCursor] = useState<string | null>(view.cursor);
+  const [fullLoaded, setFullLoaded] = useState(false);
+  const [indexing, setIndexing] = useState(view.totalSupply > view.nfts.length);
+  const [capped, setCapped] = useState(false);
+  const [visible, setVisible] = useState(PAGE);
   const [tier, setTier] = useState<TierFilter>("all");
   const [sort, setSort] = useState<SortKey>("rank-asc");
   const [traitFilters, setTraitFilters] = useState<TraitFilters>({});
-  const [enriching, setEnriching] = useState(view.nfts.length > 0);
-  const [progress, setProgress] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   const SHELL: CollectionData = useMemo(() => ({
     slug: view.id, name: view.name, description: view.description, bannerUrl: view.bannerUrl,
@@ -34,69 +37,24 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     theme: { accent: "#8b5cf6" }, dexieCollectionId: view.id,
   }), [view, nfts.length]);
 
-  // Batched enrichment (shared /api/binder route): fetch per-NFT traits + estimated ranks, merge in
-  // place. Floor is locked from the page so values stay stable; only the rarity premium refines.
-  const enrich = useCallback(async (cards: NftData[], withProgress: boolean) => {
-    const ids = cards.map((c) => c.launcherId);
-    if (ids.length === 0) return;
-    const floors = view.floorXch != null ? { [view.id]: view.floorXch } : {};
-    const CHUNK = 24;
-    const chunks: string[][] = [];
-    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
-    if (withProgress) { setEnriching(true); setProgress(0); }
-    let done = 0;
-    for (const chunk of chunks) {
-      try {
-        const res = await fetch("/api/binder", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ids: chunk, floors, xchUsdRate: view.xchUsdRate }),
-        });
-        const data = res.ok ? ((await res.json()) as { nfts?: NftData[] }) : null;
-        if (data?.nfts) {
-          const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
-          setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
-        }
-      } catch { /* keep fast card */ }
-      done += chunk.length;
-      if (withProgress) setProgress(Math.min(1, done / ids.length));
-    }
-    if (withProgress) setEnriching(false);
-  }, [view.id, view.floorXch, view.xchUsdRate]);
-
-  // Initial enrichment of the first page.
-  const didInit = useRef(false);
+  // Pull the entire collection (cached server-side), sorted rarest-first.
   useEffect(() => {
-    if (didInit.current) return;
-    didInit.current = true;
-    void enrich(view.nfts, true);
-  }, [enrich, view.nfts]);
+    let cancelled = false;
+    setIndexing(true);
+    fetch(`/api/collection/${view.id}/all`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { nfts?: NftData[]; capped?: boolean } | null) => {
+        if (cancelled || !data?.nfts?.length) return;
+        setNfts(data.nfts);
+        setCapped(Boolean(data.capped));
+        setFullLoaded(true);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setIndexing(false); });
+    return () => { cancelled = true; };
+  }, [view.id]);
 
-  async function loadMore() {
-    if (!cursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const res = await fetch(`/api/collection/${view.id}/nfts?cursor=${encodeURIComponent(cursor)}`);
-      const data = res.ok ? ((await res.json()) as { nfts?: NftData[]; cursor?: string | null }) : null;
-      if (data?.nfts?.length) {
-        setNfts((prev) => [...prev, ...data.nfts!]);
-        setCursor(data.cursor ?? null);
-        void enrich(data.nfts, false); // enrich the new page quietly
-      } else {
-        setCursor(null);
-      }
-    } catch { /* ignore */ }
-    setLoadingMore(false);
-  }
-
-  const traitOptions = useMemo(() => {
-    const map: Record<string, Set<string>> = {};
-    for (const n of nfts) for (const t of n.traits) (map[t.trait_type] ??= new Set()).add(String(t.value));
-    const r: Record<string, string[]> = {};
-    for (const [k, v] of Object.entries(map)) r[k] = [...v].sort();
-    return r;
-  }, [nfts]);
-
+  // ── Filtering + sorting over the WHOLE collection, then render only the visible slice ──
   const filtered = useMemo(() => {
     let r = nfts;
     if (tier !== "all") r = r.filter((n) => (n.rarityRank ? tierIdForPercentile(pct(n)) === tier : false));
@@ -115,6 +73,48 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     return s;
   }, [nfts, tier, traitFilters, sort]);
 
+  const displayed = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
+
+  // Reset the window when the filter/sort changes so you always see the top of the new order.
+  useEffect(() => { setVisible(PAGE); }, [tier, sort, traitFilters]);
+
+  // ── Enrich just the visible cards (traits + estimated ranks), tracked so we never re-fetch one ──
+  const enrichedRef = useRef<Set<string>>(new Set());
+  const enrich = useCallback(async (cards: NftData[]) => {
+    const floors = view.floorXch != null ? { [view.id]: view.floorXch } : {};
+    const CHUNK = 24;
+    for (let i = 0; i < cards.length; i += CHUNK) {
+      const ids = cards.slice(i, i + CHUNK).map((c) => c.launcherId);
+      try {
+        const res = await fetch("/api/binder", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ids, floors, xchUsdRate: view.xchUsdRate }),
+        });
+        const data = res.ok ? ((await res.json()) as { nfts?: NftData[] }) : null;
+        if (data?.nfts) {
+          const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
+          setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
+        }
+      } catch { /* keep fast card */ }
+    }
+  }, [view.id, view.floorXch, view.xchUsdRate]);
+
+  useEffect(() => {
+    const todo = displayed.filter((n) => !enrichedRef.current.has(n.launcherId));
+    if (todo.length === 0) return;
+    for (const n of todo) enrichedRef.current.add(n.launcherId); // optimistic, prevents double-fetch
+    void enrich(todo);
+  }, [displayed, enrich]);
+
+  const traitOptions = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const n of nfts) for (const t of n.traits) (map[t.trait_type] ??= new Set()).add(String(t.value));
+    const r: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(map)) r[k] = [...v].sort();
+    return r;
+  }, [nfts]);
+
   const sidebarProps = {
     tierFilter: tier, onTierFilter: setTier,
     sort, onSort: setSort,
@@ -122,6 +122,8 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     traitOptions,
     resultCount: filtered.length, totalCount: nfts.length,
   };
+
+  const moreCount = Math.min(PAGE, filtered.length - displayed.length);
 
   return (
     <div className="py-2">
@@ -141,28 +143,23 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             <span>{view.totalSupply.toLocaleString()} items</span>
             <span>Floor <span className="text-title font-semibold">{view.floorXch != null ? formatXch(view.floorXch) : "—"}</span></span>
             <span>Volume <span className="text-title font-semibold">{view.volumeXch != null ? formatXch(Math.round(view.volumeXch)) : "—"}</span></span>
+            {indexing && <span className="text-violet-300/90 animate-pulse">Finding the rarest across all {view.totalSupply.toLocaleString()}…</span>}
+            {fullLoaded && capped && <span className="text-amber-300/90">showing rarest {nfts.length.toLocaleString()}</span>}
           </div>
         </div>
       </div>
-
-      {enriching && (
-        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-          <div className="h-full rounded-full transition-[width] duration-300 ease-out"
-            style={{ width: `${Math.round(progress * 100)}%`, background: "linear-gradient(90deg, #8b5cf6, #ec4899)" }} />
-        </div>
-      )}
 
       <TierStatsBar collection={SHELL} nfts={nfts} />
 
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1320 }}>
         <FilterSidebar {...sidebarProps} />
         <div className="min-w-0 flex-1" style={{ maxWidth: 960 }}>
-          <BinderView collection={SHELL} nfts={filtered} />
-          {cursor && (
+          <BinderView collection={SHELL} nfts={displayed} />
+          {displayed.length < filtered.length && (
             <div className="mt-5 flex justify-center">
-              <button type="button" onClick={loadMore} disabled={loadingMore}
-                className="rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold text-title transition hover:bg-white/[0.08] disabled:opacity-50">
-                {loadingMore ? "Loading…" : `Load more (${nfts.length} of ${view.totalSupply.toLocaleString()})`}
+              <button type="button" onClick={() => setVisible((v) => v + PAGE)}
+                className="text-title rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold transition hover:bg-white/[0.08]">
+                Show {moreCount} more · {displayed.length.toLocaleString()} of {filtered.length.toLocaleString()}
               </button>
             </div>
           )}
@@ -171,12 +168,12 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
 
       {/* Mobile */}
       <div className="md:hidden">
-        <BinderView collection={SHELL} nfts={filtered} />
-        {cursor && (
+        <BinderView collection={SHELL} nfts={displayed} />
+        {displayed.length < filtered.length && (
           <div className="mt-4 flex justify-center">
-            <button type="button" onClick={loadMore} disabled={loadingMore}
-              className="rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold text-title disabled:opacity-50">
-              {loadingMore ? "Loading…" : "Load more"}
+            <button type="button" onClick={() => setVisible((v) => v + PAGE)}
+              className="text-title rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold">
+              Show more
             </button>
           </div>
         )}

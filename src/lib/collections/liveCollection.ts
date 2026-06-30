@@ -1,7 +1,7 @@
 import { getCollection, listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
-import type { MgCollection } from "@/lib/data-sources/mintgarden/types";
+import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
 import type { NftData } from "@/types";
 
 // Powers the live collection binder (/collection/[id]). Loads a page of the collection's NFTs as
@@ -81,4 +81,47 @@ export async function getCollectionNftsPage(id: string, cursor: string, size = 6
     resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null),
   ]);
   return { nfts: cardsFrom(page.items ?? [], col, floorXch, xchUsdRate), cursor: page.next ?? null };
+}
+
+// ── Full collection (rarity-sorted) ───────────────────────────────────────────
+// MintGarden has no server-side rarity sort, so to show "the rarest in the whole collection" we page
+// through every NFT (slim list items carry openrarity_rank for ranked collections), sort by rank, and
+// cache the result. First call for a collection is slow (sequential paging); after that it's instant
+// for 10 min. The binder renders only the visible slice, so big collections stay light in the DOM.
+const _fullCache = new Map<string, { value: NftData[]; expiresAt: number }>();
+const FULL_PAGE_SIZE = 100;
+const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their rarest ~12k
+
+export interface FullCollection {
+  nfts: NftData[]; // sorted rarest-first (rank asc; unranked last)
+  total: number;
+  capped: boolean;
+}
+
+export async function getAllCollectionCards(id: string): Promise<FullCollection> {
+  if (!id.startsWith("col1")) return { nfts: [], total: 0, capped: false };
+  const hit = _fullCache.get(id);
+  if (hit && Date.now() < hit.expiresAt) return { nfts: hit.value, total: hit.value.length, capped: false };
+
+  const [col, rate] = await Promise.all([getCollection(id).catch(() => null), fetchXchUsdRate()]);
+  if (!col) return { nfts: [], total: 0, capped: false };
+  const xchUsdRate = rate ?? XCH_USD_FALLBACK;
+  const floorXch = await resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null);
+
+  const items: MgListItem[] = [];
+  let cursor: string | null | undefined = undefined;
+  let pages = 0;
+  let capped = false;
+  do {
+    const page: MgPage<MgListItem> = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE).catch(() => ({ items: [], next: null, previous: null }));
+    items.push(...(page.items ?? []));
+    cursor = page.next;
+    pages += 1;
+    if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
+  } while (cursor);
+
+  const cards = cardsFrom(items, col, floorXch, xchUsdRate);
+  cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last
+  _fullCache.set(id, { value: cards, expiresAt: Date.now() + 10 * 60_000 });
+  return { nfts: cards, total: cards.length, capped };
 }
