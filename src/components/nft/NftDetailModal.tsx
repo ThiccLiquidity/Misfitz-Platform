@@ -251,7 +251,7 @@ export function NftDetailModal({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-                style={{ background: "rgba(40,180,90,0.16)", border: "1px solid rgba(80,200,120,0.5)", color: "#5fce7a" }}
+                style={{ background: "rgba(45,110,225,0.16)", border: "1px solid rgba(95,150,240,0.5)", color: "#6aa0ff" }}
               >
                 View &amp; take offer on Dexie ↗
               </a>
@@ -267,9 +267,7 @@ export function NftDetailModal({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-                style={mgIsBuy
-                  ? { background: "rgba(40,180,90,0.16)", border: "1px solid rgba(80,200,120,0.5)", color: "#5fce7a" }
-                  : { background: `${accentColor}14`, border: `1px solid ${accentColor}33`, color: accentColor }}
+                style={{ background: "rgba(40,180,90,0.16)", border: "1px solid rgba(80,200,120,0.5)", color: "#5fce7a" }}
               >
                 {mgBuyLabel}
               </a>
