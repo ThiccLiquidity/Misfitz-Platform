@@ -327,7 +327,7 @@ export function NftDetailModal({
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: lblColor }}>
                 Where this value comes from
                 <span
-                  title="We fit a smooth value-versus-rarity curve to the collection’s recent sales — weighted toward the most recent and anchored to the floor — then read this NFT’s price off the curve and apply premiums for recent trait demand and collector-number appeal."
+                  title="How Value Is Estimated — Estimated value is calculated using an NFT’s rarity and recent collection sales to create a smooth market pricing curve. Additional adjustments are then made for trait demand and collector premiums, such as desirable token numbers."
                   className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-black"
                   style={{ border: `1px solid ${lblColor}`, color: lblColor }}
                 >
