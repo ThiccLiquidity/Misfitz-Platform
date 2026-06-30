@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSavedWallets } from "@/lib/portfolio/useSavedWallets";
 import { parseOwnerIds } from "@/lib/wallet/ownerId";
@@ -23,6 +23,7 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
+  const [navigating, startNav] = useTransition();
   const autoloadedRef = useRef(false);
 
   // First visit of this mount with nothing loaded but a saved profile present -> open it once.
@@ -36,8 +37,10 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
   }, [hydrated, loaded.length, saved, router]);
 
   function go(ids: string[]) {
-    if (ids.length === 0) router.push("/binder");
-    else router.push(`/binder?address=${encodeURIComponent(ids.join(","))}`);
+    startNav(() => {
+      if (ids.length === 0) router.push("/binder");
+      else router.push(`/binder?address=${encodeURIComponent(ids.join(","))}`);
+    });
   }
   function addDraft() {
     const add = parseOwnerIds(draft);
@@ -65,10 +68,11 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
   const chipBg = isLight ? "rgba(41,128,200,0.10)" : "rgba(255,255,255,0.06)";
   const chipText = isLight ? "#0a1e38" : "rgba(255,255,255,0.8)";
 
-  if (redirecting) {
+  if (redirecting || navigating) {
     return (
-      <div className="mx-2 mb-4 rounded-xl px-4 py-3 text-sm text-subtle" style={{ background: cardBg, border: cardBorder }}>
-        Loading your saved binder…
+      <div className="mx-2 mb-4 flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: cardBg, border: cardBorder }}>
+        <div className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-amber-400" />
+        <span className="text-sm text-subtle">Loading your binder\u2026</span>
       </div>
     );
   }

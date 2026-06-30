@@ -61,7 +61,7 @@ async function withCache<T>(
 // and the upstreams have no SLA — without a timeout one slow/stalled response hangs the whole request
 // forever (the "endless spinner"). On timeout we abort; the caller's try/catch then falls back to a
 // null/empty result, so the binder still loads (just without that one number) instead of never loading.
-const MARKET_FETCH_TIMEOUT_MS = 8000;
+const MARKET_FETCH_TIMEOUT_MS = 6000;
 async function tfetch(url: string, init?: RequestInit, timeoutMs = MARKET_FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

@@ -1,10 +1,15 @@
 @echo off
 cd /d "%~dp0"
-echo Stopping any site already running on port 3000...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>&1
+echo ============================================================
+echo  Restarting Traitfolio cleanly.
+echo  This stops ALL Node processes so no old/stale copy of the
+echo  site can keep running, then starts ONE fresh server.
+echo ============================================================
 echo.
-echo Starting the site fresh - this can take 10-20 seconds...
-echo Leave THIS window open. When you see "Ready" or "compiled", hard-refresh the browser (Ctrl+Shift+R).
+taskkill /F /IM node.exe >nul 2>&1
+timeout /t 2 /nobreak >nul
+echo Old servers stopped. Starting fresh on http://localhost:3000 ...
+echo Leave THIS window OPEN. When you see "Ready in" or "compiled", hard-refresh the browser (Ctrl+Shift+R).
 echo.
 call npm run dev
 pause
