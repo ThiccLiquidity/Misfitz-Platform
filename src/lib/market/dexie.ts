@@ -75,21 +75,43 @@ async function tfetch(url: string, init?: RequestInit, timeoutMs = MARKET_FETCH_
 // ── XCH / USD rate ────────────────────────────────────────────────────────────
 
 /**
- * Fetches the current XCH/USD rate from CoinGecko.
- * Cached for 1 minute. Returns null on any error.
+ * XCH/USD rate from CoinGecko — used ONLY for the cosmetic "≈ $" labels.
+ *
+ * Stale-while-revalidate, and NON-BLOCKING on purpose: CoinGecko's free tier is 5-15 calls/min and
+ * frequently slow / rate-limited, so we never let a page render wait on it. We return the last known
+ * rate immediately (seeded with XCH_USD_FALLBACK on a cold process) and kick a background refresh
+ * when it's stale. Worst case a page shows a slightly old dollar figure for a few seconds, never a
+ * spinner. The XCH values themselves never depend on this.
  */
-export async function fetchXchUsdRate(): Promise<number | null> {
-  return withCache("xch_usd_rate", 60_000, async () => {
+let _rateValue = XCH_USD_FALLBACK;
+let _rateAt = 0;
+let _rateRefreshing = false;
+
+function refreshXchUsdRate(): void {
+  if (_rateRefreshing) return;
+  _rateRefreshing = true;
+  (async () => {
     try {
-      const res = await tfetch(`${COINGECKO_BASE}/simple/price?ids=chia&vs_currencies=usd`);
-      if (!res.ok) return null;
-      const json = await res.json() as { chia?: { usd?: number } };
-      const rate = json?.chia?.usd;
-      return typeof rate === "number" ? rate : null;
+      const res = await tfetch(`${COINGECKO_BASE}/simple/price?ids=chia&vs_currencies=usd`, undefined, 3000);
+      if (res.ok) {
+        const json = (await res.json()) as { chia?: { usd?: number } };
+        const rate = json?.chia?.usd;
+        if (typeof rate === "number" && rate > 0) {
+          _rateValue = rate;
+          _rateAt = Date.now();
+        }
+      }
     } catch {
-      return null;
+      /* keep last known rate */
+    } finally {
+      _rateRefreshing = false;
     }
-  });
+  })();
+}
+
+export async function fetchXchUsdRate(): Promise<number | null> {
+  if (Date.now() - _rateAt > 60_000) refreshXchUsdRate(); // fire-and-forget; do NOT await
+  return _rateValue;
 }
 
 // ── Collection floor price ────────────────────────────────────────────────────
