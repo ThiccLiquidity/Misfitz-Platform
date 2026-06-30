@@ -27,13 +27,10 @@ function resolveAccent(accent: string, isLight: boolean): string {
 }
 
 const FV_ROWS: { key: keyof FairValueEstimate; label: string }[] = [
-  { key: "floorValue",             label: "Floor value"       },
-  { key: "rarityPremium",          label: "Rarity premium"    },
-  { key: "desirabilityPremium",    label: "Collector appeal"  },
-  { key: "traitPremium",           label: "Trait demand"      },
-  { key: "demandPremium",          label: "Trait heat"        },
-  { key: "historicalSalesPremium", label: "Historical sales"  },
-  { key: "rewardValue",            label: "Rewards / airdrops"},
+  { key: "floorValue",          label: "Floor value"      },
+  { key: "rarityPremium",       label: "Rarity premium"   },
+  { key: "desirabilityPremium", label: "Collector number" },
+  { key: "traitPremium",        label: "Trait demand"     },
 ];
 
 interface NftDetailModalProps {
@@ -330,7 +327,7 @@ export function NftDetailModal({
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: lblColor }}>
                 Where this value comes from
                 <span
-                  title="Estimated value = a market-sales curve fit by rarity rank (recency-weighted, and never valuing a rarer NFT below a less-rare recent sale), plus a trait-demand premium and any collector-number premium on top."
+                  title="We fit a smooth value-versus-rarity curve to the collection\u2019s recent sales \u2014 weighted toward the most recent and anchored to the floor \u2014 then read this NFT\u2019s price off the curve and apply premiums for recent trait demand and collector-number appeal."
                   className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-black"
                   style={{ border: `1px solid ${lblColor}`, color: lblColor }}
                 >
