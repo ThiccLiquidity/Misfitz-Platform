@@ -166,7 +166,7 @@ export function NftRarityCard({
                 border: "1px solid rgba(120,230,160,0.55)", boxShadow: "0 1px 6px rgba(0,0,0,0.45)",
               }}
             >
-              <span aria-hidden>🏷️</span>{formatXch(nft.listing.priceXch)} XCH
+              <span aria-hidden>🏷️</span>{formatXch(nft.listing.priceXch)}
             </div>
           )}
         </div>

@@ -7,7 +7,7 @@ import { BinderView } from "@/components/binder/BinderView";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
-import { formatXch } from "@/lib/format";
+import { formatXch, formatUsd, formatXchShort, formatUsdShort } from "@/lib/format";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import type { CollectionView } from "@/lib/collections/liveCollection";
 
@@ -200,28 +200,47 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   return (
     <div className="py-2">
       {/* Collection header */}
-      <div className="mb-4 flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
-        {view.imageUrl && (
-          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl">
-            <Image src={view.imageUrl} alt={view.name} fill className="object-cover" sizes="64px" />
+      <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
+        <div className="flex items-center gap-4">
+          {view.imageUrl && (
+            <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl">
+              <Image src={view.imageUrl} alt={view.name} fill className="object-cover" sizes="56px" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-title truncate text-2xl font-black">{view.name}</h1>
+              {view.verified && <span className="text-sky-400" title="Verified creator">✔</span>}
+            </div>
+            <div className="text-subtle mt-0.5 text-xs">
+              {view.totalSupply.toLocaleString()} items
+              {fullLoaded && capped && <span className="text-amber-300/90"> · showing rarest {nfts.length.toLocaleString()}</span>}
+            </div>
           </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <h1 className="text-title truncate text-xl font-black">{view.name}</h1>
-            {view.verified && <span className="text-sky-400" title="Verified creator">✔</span>}
-          </div>
-          <div className="text-subtle mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-            <span>{view.totalSupply.toLocaleString()} items</span>
-            <span>Floor <span className="text-title font-semibold">{view.floorXch != null ? formatXch(view.floorXch) : "—"}</span></span>
-            <span>Volume <span className="text-title font-semibold">{view.volumeXch != null ? formatXch(Math.round(view.volumeXch)) : "—"}</span></span>
-            <span>Market cap <span className="text-title font-semibold">{marketCap != null ? formatXch(Math.round(marketCap)) : "—"}</span></span>
-            {traitfolioCap != null && (
-              <span style={{ color: "#caa23a" }}>Traitfolio cap <span className="font-semibold" style={{ color: "#ffe06a" }}>{formatXch(traitfolioCap)}</span></span>
-            )}
-            {indexing && <span className="text-violet-300/90 animate-pulse">Finding the rarest across all {view.totalSupply.toLocaleString()}…</span>}
-            {fullLoaded && capped && <span className="text-amber-300/90">showing rarest {nfts.length.toLocaleString()}</span>}
-          </div>
+        </div>
+
+        {/* Big, clear stat strip — XCH headline + USD subline. */}
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {([
+            { label: "Floor", xch: view.floorXch != null ? formatXch(view.floorXch) : "—",
+              usd: view.floorXch != null ? formatUsd(Math.round(view.floorXch * view.xchUsdRate * 100) / 100) : null, accent: undefined },
+            { label: "Market cap", xch: marketCap != null ? formatXchShort(marketCap) : "—",
+              usd: marketCap != null ? formatUsdShort(marketCap * view.xchUsdRate) : null, accent: undefined },
+            { label: "Traitfolio cap", xch: traitfolioCap != null ? formatXchShort(traitfolioCap) : "—",
+              usd: traitfolioCap != null ? formatUsdShort(traitfolioCap * view.xchUsdRate) : null, accent: "#ffe06a" },
+            { label: "Volume", xch: view.volumeXch != null ? formatXchShort(view.volumeXch) : "—",
+              usd: view.volumeXch != null ? formatUsdShort(view.volumeXch * view.xchUsdRate) : null, accent: undefined },
+          ] as const).map((st) => (
+            <div
+              key={st.label}
+              className="rounded-xl px-4 py-2.5"
+              style={{ background: "rgba(201,162,39,0.06)", border: "1px solid rgba(201,162,39,0.22)" }}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.5)" }}>{st.label}</div>
+              <div className="text-xl font-black leading-tight sm:text-2xl" style={{ color: st.accent ?? "var(--title)" }}>{st.xch}</div>
+              {st.usd && <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.42)" }}>{st.usd}</div>}
+            </div>
+          ))}
         </div>
       </div>
 

@@ -136,8 +136,8 @@ export function NftDetailModal({
             >
               ✕
             </button>
-            <div className="relative h-full w-full">
-              <Image src={nft.imageUrl} alt={nft.name} fill className="object-contain" sizes="100vw" priority />
+            <div className="relative aspect-square w-full max-w-md sm:max-w-lg" style={{ maxHeight: "72vh" }}>
+              <Image src={nft.imageUrl} alt={nft.name} fill className="object-contain" sizes="(max-width:640px) 90vw, 512px" priority />
             </div>
           </div>
         )}

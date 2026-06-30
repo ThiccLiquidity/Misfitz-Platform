@@ -43,6 +43,15 @@ export function DealScoreGauge({ score, label }: DealScoreGaugeProps) {
 
   return (
     <svg viewBox="0 0 100 58" width="64" height="38" className="mx-auto">
+      <defs>
+        {/* Deal spectrum: red (overpriced, left) -> blue (fair, middle) -> green (great, right). */}
+        <linearGradient id="tf-dealgrad" gradientUnits="userSpaceOnUse" x1="8" y1="0" x2="92" y2="0">
+          <stop offset="0" stopColor="#ef4444" />
+          <stop offset="0.5" stopColor="#3b82f6" />
+          <stop offset="1" stopColor="#22c55e" />
+        </linearGradient>
+      </defs>
+      {/* track */}
       <path
         d="M 8 50 A 42 42 0 0 1 92 50"
         fill="none"
@@ -50,15 +59,16 @@ export function DealScoreGauge({ score, label }: DealScoreGaugeProps) {
         strokeWidth="8"
         strokeLinecap="round"
       />
+      {/* filled spectrum up to the score */}
       <path
         d="M 8 50 A 42 42 0 0 1 92 50"
         fill="none"
-        stroke={color}
+        stroke="url(#tf-dealgrad)"
         strokeWidth="8"
         strokeLinecap="round"
         strokeDasharray={`${filled} ${ARC_LENGTH}`}
       />
-      <text x="50" y="46" textAnchor="middle" fontSize="22" fontWeight="700" fill="var(--rc-ink)">
+      <text x="50" y="46" textAnchor="middle" fontSize="22" fontWeight="800" fill={color}>
         {Math.round(clamped)}
       </text>
     </svg>
