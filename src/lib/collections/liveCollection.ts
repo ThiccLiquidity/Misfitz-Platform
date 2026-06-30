@@ -109,6 +109,9 @@ export interface FullCollection {
   nfts: NftData[]; // sorted rarest-first (rank asc; unranked last)
   total: number;
   capped: boolean;
+  // Trait values selling hotter than their prevalence right now (normalized type/value) — feeds the
+  // filter bar's 🔥 markers. Empty when comps are cold/disabled.
+  hotTraits?: { type: string; value: string; ratio: number }[];
 }
 
 async function buildBaseCollection(id: string): Promise<BaseCollection> {
@@ -202,7 +205,8 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
 // in the background it appears on the very next request — it is NOT trapped behind the 10-min card cache.
 export async function getAllCollectionCards(id: string): Promise<FullCollection> {
   const base = await buildBaseCollection(id);
-  const result = (cards: NftData[]) => ({ nfts: cards, total: cards.length, capped: base.capped });
+  const result = (cards: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = []) =>
+    ({ nfts: cards, total: cards.length, capped: base.capped, hotTraits });
   if (!isCompsEnabled()) return result(base.cards);
   const comps = await getCompsModel(id).catch(() => null);
   if (!comps) return result(base.cards); // cold model → old values until the background build warms up
@@ -234,5 +238,5 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       valueTraitTop: cv.traitTop ?? null,
     };
   });
-  return result(nfts);
+  return result(nfts, comps.hotTraits());
 }

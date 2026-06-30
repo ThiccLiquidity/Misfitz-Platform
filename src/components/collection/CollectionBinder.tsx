@@ -25,6 +25,7 @@ function tokenNum(n: NftData): number {
 export function CollectionBinder({ view }: { view: CollectionView }) {
   // Start with the SSR first page (mint order), then swap to the whole collection sorted rarest-first.
   const [nfts, setNfts] = useState<NftData[]>(view.nfts);
+  const [hotTraitKeys, setHotTraitKeys] = useState<Set<string>>(new Set());
   const { mode: themeMode } = useThemeMode();
   const statLight = themeMode === "light";
   const [fullLoaded, setFullLoaded] = useState(false);
@@ -53,10 +54,11 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     setIndexing(true);
     fetch(`/api/collection/${view.id}/all`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { nfts?: NftData[]; capped?: boolean } | null) => {
+      .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string }[] } | null) => {
         if (cancelled || !data?.nfts?.length) return;
         setNfts(data.nfts);
         setCapped(Boolean(data.capped));
+        if (data.hotTraits) setHotTraitKeys(new Set(data.hotTraits.map((h) => `${h.type}|${h.value}`)));
         setFullLoaded(true);
       })
       .catch(() => {})
@@ -190,6 +192,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     sort, onSort: setSort,
     traitFilters, onTraitFilter: (t: string, v: string) => setTraitFilters((p) => ({ ...p, [t]: v })),
     traitOptions,
+    hotTraitKeys,
     resultCount: filtered.length, totalCount: nfts.length,
     forSaleOnly,
     onForSaleOnly: (v: boolean) => { setForSaleOnly(v); if (v) setSort("deal-desc"); },

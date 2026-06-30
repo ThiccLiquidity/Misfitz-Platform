@@ -16,6 +16,7 @@ interface FilterSidebarProps {
   traitFilters: TraitFilters;
   onTraitFilter: (traitType: string, value: string) => void;
   traitOptions: Record<string, string[]>;
+  hotTraitKeys?: Set<string>; // "type|value" (lowercase) entries currently in demand -> show 🔥
   resultCount: number;
   totalCount: number;
   /** Sheet mode: no outer container chrome — used when caller wraps in a bottom drawer. */
@@ -155,6 +156,7 @@ export function FilterSidebar({
   sort, onSort,
   traitFilters, onTraitFilter,
   traitOptions,
+  hotTraitKeys,
   resultCount, totalCount,
   sheet = false,
   hideTraits = false,
@@ -309,7 +311,7 @@ export function FilterSidebar({
                   className="truncate text-[10px] font-bold uppercase tracking-wider"
                   style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}
                 >
-                  {traitType}
+                  {traitType}{values.some((v) => hotTraitKeys?.has(`${traitType.toLowerCase()}|${String(v).toLowerCase()}`)) ? " 🔥" : ""}
                 </label>
                 <select
                   value={traitFilters[traitType] ?? ""}
@@ -323,7 +325,9 @@ export function FilterSidebar({
                 >
                   <option value="">Any</option>
                   {values.map((v) => (
-                    <option key={v} value={v}>{v}</option>
+                    <option key={v} value={v}>
+                      {v}{hotTraitKeys?.has(`${traitType.toLowerCase()}|${String(v).toLowerCase()}`) ? " 🔥" : ""}
+                    </option>
                   ))}
                 </select>
               </div>
