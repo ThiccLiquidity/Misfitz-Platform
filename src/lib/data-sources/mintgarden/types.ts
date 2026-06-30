@@ -23,6 +23,17 @@ export interface MgCollection {
   floor_price: number | null; // XCH
   // { trait_type(lowercased): { value(lowercased): count } }
   attributes_frequency_counts?: Record<string, Record<string, number>> | null;
+  // Discovery fields (present on the /collections and /search list shapes).
+  volume?: number | null;       // lifetime traded volume in XCH
+  trade_count?: number | null;
+  creator?: {
+    name?: string | null;
+    encoded_id?: string | null;
+    verification_state?: number | null;
+    avatar_uri?: string | null;
+  } | null;
+  blocked_content?: boolean | null;
+  sensitive_content?: boolean | null;
 }
 
 // GET /nfts/{nft1...}

@@ -87,6 +87,26 @@ export function getCollection(collectionId: string): Promise<MgCollection> {
   );
 }
 
+// Top/trending collections — MintGarden's /collections is sorted by lifetime volume (desc), with a
+// cursor. Perfect for a discovery feed. Cached 5 min.
+export function listTopCollections(cursor?: string | null, size = 24): Promise<MgPage<MgCollection>> {
+  const q = new URLSearchParams({ size: String(size) });
+  if (cursor) q.set("page", cursor);
+  return cached(`topcols_${cursor ?? "0"}_${size}`, 5 * 60_000, () =>
+    getJson<MgPage<MgCollection>>(`/collections?${q}`),
+  );
+}
+
+// Search collections by name (the /search endpoint also returns nfts/profiles, which we ignore here).
+export function searchCollections(query: string): Promise<MgCollection[]> {
+  const q = query.trim();
+  if (!q) return Promise.resolve([]);
+  return cached(`colsearch_${q.toLowerCase()}`, 5 * 60_000, async () => {
+    const res = await getJsonOrNull<{ collections?: MgCollection[] }>(`/search?query=${encodeURIComponent(q)}`);
+    return res?.collections ?? [];
+  });
+}
+
 export function listCollectionNfts(
   collectionId: string,
   cursor?: string | null,

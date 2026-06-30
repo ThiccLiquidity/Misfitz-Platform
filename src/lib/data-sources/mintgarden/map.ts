@@ -1,4 +1,4 @@
-import type { CollectionData, FairValueEstimate, ListingData, NftData, Trait } from "@/types";
+import type { CollectionData, CollectionSummary, FairValueEstimate, ListingData, NftData, Trait } from "@/types";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { collectibleNumber } from "@/lib/rarity/collectibleNumbers";
@@ -294,5 +294,22 @@ export function mapListItemToNftData(item: MgListItem, xchUsdRate = XCH_USD_FALL
     rarityScore: null,
     listing,
     dealScore: null,
+  };
+}
+
+// MintGarden collection -> discovery card.
+export function mapCollectionSummary(c: MgCollection): CollectionSummary {
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description ?? null,
+    imageUrl: c.thumbnail_uri ?? null,
+    bannerUrl: c.banner_uri ?? null,
+    totalSupply: c.nft_count ?? 0,
+    floorXch: typeof c.floor_price === "number" ? c.floor_price : null,
+    volumeXch: typeof c.volume === "number" ? c.volume : null,
+    tradeCount: typeof c.trade_count === "number" ? c.trade_count : null,
+    creatorName: c.creator?.name ?? null,
+    verified: c.creator?.verification_state === 1,
   };
 }

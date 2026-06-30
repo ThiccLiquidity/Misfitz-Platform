@@ -93,3 +93,18 @@ export interface CollectionData {
 }
 
 export type ThemeMode = "dark" | "light";
+
+// Lightweight collection card for the discovery / browse page (MintGarden trending + search).
+export interface CollectionSummary {
+  id: string; // col1...
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  bannerUrl: string | null;
+  totalSupply: number;
+  floorXch: number | null;
+  volumeXch: number | null;
+  tradeCount: number | null;
+  creatorName: string | null;
+  verified: boolean;
+}
