@@ -219,6 +219,16 @@ export function NftDetailModal({
             </div>
           </div>
 
+          {/* Multi-asset warning — the listing wants a CAT (or bundle) on top of XCH */}
+          {(nft.listingAssets ?? []).some((a) => a !== "XCH") && (
+            <div className="mx-4 mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-300">
+              ⚠ This offer also requires{" "}
+              <span className="font-bold">{(nft.listingAssets ?? []).filter((a) => a !== "XCH").join(", ")}</span>{" "}
+              in addition to XCH. The price shown is the XCH portion only — this is <span className="font-bold">not</span>{" "}
+              a clean XCH buy, so no deal score is given. Verify the full offer before purchasing.
+            </div>
+          )}
+
           {/* Buy / View on MintGarden — external link (we never execute trades in-app) */}
           {nft.launcherId.startsWith("nft1") && (
             <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>

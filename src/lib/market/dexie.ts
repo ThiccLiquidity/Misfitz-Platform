@@ -243,3 +243,69 @@ export async function fetchNftOffer(launcherId: string): Promise<{ offer: string
     }
   });
 }
+
+// ── Collection active offers (for accurate shop listings + multi-asset detection) ──────────────
+// Dexie's offers carry the FULL requested-asset list, so we can tell a clean NFT-for-XCH listing from
+// one that also wants a CAT (which would make the "deal" misleading). Keyed by the offered NFT's
+// launcher id (hex) so we can overlay onto our cards. Cached 5 min; capped pages for huge collections.
+export interface CollectionOffer {
+  priceXch: number;
+  assets: string[];   // requested asset codes, e.g. ["XCH"] or ["XCH","SBX"]
+  multiNft: boolean;  // offer bundles more than one NFT
+}
+
+interface DexieOfferRaw {
+  price?: number;
+  offered?: { is_nft?: boolean; id?: string }[];
+  requested?: { id?: string; code?: string }[];
+}
+
+export async function fetchCollectionActiveOffers(colId: string, maxPages = 15): Promise<Map<string, CollectionOffer>> {
+  if (!colId.startsWith("col1")) return new Map();
+  return withCache(`coloffers_${colId}`, 5 * 60_000, async () => {
+    const map = new Map<string, CollectionOffer>();
+    const fetchPage = async (page: number): Promise<{ offers: DexieOfferRaw[]; count: number }> => {
+      const url = new URL(`${DEXIE_BASE}/offers`);
+      url.searchParams.set("status", "0"); // active
+      url.searchParams.set("offered", colId);
+      url.searchParams.set("sort", "price_asc"); // cheapest first — the deal-relevant ones
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("page_size", "100");
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (!res.ok) return { offers: [], count: 0 };
+      const json = (await res.json()) as { offers?: DexieOfferRaw[]; count?: number };
+      return { offers: json?.offers ?? [], count: json?.count ?? 0 };
+    };
+    const ingest = (offers: DexieOfferRaw[]) => {
+      for (const o of offers) {
+        const nfts = (o.offered ?? []).filter((x) => x.is_nft && x.id);
+        if (nfts.length === 0) continue;
+        const assets = (o.requested ?? [])
+          .map((r) => (r.code ?? r.id ?? "").toUpperCase())
+          .filter(Boolean);
+        const offer: CollectionOffer = {
+          priceXch: typeof o.price === "number" ? o.price : 0,
+          assets,
+          multiNft: nfts.length > 1,
+        };
+        for (const nft of nfts) if (nft.id && !map.has(nft.id)) map.set(nft.id, offer); // cheapest wins
+      }
+    };
+    try {
+      const first = await fetchPage(1);
+      ingest(first.offers);
+      const totalPages = Math.min(maxPages, Math.ceil(first.count / 100));
+      // Remaining pages in parallel (page-number pagination), bounded concurrency.
+      const rest: number[] = [];
+      for (let p = 2; p <= totalPages; p++) rest.push(p);
+      const LIMIT = 6;
+      for (let i = 0; i < rest.length; i += LIMIT) {
+        const batch = await Promise.all(rest.slice(i, i + LIMIT).map((p) => fetchPage(p).catch(() => ({ offers: [], count: 0 }))));
+        for (const b of batch) ingest(b.offers);
+      }
+    } catch {
+      /* partial map is fine */
+    }
+    return map;
+  });
+}

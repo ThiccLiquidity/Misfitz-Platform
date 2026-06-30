@@ -1,6 +1,7 @@
 import { getCollection, listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionActiveOffers, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { computeDealScore } from "@/lib/rarity/enrich";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
 import type { NftData } from "@/types";
 
@@ -106,7 +107,9 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   const [col, rate] = await Promise.all([getCollection(id).catch(() => null), fetchXchUsdRate()]);
   if (!col) return { nfts: [], total: 0, capped: false };
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
-  const floorXch = await resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null);
+  // Kick off the floor + Dexie active-offers fetches in parallel with the (sequential) NFT paging.
+  const floorPromise = resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null);
+  const offersPromise = fetchCollectionActiveOffers(id).catch(() => new Map());
 
   const items: MgListItem[] = [];
   let cursor: string | null | undefined = undefined;
@@ -120,7 +123,28 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
   } while (cursor);
 
+  const [floorXch, offerMap] = await Promise.all([floorPromise, offersPromise]);
   const cards = cardsFrom(items, col, floorXch, xchUsdRate);
+
+  // Overlay real Dexie offers: accurate XCH price + asset list. Only CLEAN single-NFT, XCH-only offers
+  // get a deal score — anything that also wants a CAT (or bundles NFTs) is flagged, never scored, so a
+  // hidden-CAT listing can't masquerade as a great deal.
+  for (const card of cards) {
+    const offer = offerMap.get(card.id);
+    if (offer) {
+      card.listing = { priceXch: offer.priceXch, priceUsd: Math.round(offer.priceXch * xchUsdRate * 100) / 100 };
+      card.listingAssets = offer.assets;
+      const cleanXch = !offer.multiNft && offer.assets.length === 1 && offer.assets[0] === "XCH";
+      card.dealScore = cleanXch && card.fairValue && offer.priceXch > 0
+        ? computeDealScore(card.fairValue.totalEstimate, offer.priceXch)
+        : null;
+    } else {
+      // Listed on MintGarden but not verified on Dexie — keep any price but make no deal claim.
+      card.listingAssets = null;
+      card.dealScore = null;
+    }
+  }
+
   cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last
   _fullCache.set(id, { value: cards, expiresAt: Date.now() + 10 * 60_000 });
   return { nfts: cards, total: cards.length, capped };
