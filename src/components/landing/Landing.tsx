@@ -77,40 +77,49 @@ export function Landing() {
         </section>
 
         {/* ── SECONDARY: Portfolio tracking (smaller, supporting act) ──────────────── */}
-        <section className="pb-20">
+        <section className="pb-16">
           <div
-            className="grid grid-cols-1 items-center gap-6 overflow-hidden rounded-3xl p-6 sm:p-8 md:grid-cols-2"
+            className="mx-auto max-w-2xl rounded-3xl px-6 py-10 text-center sm:px-10"
             style={{ background: "var(--page-bg)", border: "1px solid rgba(201,162,39,0.25)" }}
           >
-            <div>
-              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--subtle)" }}>
-                Also on Traitfolio
-              </span>
-              <h2 className="mt-2 text-2xl font-black sm:text-3xl">Track your portfolio</h2>
-              <p className="mt-3 text-sm sm:text-base" style={{ color: "var(--subtle)" }}>
-                Paste a wallet address or DID to value an entire collection of holdings instantly —
-                rarity, estimated value, and tier breakdown. No account needed.
-              </p>
-              <Link
-                href="/binder"
-                className="mt-5 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold transition hover:bg-[rgba(201,162,39,0.12)]"
-                style={{ color: "var(--title)", border: "1px solid var(--card-border)" }}
-              >
-                Value a wallet <span aria-hidden>→</span>
-              </Link>
+            {/* rarity-spectrum accent — ties the section to the brand without a photo */}
+            <div className="mx-auto mb-6 flex h-1.5 w-28 overflow-hidden rounded-full">
+              {["#cc66ff", "#f0c000", "#a8d0ff", "#ff6060", "#5fce7a", "#6090e0"].map((c) => (
+                <span key={c} className="flex-1" style={{ background: c }} />
+              ))}
             </div>
-            <div className="relative">
-              <Image
-                src="/brand/hero-binder.png"
-                alt="Portfolio binder preview"
-                width={1200}
-                height={800}
-                className="h-auto w-full rounded-2xl"
-              />
-            </div>
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--subtle)" }}>
+              Also on Traitfolio
+            </span>
+            <h2 className="mt-2 text-2xl font-black sm:text-3xl">Track your portfolio</h2>
+            <p className="mx-auto mt-3 max-w-md text-sm sm:text-base" style={{ color: "var(--subtle)" }}>
+              Paste a wallet address or DID to value an entire collection of holdings instantly —
+              rarity, estimated value, and tier breakdown. No account needed.
+            </p>
+            <Link
+              href="/binder"
+              className="mt-6 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold transition hover:bg-[rgba(201,162,39,0.12)]"
+              style={{ color: "var(--title)", border: "1px solid var(--card-border)" }}
+            >
+              Value a wallet <span aria-hidden>→</span>
+            </Link>
           </div>
         </section>
       </main>
+
+      {/* Footer */}
+      <footer
+        className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row sm:px-8"
+        style={{ borderTop: "1px solid rgba(201,162,39,0.18)" }}
+      >
+        <Link href="/" aria-label="Traitfolio home" className="flex items-center gap-2 opacity-90">
+          <Image src="/brand/logo-mark.png" alt="" width={425} height={478} className="h-6 w-auto" />
+          <Wordmark className="text-base" />
+        </Link>
+        <p className="text-xs" style={{ color: "var(--subtle)" }}>
+          The home of digital collecting on Chia.
+        </p>
+      </footer>
     </div>
   );
 }
