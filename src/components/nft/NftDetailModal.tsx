@@ -53,6 +53,12 @@ export function NftDetailModal({
   const { mode } = useThemeMode();
   const isLight = mode === "light";
   const [lightbox, setLightbox] = useState(false);
+  // Base estimate = sum of the floor+premium breakdown rows (pre-comps). The headline totalEstimate is
+  // the comps-blended number, so the difference is exactly what the sales comps moved it by.
+  const fvBase = nft.fairValue
+    ? FV_ROWS.reduce((sum, { key }) => { const v = nft.fairValue![key]; return sum + (typeof v === "number" ? v : 0); }, 0)
+    : 0;
+  const compsAdj = nft.fairValue ? nft.fairValue.totalEstimate - fvBase : 0;
 
   const thresholds = useMemo(() => resolveTierThresholds(rarityTiers), [rarityTiers]);
   const tier = useMemo(
@@ -345,6 +351,23 @@ export function NftDetailModal({
                   </div>
                 );
               })}
+              {/* Sales-comps adjustment — signed, so the rows reconcile to the headline estimate. */}
+              {nft.valueBasis && Math.abs(compsAdj) >= 0.005 && (
+                <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
+                  <span className="text-xs font-semibold" style={{ color: compsAdj >= 0 ? "#5fce7a" : "#e0a35a" }}>
+                    Sales comps {compsAdj >= 0 ? "▲" : "▼"}
+                  </span>
+                  <span className="text-xs font-bold" style={{ color: compsAdj >= 0 ? "#5fce7a" : "#e0a35a" }}>
+                    {compsAdj >= 0 ? "+" : "−"}{Math.abs(compsAdj).toFixed(2)} XCH
+                  </span>
+                </div>
+              )}
+              {/* Bold final — what the rows add up to (the headline Est. Value). */}
+              <div className="flex items-baseline justify-between pt-2">
+                <span className="text-xs font-black uppercase tracking-wide" style={{ color: lblColor }}>Estimated value</span>
+                <span className="text-sm font-black" style={{ color: valColor }}>{nft.fairValue!.totalEstimate.toFixed(2)} XCH</span>
+              </div>
+
               {nft.valueBasis && (
                 <div
                   className="mt-2.5 rounded-lg px-3 py-2 text-[11px] leading-snug"
@@ -358,11 +381,18 @@ export function NftDetailModal({
                       </span>
                     )}
                   </div>
+                  {/* Before → after, so the effect is unmistakable. */}
+                  <div className="mt-1 font-semibold" style={{ color: valColor }}>
+                    {fvBase.toFixed(2)} → {nft.fairValue!.totalEstimate.toFixed(2)} XCH
+                    <span className="ml-1 font-normal" style={{ color: subColor }}>
+                      ({compsAdj >= 0 ? "+" : "−"}{Math.abs(compsAdj).toFixed(2)} from real sales)
+                    </span>
+                  </div>
                   <div className="mt-1" style={{ color: subColor }}>{nft.valueBasis}</div>
                   <div className="mt-1 text-[10px]" style={{ color: lblColor }}>
                     {typeof nft.valueConfidence === "number" && nft.valueConfidence < 0.5
-                      ? "Few recent sales near this rarity — value leans on our estimate."
-                      : "Backed by real recent sales of similar NFTs."}
+                      ? "Few recent sales near this rarity — value leans mostly on our estimate."
+                      : "Real recent sales of similar NFTs are pulling the estimate toward market."}
                   </div>
                 </div>
               )}
