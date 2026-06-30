@@ -25,6 +25,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   // Start with the SSR first page (mint order), then swap to the whole collection sorted rarest-first.
   const [nfts, setNfts] = useState<NftData[]>(view.nfts);
   const [fullLoaded, setFullLoaded] = useState(false);
+  const [enriching, setEnriching] = useState(false);
   const [indexing, setIndexing] = useState(view.totalSupply > view.nfts.length);
   const [capped, setCapped] = useState(false);
   const [visible, setVisible] = useState(PAGE);
@@ -154,7 +155,8 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     const todo = displayed.filter((n) => !enrichedRef.current.has(n.launcherId));
     if (todo.length === 0) return;
     for (const n of todo) enrichedRef.current.add(n.launcherId); // optimistic, prevents double-fetch
-    void enrich(todo);
+    setEnriching(true);
+    void enrich(todo).finally(() => setEnriching(false));
   }, [displayed, enrich]);
 
   const traitOptions = useMemo(() => {
@@ -206,6 +208,19 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           </div>
         </div>
       </div>
+
+      {(indexing || enriching) && (
+        <div className="mb-4">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="text-title font-semibold">
+              {indexing
+                ? `Loading all ${view.totalSupply.toLocaleString()} NFTs + live sale data…`
+                : "Loading rarity, traits & deal scores…"}
+            </span>
+          </div>
+          <div className="tf-loadbar"><div className="tf-loadbar-fill" /></div>
+        </div>
+      )}
 
       <TierStatsBar collection={SHELL} nfts={nfts} />
 

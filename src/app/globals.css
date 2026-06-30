@@ -1501,3 +1501,26 @@ body {
     radial-gradient(110% 80% at 72% 22%, rgba(157, 107, 255, 0.38), transparent 60%),
     linear-gradient(120deg, #ffd9b8 0%, #ffc0dd 34%, #d3b4ff 68%, #a884ff 100%);
 }
+
+/* ── Indeterminate loading bar (collection/binder data loading) ────────────────── */
+.tf-loadbar {
+  position: relative;
+  height: 5px;
+  width: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(201,162,39,0.12);
+}
+.tf-loadbar-fill {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  width: 38%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #f0c000 30%, #ffe577 50%, #f0c000 70%, transparent);
+  animation: tf-loadsweep 1.1s ease-in-out infinite;
+}
+@keyframes tf-loadsweep {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(330%); }
+}
