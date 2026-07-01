@@ -1,6 +1,7 @@
 import type { NftData } from "@/types";
 import { fetchOwnerNftDetails } from "@/lib/data-sources/mintgarden/owner";
 import { mapDetailToNftData, nftMarketAnchorXch, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
+import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
@@ -191,11 +192,28 @@ export async function enrichNftsByIds(
     }),
   );
 
+  // For collections MintGarden hasn't ranked (no attributes_frequency_counts) but whose NFTs carry
+  // traits, inject OUR OWN computed frequency table so the rank estimator + trait-rarity math can run.
+  // Non-blocking: uses the cached table if warm, else kicks a background build and skips this pass.
+  const needFreq = [...new Set(
+    details
+      .filter((d): d is NonNullable<typeof d> => !!d && !d.collection?.attributes_frequency_counts && !!d.collection?.id?.startsWith("col1"))
+      .map((d) => d.collection.id),
+  )];
+  const freqByCol = new Map<string, Record<string, Record<string, number>>>();
+  if (needFreq.length > 0) {
+    const results = await Promise.all(needFreq.map((c) => getCollectionFrequency(c).catch(() => null)));
+    needFreq.forEach((c, i) => { const r = results[i]; if (r) freqByCol.set(c, r.freq); });
+  }
+
   const out: NftData[] = [];
   const outCol: string[] = []; // collection (col1...) per out card, for the comps blend
   for (const d of details) {
     if (!d || !isDisplayableNft(d)) continue;
     const colId = d.collection.id;
+    if (!d.collection.attributes_frequency_counts && freqByCol.has(colId)) {
+      d.collection.attributes_frequency_counts = freqByCol.get(colId)!; // our own table -> estimated ranks + trait rarity
+    }
     const floor = floorByCollection[colId];
     const m = mapDetailToNftData(d, xchUsdRate, typeof floor === "number" ? floor : null);
     out.push({ ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName });
