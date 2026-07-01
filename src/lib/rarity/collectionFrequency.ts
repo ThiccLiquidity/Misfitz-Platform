@@ -1,3 +1,5 @@
+import { promises as fs } from "fs";
+import path from "path";
 import { listCollectionNfts, getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import type { MgPage, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
@@ -24,7 +26,36 @@ const CONC = 8;
 interface Entry { value: CollectionFrequency | null; expiresAt: number; building?: Promise<CollectionFrequency | null> }
 const _cache = new Map<string, Entry>();
 
+// ── Persistent disk cache ─────────────────────────────────────────────────────
+// The expensive part (fetching EVERY NFT's traits from MintGarden) should happen ONCE per collection,
+// ever — not on every server restart. We persist the computed table to disk so a restart loads it
+// instantly instead of re-scanning the whole collection. NFT traits never change, so this is safe;
+// a 30-day TTL lets us pick up any new mints. (A single-server disk cache; swap for shared storage
+// when going multi-instance.)
+const CACHE_DIR = path.join(process.cwd(), ".rarity-cache");
+const DISK_TTL = 30 * 24 * 60 * 60_000;
+
+async function readDisk(colId: string): Promise<CollectionFrequency | null> {
+  try {
+    const raw = await fs.readFile(path.join(CACHE_DIR, `${colId}.json`), "utf8");
+    const j = JSON.parse(raw) as { freq?: CollectionFrequency["freq"]; total?: number; builtAt?: number };
+    if (j?.freq && typeof j.total === "number" && typeof j.builtAt === "number" && Date.now() - j.builtAt < DISK_TTL) {
+      return { freq: j.freq, total: j.total };
+    }
+  } catch { /* no cached file yet */ }
+  return null;
+}
+async function writeDisk(colId: string, v: CollectionFrequency): Promise<void> {
+  try {
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.writeFile(path.join(CACHE_DIR, `${colId}.json`), JSON.stringify({ ...v, builtAt: Date.now() }));
+  } catch { /* disk unavailable (e.g. read-only FS) — fall back to in-memory only */ }
+}
+
 async function build(colId: string): Promise<CollectionFrequency | null> {
+  // 1) Persistent disk cache first — a restart shouldn't re-scan the whole collection.
+  const cached = await readDisk(colId);
+  if (cached) return cached;
   const ids: string[] = [];
   let cursor: string | null | undefined = undefined;
   do {
@@ -54,7 +85,9 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
   }
   await Promise.all(Array.from({ length: Math.min(CONC, ids.length) }, worker));
   if (withTraits === 0) return null; // no traits anywhere -> nothing to rank by
-  return { freq, total: ids.length };
+  const result: CollectionFrequency = { freq, total: ids.length };
+  await writeDisk(colId, result); // persist so the slow scan happens exactly once, ever
+  return result;
 }
 
 export async function getCollectionFrequency(colId: string, opts: { wait?: boolean } = {}): Promise<CollectionFrequency | null> {
