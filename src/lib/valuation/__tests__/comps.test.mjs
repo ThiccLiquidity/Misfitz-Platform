@@ -13,10 +13,15 @@ test("rarer ranks value higher (smooth baseline + sales)", () => {
   assert.ok(m.curveValue(100) > m.curveValue(800));
 });
 
-test("thin/distant sales fall back toward the floor baseline", () => {
+test("single sale -> one smooth, monotonic parabola (no waves), never below floor", () => {
+  // With a global parabola fit, a lone sale sets the overall level while the RARITY SHAPE keeps the
+  // rare end above the common end. (The old local model left distant commons at floor; the parabola
+  // averages a level instead — sparse data is regularized toward the baseline but still lifts.)
   const sales = [{ rank: 50, price: 80, ageDays: 5 }];
   const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: (p) => (p >= 50 ? 0 : 1) });
-  assert.ok(m.curveValue(900) <= 12, `common far from sale should sit near floor, got ${m.curveValue(900)}`);
+  assert.ok(m.curveValue(50) > m.curveValue(900), "rarer must value >= commoner");
+  assert.ok(m.curveValue(900) >= 5, "never below floor");
+  assert.ok(m.curveValue(50) >= 40, `rare end reflects the sale, got ${m.curveValue(50)}`);
 });
 
 test("trait demand: a trait selling MORE OFTEN than its prevalence runs hot (>1)", () => {

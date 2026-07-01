@@ -63,6 +63,23 @@ function weightedMedian(pairs: { x: number; w: number }[]): number | null {
   return sorted[sorted.length - 1].x;
 }
 
+// Solve a 3x3 linear system A·x = g (Gaussian elimination, partial pivoting). Returns null if singular.
+function solve3(A: number[][], g: number[]): [number, number, number] | null {
+  const M = A.map((row, i) => [row[0], row[1], row[2], g[i]]);
+  for (let col = 0; col < 3; col++) {
+    let piv = col;
+    for (let r = col + 1; r < 3; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    if (Math.abs(M[piv][col]) < 1e-12) return null;
+    [M[col], M[piv]] = [M[piv], M[col]];
+    for (let r = 0; r < 3; r++) {
+      if (r === col) continue;
+      const f = M[r][col] / M[col][col];
+      for (let k = col; k <= 3; k++) M[r][k] -= f * M[col][k];
+    }
+  }
+  return [M[0][3] / M[0][0], M[1][3] / M[1][1], M[2][3] / M[2][2]];
+}
+
 export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsOptions = {}): CompsModel | null {
   const halfLife = opts.halfLifeDays ?? 120;
   const demandHalfLife = opts.demandHalfLifeDays ?? 21;
@@ -88,56 +105,38 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     traits: s.traits ?? [],
   }));
 
-  // ── Baseline curve, scaled by overall market level ──────────────────────────────────────────────
-  const baseAt = (rank: number) => floor + floor * rarityFactor(clamp((rank / supply) * 100, 0, 100));
-  let globalScale = 1;
-  if (floor > 0) {
-    const ratios = points.map((p) => ({ x: p.price / baseAt(p.rank), w: p.w })).filter((r) => Number.isFinite(r.x) && r.x > 0);
-    const gs = weightedMedian(ratios);
-    if (gs != null) globalScale = clamp(gs, 0.5, 4);
-  }
-  const scaledBaseAt = (rank: number) => floor + (baseAt(rank) - floor) * globalScale;
-
-  // ── Smooth sales fit: Gaussian-kernel weighted mean, blended toward baseline by local support ───
-  function rawCurveValue(rank: number): number {
-    let sw = 0, swv = 0;
+  // ── Parabolic rarity curve, fit to sales ────────────────────────────────────────────────────────
+  // The value curve is ALWAYS a smooth rarity parabola in rarity-space:
+  //     value(rank) = a + b·rf + c·rf²         (rf = rarityFactor(percentile); high for rare, 0 for common)
+  // Because rf is itself a curved function of rank, this is a smooth parabola in RANK. Recent sales don't
+  // bend it point-by-point (that made "waves"); they fit its three coefficients by recency-weighted least
+  // squares with a RIDGE PRIOR toward the floor-anchored rarity baseline (a≈floor, b≈floor, c≈0). So the
+  // sales pull and tug the whole parabola — a cluster of strong rare sales steepens it, mid sales lift it —
+  // but sparse/noisy sales stay near the baseline and it always resolves to one clean parabola. b,c are
+  // clamped ≥0 so it's monotonic (rarer ≥ less-rare); an off-curve sale is a DEAL, never a dent.
+  const rfAt = (rank: number) => rarityFactor(clamp((rank / supply) * 100, 0, 100));
+  let a = floor, b = floor, c = 0;
+  if (floor > 0 && points.length > 0) {
+    const prior: [number, number, number] = [floor, floor, 0];
+    const lambda = 0.7; // pull toward the baseline parabola (≈ this many effective sales of regularization)
+    const A = [[lambda, 0, 0], [0, lambda, 0], [0, 0, lambda]];
+    const g: [number, number, number] = [lambda * prior[0], lambda * prior[1], lambda * prior[2]];
     for (const p of points) {
-      const d = p.rank - rank;
-      const w = p.w * Math.exp(-(d * d) / (2 * bandwidth * bandwidth)); // smooth kernel -> no hard steps
-      sw += w; swv += w * p.price;
+      const rf = rfAt(p.rank);
+      const ph = [1, rf, rf * rf];
+      const w = p.w;
+      for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) A[i][j] += w * ph[i] * ph[j]; g[i] += w * ph[i] * p.price; }
     }
-    const fit = sw > 0 ? swv / sw : null;
-    const pull = clamp(sw / (sw + pullK), 0, maxPull); // thin support -> lean on baseline
-    const base = scaledBaseAt(rank);
-    const v = fit != null ? pull * fit + (1 - pull) * base : base;
-    return Math.max(floor, v);
+    const sol = solve3(A, g);
+    if (sol) { a = sol[0]; b = Math.max(0, sol[1]); c = Math.max(0, sol[2]); }
   }
-
-  // ── Rarity-monotone envelope ────────────────────────────────────────────────────────────────────
-  // The raw sales fit can DIP locally: a couple of below-market sales in one rarity band (say a lucky
-  // deal on an Epic) would otherwise price that band UNDER a less-rare band — inverting the tiers. For a
-  // rarity value curve that is wrong: those cheap sales are DEALS (below the curve), not a lower worth.
-  // So we enforce non-increasing-in-rank (a rarer rank is never valued below any less-rare rank) as an
-  // upward envelope over a rank grid — keeping the sales-fit shape but restoring the rarity ordering.
-  const gridRanks: number[] = [];
-  const N = Math.max(1, Math.min(supply, 400));
-  if (N >= 2) for (let i = 0; i < N; i++) gridRanks.push(1 + Math.round((i / (N - 1)) * (supply - 1)));
-  else gridRanks.push(1);
-  for (const p of points) gridRanks.push(Math.round(clamp(p.rank, 1, Math.max(1, supply))));
-  const grid = [...new Set(gridRanks)].sort((a, b) => a - b);            // ascending rank = rarest first
-  const monoVals = grid.map(rawCurveValue);
-  for (let i = monoVals.length - 2; i >= 0; i--) monoVals[i] = Math.max(monoVals[i], monoVals[i + 1]);
+  const globalScale = floor > 0 ? (a + b + c) / floor : 1; // rough curve-level indicator for diagnostics
 
   function curveValue(rank: number): number {
-    if (grid.length === 1) return monoVals[0];
-    if (rank <= grid[0]) return monoVals[0];
-    if (rank >= grid[grid.length - 1]) return monoVals[monoVals.length - 1];
-    let lo = 0, hi = grid.length - 1;
-    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (grid[m] <= rank) lo = m; else hi = m; }
-    const span = grid[hi] - grid[lo] || 1;
-    const t = (rank - grid[lo]) / span;
-    return monoVals[lo] * (1 - t) + monoVals[hi] * t;
+    const rf = rfAt(rank);
+    return Math.max(floor, a + b * rf + c * rf * rf);
   }
+
   function supportAt(rank: number): number {
     let sw = 0;
     for (const p of points) { const d = p.rank - rank; sw += p.w * Math.exp(-(d * d) / (2 * bandwidth * bandwidth)); }
