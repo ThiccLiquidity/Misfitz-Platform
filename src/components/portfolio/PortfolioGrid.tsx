@@ -116,7 +116,7 @@ export function PortfolioGrid({ groups }: { groups: PortfolioGroup[] }) {
                   collectionName={item.collectionName}
                   totalSupply={item.totalSupply}
                   variant="grid"
-                  onOpen={(launcherId) => setSelectedId(launcherId)}
+                  onOpen={setSelectedId}
                 />
               ))}
             </div>

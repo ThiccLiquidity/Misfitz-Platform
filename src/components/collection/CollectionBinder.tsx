@@ -75,10 +75,18 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             setNfts((prev) => prev.map((card) => {
               const fresh = byId.get(card.launcherId);
               if (!fresh) return card;
+              // Only produce a NEW card object when a value actually changed — otherwise keep the same
+              // identity so memoized cards don't re-render on a no-op re-poll.
+              const newRank = card.rarityRank ?? fresh.rarityRank ?? null;
+              const newTotal = fresh.fairValue?.totalEstimate ?? card.fairValue?.totalEstimate ?? null;
+              const curTotal = card.fairValue?.totalEstimate ?? null;
+              if (newRank === (card.rarityRank ?? null) && newTotal === curTotal && (fresh.valueCurve ?? null) === (card.valueCurve ?? null)) {
+                return card;
+              }
               // Refresh the (warmed) value/rank; KEEP the enriched traits + Dexie listing already on the card.
               return {
                 ...card,
-                rarityRank: card.rarityRank ?? fresh.rarityRank,
+                rarityRank: newRank,
                 rankEstimated: card.rarityRank != null ? card.rankEstimated : fresh.rankEstimated,
                 fairValue: fresh.fairValue ?? card.fairValue,
                 valueBasis: fresh.valueBasis ?? card.valueBasis,

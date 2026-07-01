@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { memo } from "react";
 import type { NftData } from "@/types";
 import {
   getRarityTier,
@@ -66,7 +67,7 @@ interface NftRarityCardProps {
 //         .tcg-gloss    — diagonal gloss (mythic/legendary/epic only)
 //         .tcg-sp       — sparkle crosses (mythic + epic only)
 //         .tcg-panel-content — stats, traits, footer, banner (z-index above effects)
-export function NftRarityCard({
+function NftRarityCardImpl({
   nft,
   collectionName,
   totalSupply,
@@ -377,3 +378,7 @@ function TraitRow({
     </div>
   );
 }
+
+// Memoized: with stable onOpen + stable card identity for unchanged cards (the enrichment/re-poll
+// merges preserve identity when nothing changed), only the cards that actually changed re-render.
+export const NftRarityCard = memo(NftRarityCardImpl);
