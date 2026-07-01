@@ -16,9 +16,37 @@ const righteous = Righteous({
 // few headings (var(--font-righteous)); using it for body text made everything look thick/fuzzy.
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
+// Set NEXT_PUBLIC_SITE_URL to the production origin (e.g. https://traitfolio.app) so Open Graph image
+// URLs resolve absolutely. Falls back to localhost for dev. (See LAUNCH-READINESS.md.)
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const SITE_DESC =
+  "Track your Chia NFT collections, discover new ones, see rarity + estimated value, and flex what you own. Built for collectors.";
+
 export const metadata: Metadata = {
-  title: "Traitfolio — The home of digital collecting",
-  description: "Traitfolio — track your Chia NFT collections, discover new ones, and flex what you own. Built for collectors.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Traitfolio — The home of digital collecting",
+    template: "%s · Traitfolio",
+  },
+  description: SITE_DESC,
+  applicationName: "Traitfolio",
+  keywords: ["Chia", "NFT", "collection", "rarity", "MintGarden", "Dexie", "Traitfolio", "collector"],
+  icons: { icon: "/logo-mark.png", apple: "/logo-mark.png" },
+  manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    siteName: "Traitfolio",
+    title: "Traitfolio — The home of digital collecting",
+    description: SITE_DESC,
+    url: SITE_URL,
+    images: [{ url: "/landing-hero.png", alt: "Traitfolio — Chia NFT collector platform" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Traitfolio — The home of digital collecting",
+    description: SITE_DESC,
+    images: ["/landing-hero.png"],
+  },
 };
 
 // Explicit mobile viewport. viewportFit:"cover" lets us honour iOS safe-area insets; themeColor tints

@@ -3,12 +3,18 @@ import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
 import { YourBinder } from "@/components/binder/YourBinder";
 import { WalletProfileBar } from "@/components/portfolio/WalletProfileBar";
 import { BinderEmptyState } from "@/components/binder/BinderEmptyState";
+import type { Metadata } from "next";
 
 // Your Binder — every NFT you own across one OR MANY wallets in a single binder, sorted by rarity,
 // with total value. No login: paste any number of xch1… addresses / did:chia… profile ids (comma-
 // separated in the URL); the WalletProfileBar auto-remembers that set on this device so it loads next
 // time. When nothing is entered or saved we show a neutral empty state (no placeholder collection).
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Your Binder",
+  description: "Paste any Chia address or DID to see every NFT you own in one binder — sorted by rarity, with an estimated value for each. No account needed.",
+};
 
 export default async function BinderPage({ searchParams }: { searchParams: { address?: string } }) {
   const raw = (searchParams.address ?? "").trim().toLowerCase();
