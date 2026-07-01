@@ -15,7 +15,8 @@ const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 
 // Used when CoinGecko is unavailable — keeps USD fields populated with a reasonable value.
 // Update this periodically until a live rate is reliably available.
-export const XCH_USD_FALLBACK = 10.96;
+import { XCH_USD_FALLBACK } from "./constants";
+export { XCH_USD_FALLBACK };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@
 import type { DealScore, ListingData, NftData, Trait } from "@/types";
 import { tierIdForPercentile, type RarityTierThresholds, type TierId } from "./tiers";
 import type { MarketContext } from "@/lib/market/dexie";
-import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { XCH_USD_FALLBACK } from "@/lib/market/constants";
 
 // Re-exported so queries.ts (and any other pre-enrichment caller) can use the same constant
 // for initial USD estimates without importing from the market layer directly.
