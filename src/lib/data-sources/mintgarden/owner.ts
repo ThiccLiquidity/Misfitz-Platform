@@ -9,7 +9,7 @@ import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 // thousands of requests; the caller is told when results were truncated.
 
 export const MAX_HOLDINGS = 120;
-const PAGE_SIZE = 120; // one round-trip for a typical wallet (was 50 = up to 3 sequential pages)
+const PAGE_SIZE = 50; // MintGarden address endpoint rejects larger sizes (returns nothing); keep at 50
 const DETAIL_CONCURRENCY = 12;
 
 // Minimal concurrency pool — runs `worker` over `items`, at most `limit` in flight.
@@ -79,7 +79,7 @@ interface CachedListings { items: MgListItem[]; collections: [string, MgCollecti
 export async function fetchOwnerListings(address: string): Promise<OwnerListings> {
   const t0 = Date.now();
   const short = `${address.slice(0, 8)}…${address.slice(-4)}`;
-  const cacheKey = `holdings:${address.trim().toLowerCase()}`;
+  const cacheKey = `holdings2:${address.trim().toLowerCase()}`;
   try {
     const hit = await cacheGet(cacheKey, HOLDINGS_TTL);
     if (hit) {
@@ -112,10 +112,15 @@ export async function fetchOwnerListings(address: string): Promise<OwnerListings
   const collections = new Map<string, MgCollection>();
   colIds.forEach((id, i) => { const c = cols[i]; if (c) collections.set(id, c); });
 
-  try {
-    const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
-    cachePut(cacheKey, JSON.stringify(payload)); // write-through for the next open of this wallet
-  } catch { /* cache optional */ }
+  // Only cache a NON-empty result. Caching an empty list (a transient MintGarden error or a bad page
+  // size) would poison this wallet with "no NFTs" for the whole TTL. An empty wallet is cheap to
+  // re-check, so skipping the write when there is nothing costs nothing.
+  if (items.length > 0) {
+    try {
+      const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
+      cachePut(cacheKey, JSON.stringify(payload)); // write-through for the next open of this wallet
+    } catch { /* cache optional */ }
+  }
 
   console.log(`[binder-perf] ${short} holdings LIVE in ${Date.now() - t0}ms — paging ${pageMs}ms (${pages}p, ${items.length} nfts), collections ${colMs}ms (${colIds.length})`);
   return { items, collections, truncated };
