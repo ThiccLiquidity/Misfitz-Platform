@@ -157,7 +157,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
     let cursor: string | null | undefined = undefined;
     let pages = 0;
     do {
-      const page: MgPage<MgListItem> = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE).catch(() => ({ items: [], next: null, previous: null }));
+      const page: MgPage<MgListItem> = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true).catch(() => ({ items: [], next: null, previous: null }));
       items.push(...(page.items ?? []));
       cursor = page.next;
       pages += 1;
@@ -243,14 +243,22 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   if (id.startsWith("col1") && !base.cards.some((c) => c.rarityRank != null)) {
     const rarity = await getCollectionFrequency(id).catch(() => null);
     if (rarity && Object.keys(rarity.rankById).length > 0) {
+      // Our ranks run 1..M over the NFTs we could actually rank (traited + successfully fetched). The
+      // tier bands divide rank by the card's display supply, so if M < supply — big collections capped
+      // at 2000, traitless NFTs, or fetch gaps — the largest rank would only reach percentile M/supply
+      // and NOTHING lands in the common band (every count skews rare). Scale each rank to the display
+      // supply so rank/supply is the TRUE percentile within the ranked set and each tier gets its share.
+      const M = Object.keys(rarity.rankById).length;
       cards = base.cards
         .map((c) => {
           const r = rarity.rankById[c.id];
           if (r == null) return c;
+          const supply = c.totalSupply ?? rarity.total;
+          const scaledRank = Math.max(1, Math.min(supply, Math.round(((r - 0.5) / M) * supply)));
           const fairValue = floorXch != null
-            ? estimateFairValue({ floorXch, rarityRank: r, totalSupply: c.totalSupply ?? rarity.total, xchUsdRate })
+            ? estimateFairValue({ floorXch, rarityRank: scaledRank, totalSupply: supply, xchUsdRate })
             : c.fairValue;
-          return { ...c, rarityRank: r, rankEstimated: true, fairValue };
+          return { ...c, rarityRank: scaledRank, rankEstimated: true, fairValue };
         })
         .sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity));
     } else {

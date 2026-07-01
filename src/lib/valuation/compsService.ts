@@ -73,7 +73,7 @@ async function build(colId: string): Promise<CompsModel | null> {
   let supply = 0; // collection size, for rank percentile + rank-distance bandwidth
   let traitFreq: TraitFreq | undefined;
   const built: (({ soldAt: number } & Sale) | null)[] = await pool(recent, CONC, async (s) => {
-    const d = await getNftDetail(s.id).catch(() => null);
+    const d = await getNftDetail(s.id, true).catch(() => null);
     if (!d) return null;
     const col = d.collection as { nft_count?: number; attributes_frequency_counts?: TraitFreq } | undefined;
     if (typeof col?.nft_count === "number" && col.nft_count > supply) supply = col.nft_count;

@@ -62,7 +62,7 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
   const ids: string[] = [];
   let cursor: string | null | undefined = undefined;
   do {
-    const page: MgPage<MgListItem> = await listCollectionNfts(colId, cursor, PAGE).catch(() => ({ items: [], next: null, previous: null }));
+    const page: MgPage<MgListItem> = await listCollectionNfts(colId, cursor, PAGE, true).catch(() => ({ items: [], next: null, previous: null }));
     for (const it of page.items ?? []) { if (ids.length >= MAX_NFTS) break; if (it.id) ids.push(it.id); }
     cursor = page.next;
   } while (cursor && ids.length < MAX_NFTS);
@@ -75,7 +75,7 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
     while (idx < ids.length) {
       const i = idx++;
       const id = ids[i];
-      const d = await getNftDetail(id).catch(() => null);
+      const d = await getNftDetail(id, true).catch(() => null);
       if (!d) continue;
       const traits = mapTraits(d);
       if (traits.length === 0) continue;

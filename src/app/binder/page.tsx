@@ -1,12 +1,13 @@
 import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
-import { getMyHoldingsFast, getDemoHoldings } from "@/lib/portfolio/myHoldings";
+import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
 import { YourBinder } from "@/components/binder/YourBinder";
 import { WalletProfileBar } from "@/components/portfolio/WalletProfileBar";
+import { BinderEmptyState } from "@/components/binder/BinderEmptyState";
 
 // Your Binder — every NFT you own across one OR MANY wallets in a single binder, sorted by rarity,
 // with total value. No login: paste any number of xch1… addresses / did:chia… profile ids (comma-
-// separated in the URL); the WalletProfileBar lets collectors save that set to this device so it
-// auto-loads next time. Falls back to a seeded demo when nothing is entered or saved.
+// separated in the URL); the WalletProfileBar auto-remembers that set on this device so it loads next
+// time. When nothing is entered or saved we show a neutral empty state (no placeholder collection).
 export const dynamic = "force-dynamic";
 
 export default async function BinderPage({ searchParams }: { searchParams: { address?: string } }) {
@@ -18,8 +19,6 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
   const holdings = addresses.length ? await getMyHoldingsFast(addresses) : null;
   const noResults = addresses.length > 0 && (!holdings || holdings.nfts.length === 0);
   const showBinder = holdings && holdings.nfts.length > 0 ? holdings : null;
-  // Demo only when the visitor has entered nothing at all (the bar auto-loads any saved profile).
-  const demo = addresses.length === 0 ? await getDemoHoldings() : null;
 
   return (
     <div className="py-2">
@@ -45,7 +44,9 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
       )}
 
       {showBinder && <YourBinder key={addresses.join(",")} holdings={showBinder} />}
-      {demo && <YourBinder key="demo" holdings={demo} />}
+
+      {/* Neutral empty state when nothing is entered (and no saved profile is auto-loading). */}
+      {addresses.length === 0 && !invalid && <BinderEmptyState />}
     </div>
   );
 }

@@ -14,13 +14,20 @@ const DEFAULT_TIMEOUT_MS = 6_000; // normal responses are <1s; a longer wait mea
 // build turns into 10+. So we (a) start requests at least MIN_GAP_MS apart (caps bursts), and (b) after
 // a 429 pause the WHOLE pool briefly so it stops hammering a limit that's already tripped. Trades a
 // little peak throughput for avoiding the catastrophic death-spiral.
-const MIN_GAP_MS = 45; // ~22 requests/sec ceiling across the whole app
+// Only BACKGROUND bulk scans are rate-limited (they were the source of the 429 death-spiral: thousands
+// of detail fetches for a whole-collection rarity/comps build). Interactive requests — the wallet or
+// collection a user is actively waiting on — fire immediately (respecting only a 429 cooldown), so they
+// are never stuck behind a queue of background work. This is what keeps address pulls snappy.
+const MIN_GAP_MS = 45; // ~22 requests/sec ceiling for background bulk scans
 let _nextStart = 0;
 let _cooldownUntil = 0;
-async function pace(): Promise<void> {
+async function pace(background: boolean): Promise<void> {
   const now = Date.now();
-  const start = Math.max(now, _nextStart, _cooldownUntil);
-  _nextStart = start + MIN_GAP_MS;
+  let start = Math.max(now, _cooldownUntil); // everyone waits out a 429 cooldown
+  if (background) {
+    start = Math.max(start, _nextStart);     // background bulk scans additionally self-throttle
+    _nextStart = start + MIN_GAP_MS;
+  }
   const wait = start - now;
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 }
@@ -38,8 +45,8 @@ export class MintGardenError extends Error {
   }
 }
 
-async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
-  await pace();
+async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS, background = false): Promise<T> {
+  await pace(background);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -66,8 +73,8 @@ async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise
 // Tolerant variant: returns null on any failure (non-200, empty body, bad JSON, timeout) instead
 // of throwing. Used for address holdings, where "this address holds nothing" is a normal, non-error
 // outcome that must NOT surface as "couldn't reach MintGarden".
-async function getJsonOrNull<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T | null> {
-  await pace();
+async function getJsonOrNull<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS, background = false): Promise<T | null> {
+  await pace(background);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -113,7 +120,7 @@ async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Prom
 const NFT_DETAIL_TTL = 10 * 60_000;
 const COLLECTION_TTL = 10 * 60_000;
 
-export function getNftDetail(nftId: string): Promise<MgNftDetail> {
+export function getNftDetail(nftId: string, background = false): Promise<MgNftDetail> {
   return cached(`nft_${nftId}`, NFT_DETAIL_TTL, async () => {
     // L2: our persistent DB cache — once fetched, served from here forever (no MintGarden call).
     const hit = await cachedDetailJson(nftId);
@@ -121,7 +128,7 @@ export function getNftDetail(nftId: string): Promise<MgNftDetail> {
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const d = await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`);
+        const d = await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`, DEFAULT_TIMEOUT_MS, background);
         storeDetailJson(nftId, JSON.stringify(d)); // write-through
         return d;
       } catch (e) {
@@ -133,11 +140,11 @@ export function getNftDetail(nftId: string): Promise<MgNftDetail> {
   });
 }
 
-export function getCollection(collectionId: string): Promise<MgCollection> {
+export function getCollection(collectionId: string, background = false): Promise<MgCollection> {
   return cached(`col_${collectionId}`, COLLECTION_TTL, async () => {
     const hit = await cachedCollectionJson(collectionId);
     if (hit) { try { return JSON.parse(hit) as MgCollection; } catch { /* refetch */ } }
-    const c = await getJson<MgCollection>(`/collections/${encodeURIComponent(collectionId)}`);
+    const c = await getJson<MgCollection>(`/collections/${encodeURIComponent(collectionId)}`, DEFAULT_TIMEOUT_MS, background);
     storeCollectionJson(collectionId, JSON.stringify(c)); // write-through
     return c;
   });
@@ -167,10 +174,11 @@ export function listCollectionNfts(
   collectionId: string,
   cursor?: string | null,
   size = 50,
+  background = false,
 ): Promise<MgPage<MgListItem>> {
   const q = new URLSearchParams({ size: String(size) });
   if (cursor) q.set("page", cursor);
-  return getJson<MgPage<MgListItem>>(`/collections/${encodeURIComponent(collectionId)}/nfts?${q}`);
+  return getJson<MgPage<MgListItem>>(`/collections/${encodeURIComponent(collectionId)}/nfts?${q}`, DEFAULT_TIMEOUT_MS, background);
 }
 
 const EMPTY_PAGE: MgPage<MgListItem> = { items: [], next: null, previous: null };
