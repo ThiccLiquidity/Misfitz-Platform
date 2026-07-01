@@ -37,12 +37,16 @@ const _cache = new Map<string, Entry>();
 // when going multi-instance.)
 const CACHE_DIR = path.join(process.cwd(), ".rarity-cache");
 const DISK_TTL = 30 * 24 * 60 * 60_000;
+// Bump when the ranking ALGORITHM changes so old cache files are ignored + rebuilt. v1 used a
+// percentile estimate that tied many NFTs at the same rank (dozens all "rank #1"); v2 sorts every
+// NFT by score for unique 1..N ranks. Without this bump the stale v1 file keeps serving bad ranks.
+const CACHE_VERSION = 2;
 
 async function readDisk(colId: string): Promise<CollectionFrequency | null> {
   try {
     const raw = await fs.readFile(path.join(CACHE_DIR, `${colId}.json`), "utf8");
-    const j = JSON.parse(raw) as { freq?: CollectionFrequency["freq"]; total?: number; rankById?: Record<string, number>; builtAt?: number };
-    if (j?.freq && typeof j.total === "number" && typeof j.builtAt === "number" && Date.now() - j.builtAt < DISK_TTL) {
+    const j = JSON.parse(raw) as { freq?: CollectionFrequency["freq"]; total?: number; rankById?: Record<string, number>; builtAt?: number; version?: number };
+    if (j?.version === CACHE_VERSION && j?.freq && typeof j.total === "number" && typeof j.builtAt === "number" && Date.now() - j.builtAt < DISK_TTL) {
       return { freq: j.freq, total: j.total, rankById: j.rankById ?? {} };
     }
   } catch { /* no cached file yet */ }
@@ -51,7 +55,7 @@ async function readDisk(colId: string): Promise<CollectionFrequency | null> {
 async function writeDisk(colId: string, v: CollectionFrequency): Promise<void> {
   try {
     await fs.mkdir(CACHE_DIR, { recursive: true });
-    await fs.writeFile(path.join(CACHE_DIR, `${colId}.json`), JSON.stringify({ ...v, builtAt: Date.now() }));
+    await fs.writeFile(path.join(CACHE_DIR, `${colId}.json`), JSON.stringify({ ...v, builtAt: Date.now(), version: CACHE_VERSION }));
   } catch { /* disk unavailable (e.g. read-only FS) — fall back to in-memory only */ }
 }
 

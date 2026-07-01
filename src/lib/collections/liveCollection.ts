@@ -258,7 +258,15 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
           const fairValue = floorXch != null
             ? estimateFairValue({ floorXch, rarityRank: scaledRank, totalSupply: supply, xchUsdRate })
             : c.fairValue;
-          return { ...c, rarityRank: scaledRank, rankEstimated: true, fairValue };
+          // Recompute the deal score now that this (MintGarden-unranked) card finally has a value.
+          // Its deal score was null in buildBaseCollection (no rank yet -> no fairValue), and the comps
+          // path never runs for unranked collections (their comps model needs openrarity_rank), so
+          // WITHOUT this the deal finder shows nothing for exactly these collections.
+          const xchOnly = !!c.listingRequested && c.listingRequested.length === 1 && c.listingRequested[0].code === "XCH";
+          const dealScore = c.listing && c.dexieOfferId && xchOnly && fairValue && c.listing.priceXch > 0
+            ? computeDealScore(fairValue.totalEstimate, c.listing.priceXch)
+            : c.dealScore;
+          return { ...c, rarityRank: scaledRank, rankEstimated: true, fairValue, dealScore };
         })
         .sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity));
     } else {
