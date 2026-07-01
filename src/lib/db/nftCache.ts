@@ -16,6 +16,8 @@ interface CacheDb {
   putDetail(id: string, json: string): void;
   getCollection(id: string): string | null;
   putCollection(id: string, json: string): void;
+  getKv(key: string, ttlMs: number): string | null;
+  putKv(key: string, json: string): void;
 }
 
 // NFT details are near-immutable for our uses (traits/rank/collection/name/image never change; the
@@ -36,6 +38,7 @@ async function open(): Promise<CacheDb | null> {
     db.exec("PRAGMA synchronous = NORMAL");
     db.exec("CREATE TABLE IF NOT EXISTS nft_detail (id TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)");
     db.exec("CREATE TABLE IF NOT EXISTS collection (id TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)");
+    db.exec("CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)");
     const selDetail = db.prepare("SELECT json, fetched_at AS fetchedAt FROM nft_detail WHERE id = ?");
     const upDetail = db.prepare(
       "INSERT INTO nft_detail (id, json, fetched_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at",
@@ -43,6 +46,10 @@ async function open(): Promise<CacheDb | null> {
     const selCol = db.prepare("SELECT json, fetched_at AS fetchedAt FROM collection WHERE id = ?");
     const upCol = db.prepare(
       "INSERT INTO collection (id, json, fetched_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at",
+    );
+    const selKv = db.prepare("SELECT json, fetched_at AS fetchedAt FROM kv WHERE k = ?");
+    const upKv = db.prepare(
+      "INSERT INTO kv (k, json, fetched_at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at",
     );
     const freshJson = (row: unknown, ttl: number): string | null => {
       const r = row as { json?: string; fetchedAt?: number } | undefined;
@@ -54,6 +61,8 @@ async function open(): Promise<CacheDb | null> {
       putDetail: (id, json) => { try { upDetail.run(id, json, Date.now()); } catch { /* ignore */ } },
       getCollection: (id) => { try { return freshJson(selCol.get(id), COLLECTION_TTL_MS); } catch { return null; } },
       putCollection: (id, json) => { try { upCol.run(id, json, Date.now()); } catch { /* ignore */ } },
+      getKv: (key, ttlMs) => { try { return freshJson(selKv.get(key), ttlMs); } catch { return null; } },
+      putKv: (key, json) => { try { upKv.run(key, json, Date.now()); } catch { /* ignore */ } },
     };
   } catch {
     return null; // SQLite unavailable -> no-op cache, app falls back to network
@@ -76,4 +85,13 @@ export async function cachedCollectionJson(id: string): Promise<string | null> {
 }
 export function storeCollectionJson(id: string, json: string): void {
   void cache().then((c) => c?.putCollection(id, json));
+}
+
+// Generic key/value entries (sales lists, the XCH rate, collection slim lists, …). The caller supplies
+// the freshness TTL because each kind of data ages differently.
+export async function cacheGet(key: string, ttlMs: number): Promise<string | null> {
+  return (await cache())?.getKv(key, ttlMs) ?? null;
+}
+export function cachePut(key: string, json: string): void {
+  void cache().then((c) => c?.putKv(key, json));
 }

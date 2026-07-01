@@ -1,4 +1,5 @@
 // Dexie.space v1 API client — live market data for any Chia NFT collection.
+import { cacheGet, cachePut } from "@/lib/db/nftCache";
 //
 // All functions:
 //   • Cache aggressively server-side (module-level TTL map)
@@ -101,6 +102,7 @@ function refreshXchUsdRate(): void {
         if (typeof rate === "number" && rate > 0) {
           _rateValue = rate;
           _rateAt = Date.now();
+          cachePut("xchrate:usd", String(rate)); // persist so a restart doesn't flash the fallback price
         }
       }
     } catch {
@@ -111,7 +113,16 @@ function refreshXchUsdRate(): void {
   })();
 }
 
+let _rateSeeded = false;
 export async function fetchXchUsdRate(): Promise<number | null> {
+  if (!_rateSeeded) {
+    _rateSeeded = true;
+    // Seed the last-known rate from the DB (better than the constant fallback) before CoinGecko answers.
+    void cacheGet("xchrate:usd", 24 * 60 * 60_000).then((j) => {
+      const r = j != null ? Number(j) : NaN;
+      if (Number.isFinite(r) && r > 0 && _rateAt === 0) _rateValue = r;
+    });
+  }
   if (Date.now() - _rateAt > 60_000) refreshXchUsdRate(); // fire-and-forget; do NOT await
   return _rateValue;
 }
@@ -408,6 +419,8 @@ export interface CompletedSale {
 export async function fetchCollectionCompletedSales(colId: string, maxPages = 30): Promise<CompletedSale[]> {
   if (!colId.startsWith("col1")) return [];
   return withCache(`colsales_${colId}`, 30 * 60_000, async () => {
+    const dbHit = await cacheGet(`sales:${colId}`, 30 * 60_000);
+    if (dbHit) { try { return JSON.parse(dbHit) as CompletedSale[]; } catch { /* refetch */ } }
     const byNft = new Map<string, CompletedSale>(); // most-recent sale per NFT (date-desc, first wins)
     const fetchPage = async (page: number): Promise<{ offers: DexieOfferRaw[]; count: number }> => {
       const url = new URL(`${DEXIE_BASE}/offers`);
@@ -446,6 +459,8 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
     } catch {
       /* partial is fine */
     }
-    return [...byNft.values()];
+    const result = [...byNft.values()];
+    cachePut(`sales:${colId}`, JSON.stringify(result)); // persist so a restart doesn't re-page Dexie
+    return result;
   });
 }

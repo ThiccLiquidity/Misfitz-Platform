@@ -4,6 +4,7 @@ import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchC
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
+import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
@@ -140,17 +141,30 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   const floorPromise = resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null);
   const offersPromise = fetchCollectionActiveOffers(id).catch(() => new Map<string, CollectionOffer>());
 
-  const items: MgListItem[] = [];
-  let cursor: string | null | undefined = undefined;
-  let pages = 0;
+  // The slim NFT list is the slow part (sequential cursor paging — 30-70s for a big collection). Persist
+  // it so a restart doesn't re-page the whole collection; refresh window is modest (new mints appear then).
+  let items: MgListItem[] = [];
   let capped = false;
-  do {
-    const page: MgPage<MgListItem> = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE).catch(() => ({ items: [], next: null, previous: null }));
-    items.push(...(page.items ?? []));
-    cursor = page.next;
-    pages += 1;
-    if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
-  } while (cursor);
+  const slimHit = await cacheGet(`slimlist:${id}`, 30 * 60_000);
+  if (slimHit) {
+    try {
+      const parsed = JSON.parse(slimHit) as { items: MgListItem[]; capped: boolean };
+      items = parsed.items ?? [];
+      capped = Boolean(parsed.capped);
+    } catch { /* re-page */ }
+  }
+  if (items.length === 0) {
+    let cursor: string | null | undefined = undefined;
+    let pages = 0;
+    do {
+      const page: MgPage<MgListItem> = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE).catch(() => ({ items: [], next: null, previous: null }));
+      items.push(...(page.items ?? []));
+      cursor = page.next;
+      pages += 1;
+      if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
+    } while (cursor);
+    if (items.length > 0) cachePut(`slimlist:${id}`, JSON.stringify({ items, capped }));
+  }
 
   const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
 
