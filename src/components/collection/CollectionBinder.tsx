@@ -6,6 +6,7 @@ import type { CollectionData, NftData } from "@/types";
 import { BinderView } from "@/components/binder/BinderView";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
+import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatXch, formatUsd, formatXchShort, formatUsdShort } from "@/lib/format";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
@@ -31,6 +32,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [fullLoaded, setFullLoaded] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [indexing, setIndexing] = useState(view.totalSupply > view.nfts.length);
+  const [warming, setWarming] = useState(false);
   const [capped, setCapped] = useState(false);
   const [visible, setVisible] = useState(PAGE);
   const [tier, setTier] = useState<TierFilter>("all");
@@ -48,22 +50,30 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     theme: { accent: "#8b5cf6" }, dexieCollectionId: view.id,
   }), [view, nfts.length]);
 
-  // Pull the entire collection (cached server-side), sorted rarest-first.
+  // Pull the entire collection (cached server-side), sorted rarest-first. While the sales model is
+  // still warming server-side, re-pull a few times so the values/hot-traits sharpen without a manual reload.
   useEffect(() => {
     let cancelled = false;
-    setIndexing(true);
-    fetch(`/api/collection/${view.id}/all`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[] } | null) => {
-        if (cancelled || !data?.nfts?.length) return;
-        setNfts(data.nfts);
-        setCapped(Boolean(data.capped));
-        if (data.hotTraits) setHotTraits(data.hotTraits);
-        setFullLoaded(true);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setIndexing(false); });
-    return () => { cancelled = true; };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let tries = 0;
+    const load = () => {
+      setIndexing(true);
+      fetch(`/api/collection/${view.id}/all`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean } | null) => {
+          if (cancelled || !data?.nfts?.length) return;
+          setNfts(data.nfts);
+          setCapped(Boolean(data.capped));
+          if (data.hotTraits) setHotTraits(data.hotTraits);
+          setWarming(Boolean(data.warming));
+          setFullLoaded(true);
+          if (data.warming && tries < 5) { tries += 1; timer = setTimeout(load, 12_000); }
+        })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setIndexing(false); });
+    };
+    load();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [view.id]);
 
   // ── Filtering + sorting over the WHOLE collection, then render only the visible slice ──
@@ -227,6 +237,10 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
 
   return (
     <div className="py-2">
+      <WorkingIndicator
+        active={indexing || enriching || warming}
+        label={indexing ? "Loading collection…" : enriching ? "Refining rarity & sales…" : "Building sales model…"}
+      />
       {/* Collection header */}
       <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
         <div className="flex items-center gap-4">

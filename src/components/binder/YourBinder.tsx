@@ -10,6 +10,7 @@ import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatUsd, formatXch } from "@/lib/format";
 import type { MyHoldings } from "@/lib/portfolio/myHoldings";
 import { useHiddenCollections } from "@/lib/portfolio/useHiddenCollections";
+import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 
 const SHELL: CollectionData = {
   slug: "my-binder", name: "Your Binder", description: null, bannerUrl: null, iconUrl: null,
@@ -158,6 +159,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
   return (
     <div>
+      <WorkingIndicator active={enriching} label="Reading wallet & refining rarity" progress={progress} />
       {holdings.demo && (
         <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400">
           Demo binder (seeded Misfitz) — sign in or paste an address to see your real collection.

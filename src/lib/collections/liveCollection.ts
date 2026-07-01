@@ -112,6 +112,9 @@ export interface FullCollection {
   // Trait values selling hotter than their prevalence right now (normalized type/value) — feeds the
   // filter bar's 🔥 markers. Empty when comps are cold/disabled.
   hotTraits?: { type: string; value: string; ratio: number }[];
+  // True while the comparable-sales model is still building in the background (values/hot-traits will
+  // sharpen on the next load). Lets the UI show a "warming up" indicator.
+  warming?: boolean;
 }
 
 async function buildBaseCollection(id: string): Promise<BaseCollection> {
@@ -205,11 +208,11 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
 // in the background it appears on the very next request — it is NOT trapped behind the 10-min card cache.
 export async function getAllCollectionCards(id: string): Promise<FullCollection> {
   const base = await buildBaseCollection(id);
-  const result = (cards: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = []) =>
-    ({ nfts: cards, total: cards.length, capped: base.capped, hotTraits });
-  if (!isCompsEnabled()) return result(base.cards);
+  const result = (cards: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) =>
+    ({ nfts: cards, total: cards.length, capped: base.capped, hotTraits, warming });
+  if (!isCompsEnabled()) return result(base.cards, [], false);
   const comps = await getCompsModel(id).catch(() => null);
-  if (!comps) return result(base.cards); // cold model → old values until the background build warms up
+  if (!comps) return result(base.cards, [], true); // cold model → warming; old values until the background build warms up
 
   const { floorXch, xchUsdRate } = base;
   const nfts = base.cards.map((card) => {
@@ -238,5 +241,5 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       valueTraitTop: cv.traitTop ?? null,
     };
   });
-  return result(nfts, comps.hotTraits());
+  return result(nfts, comps.hotTraits(), false);
 }
