@@ -25,7 +25,7 @@ function tokenNum(n: NftData): number {
 export function CollectionBinder({ view }: { view: CollectionView }) {
   // Start with the SSR first page (mint order), then swap to the whole collection sorted rarest-first.
   const [nfts, setNfts] = useState<NftData[]>(view.nfts);
-  const [hotTraitKeys, setHotTraitKeys] = useState<Set<string>>(new Set());
+  const [hotTraits, setHotTraits] = useState<{ type: string; value: string; ratio: number }[]>([]);
   const { mode: themeMode } = useThemeMode();
   const statLight = themeMode === "light";
   const [fullLoaded, setFullLoaded] = useState(false);
@@ -54,11 +54,11 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     setIndexing(true);
     fetch(`/api/collection/${view.id}/all`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string }[] } | null) => {
+      .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[] } | null) => {
         if (cancelled || !data?.nfts?.length) return;
         setNfts(data.nfts);
         setCapped(Boolean(data.capped));
-        if (data.hotTraits) setHotTraitKeys(new Set(data.hotTraits.map((h) => `${h.type}|${h.value}`)));
+        if (data.hotTraits) setHotTraits(data.hotTraits);
         setFullLoaded(true);
       })
       .catch(() => {})
@@ -187,12 +187,31 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     return r;
   }, [nfts]);
 
+  const hotTraitKeys = useMemo(() => new Set(hotTraits.map((h) => `${h.type}|${h.value}`)), [hotTraits]);
+
+  // Map the (lowercased) hot traits back to the real-cased type/value present in the options so a click
+  // applies the exact filter. Keep the strongest handful for a compact, obvious trending row.
+  const trendingTraits = useMemo(() => {
+    const out: { traitType: string; value: string; ratio: number }[] = [];
+    for (const h of hotTraits) {
+      let match: { traitType: string; value: string } | null = null;
+      for (const [tt, vals] of Object.entries(traitOptions)) {
+        if (tt.toLowerCase() !== h.type) continue;
+        const v = vals.find((x) => x.toLowerCase() === h.value);
+        if (v) { match = { traitType: tt, value: v }; break; }
+      }
+      if (match) out.push({ ...match, ratio: h.ratio });
+    }
+    return out.slice(0, 8);
+  }, [hotTraits, traitOptions]);
+
   const sidebarProps = {
     tierFilter: tier, onTierFilter: setTier,
     sort, onSort: setSort,
     traitFilters, onTraitFilter: (t: string, v: string) => setTraitFilters((p) => ({ ...p, [t]: v })),
     traitOptions,
     hotTraitKeys,
+    trendingTraits,
     resultCount: filtered.length, totalCount: nfts.length,
     forSaleOnly,
     onForSaleOnly: (v: boolean) => { setForSaleOnly(v); if (v) setSort("deal-desc"); },

@@ -58,10 +58,12 @@ async function withCache<T>(
 }
 
 // All Dexie / CoinGecko calls go through here. These are awaited server-side while the page renders,
-// and the upstreams have no SLA — without a timeout one slow/stalled response hangs the whole request
+// and the upstreams have no SLA — without a timeout one slow/stalled response hangs the whole request.
+// 12s is generous per-request so we don't drop legitimately-slow listing pages (which would hide some
+// for-sale NFTs); it still guarantees the request can't hang forever.
 // forever (the "endless spinner"). On timeout we abort; the caller's try/catch then falls back to a
 // null/empty result, so the binder still loads (just without that one number) instead of never loading.
-const MARKET_FETCH_TIMEOUT_MS = 6000;
+const MARKET_FETCH_TIMEOUT_MS = 12000;
 async function tfetch(url: string, init?: RequestInit, timeoutMs = MARKET_FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

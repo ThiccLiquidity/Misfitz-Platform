@@ -17,6 +17,7 @@ interface FilterSidebarProps {
   onTraitFilter: (traitType: string, value: string) => void;
   traitOptions: Record<string, string[]>;
   hotTraitKeys?: Set<string>; // "type|value" (lowercase) entries currently in demand -> show 🔥
+  trendingTraits?: { traitType: string; value: string; ratio: number }[]; // clickable hot-trait chips
   resultCount: number;
   totalCount: number;
   /** Sheet mode: no outer container chrome — used when caller wraps in a bottom drawer. */
@@ -157,6 +158,7 @@ export function FilterSidebar({
   traitFilters, onTraitFilter,
   traitOptions,
   hotTraitKeys,
+  trendingTraits,
   resultCount, totalCount,
   sheet = false,
   hideTraits = false,
@@ -193,6 +195,39 @@ export function FilterSidebar({
         backdropFilter: isLight ? "blur(12px)" : undefined,
       }}
     >
+      {/* ── Trending traits (clickable) ────────────────── */}
+      {!hideTraits && trendingTraits && trendingTraits.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: isLight ? "#b45309" : "#f4a940" }}>
+            🔥 Trending traits
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {trendingTraits.map((t) => {
+              const active = (traitFilters[t.traitType] ?? "") === t.value;
+              return (
+                <button
+                  key={`${t.traitType}|${t.value}`}
+                  type="button"
+                  onClick={() => onTraitFilter(t.traitType, active ? "" : t.value)}
+                  title={`${t.traitType}: ${t.value} — selling about ${t.ratio.toFixed(1)}× as often as its share of the collection`}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold transition hover:opacity-90"
+                  style={{
+                    background: active
+                      ? (isLight ? "rgba(180,83,9,0.16)" : "rgba(244,169,64,0.20)")
+                      : (isLight ? "rgba(180,83,9,0.07)" : "rgba(255,255,255,0.05)"),
+                    border: `1px solid ${active ? (isLight ? "#b45309" : "#f4a940") : (isLight ? "rgba(180,83,9,0.30)" : "rgba(255,255,255,0.12)")}`,
+                    color: isLight ? "#7a3d00" : "#ffddab",
+                  }}
+                >
+                  🔥 {t.value}
+                  <span style={{ opacity: 0.55 }}> · {t.traitType}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Marketplace (shop) ─────────────────────────── */}
       {onForSaleOnly && (
         <div className="flex flex-col gap-2">
