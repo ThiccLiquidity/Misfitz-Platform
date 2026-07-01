@@ -1,5 +1,6 @@
 import type { MgCollection, MgNftDetail, MgListItem, MgPage } from "./types";
 import { decodeChiaAddress } from "@/lib/chia/bech32";
+import { cachedDetailJson, storeDetailJson, cachedCollectionJson, storeCollectionJson } from "@/lib/db/nftCache";
 
 // Thin typed HTTP client for the public MintGarden API. No SDK, no auth — just fetch + types.
 // Isolated here so MintGardenDataSource and mappers never touch URLs or transport concerns.
@@ -114,10 +115,15 @@ const COLLECTION_TTL = 10 * 60_000;
 
 export function getNftDetail(nftId: string): Promise<MgNftDetail> {
   return cached(`nft_${nftId}`, NFT_DETAIL_TTL, async () => {
+    // L2: our persistent DB cache — once fetched, served from here forever (no MintGarden call).
+    const hit = await cachedDetailJson(nftId);
+    if (hit) { try { return JSON.parse(hit) as MgNftDetail; } catch { /* corrupt row -> refetch */ } }
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`);
+        const d = await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`);
+        storeDetailJson(nftId, JSON.stringify(d)); // write-through
+        return d;
       } catch (e) {
         lastErr = e;
         await new Promise((r) => setTimeout(r, Math.min(3_000, 400 * 2 ** attempt))); // exp backoff for transient 429s/timeouts
@@ -128,9 +134,13 @@ export function getNftDetail(nftId: string): Promise<MgNftDetail> {
 }
 
 export function getCollection(collectionId: string): Promise<MgCollection> {
-  return cached(`col_${collectionId}`, COLLECTION_TTL, () =>
-    getJson<MgCollection>(`/collections/${encodeURIComponent(collectionId)}`),
-  );
+  return cached(`col_${collectionId}`, COLLECTION_TTL, async () => {
+    const hit = await cachedCollectionJson(collectionId);
+    if (hit) { try { return JSON.parse(hit) as MgCollection; } catch { /* refetch */ } }
+    const c = await getJson<MgCollection>(`/collections/${encodeURIComponent(collectionId)}`);
+    storeCollectionJson(collectionId, JSON.stringify(c)); // write-through
+    return c;
+  });
 }
 
 // Top/trending collections — MintGarden's /collections is sorted by lifetime volume (desc), with a

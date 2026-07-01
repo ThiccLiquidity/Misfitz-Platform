@@ -17,3 +17,4 @@ __write_test__
 # test build output
 .test-build/
 .rarity-cache/
+.cache/
