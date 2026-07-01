@@ -61,3 +61,19 @@ test("recency: a fresh high sale outweighs a stale low one at the same rank", ()
   const m = buildCompsModel(sales, 1000, { floor: 2, rarityFactor: () => 0 });
   assert.ok(m.curveValue(500) >= 15, `expected fresh ~20, got ${m.curveValue(500)}`);
 });
+
+test("rarity-monotone: a cheap deal in a rare band never inverts the tiers (rarer >= less-rare)", () => {
+  // Normal-priced sales across the collection, PLUS two lucky-cheap sales in the rare (low-rank) band.
+  const sales = [];
+  for (let r = 50; r <= 900; r += 50) sales.push({ rank: r, price: (60 / r) * 30 + 6, ageDays: 20 });
+  // Two recent below-market buys at rank ~120 (an "Epic" band) — the kind that used to bend the curve down.
+  sales.push({ rank: 120, price: 7, ageDays: 1 });
+  sales.push({ rank: 125, price: 7.5, ageDays: 1 });
+  const m = buildCompsModel(sales, 1000, { floor: 6, rarityFactor: (p) => (p <= 2 ? 6 : p <= 8 ? 2 : p <= 30 ? 0.4 : 0) });
+  // The rare band (rank ~120) must NOT be valued below a less-rare band (rank ~400/700), despite the cheap sales.
+  assert.ok(m.curveValue(120) >= m.curveValue(400) - 1e-9, `rare(120)=${m.curveValue(120)} should be >= less-rare(400)=${m.curveValue(400)}`);
+  assert.ok(m.curveValue(400) >= m.curveValue(700) - 1e-9, "curve must be non-increasing in rank");
+  // And globally non-increasing across a sweep.
+  let prev = Infinity;
+  for (let r = 1; r <= 1000; r += 25) { const v = m.curveValue(r); assert.ok(v <= prev + 1e-9, `non-increasing at rank ${r}`); prev = v; }
+});

@@ -99,7 +99,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   const scaledBaseAt = (rank: number) => floor + (baseAt(rank) - floor) * globalScale;
 
   // ── Smooth sales fit: Gaussian-kernel weighted mean, blended toward baseline by local support ───
-  function curveValue(rank: number): number {
+  function rawCurveValue(rank: number): number {
     let sw = 0, swv = 0;
     for (const p of points) {
       const d = p.rank - rank;
@@ -111,6 +111,32 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     const base = scaledBaseAt(rank);
     const v = fit != null ? pull * fit + (1 - pull) * base : base;
     return Math.max(floor, v);
+  }
+
+  // ── Rarity-monotone envelope ────────────────────────────────────────────────────────────────────
+  // The raw sales fit can DIP locally: a couple of below-market sales in one rarity band (say a lucky
+  // deal on an Epic) would otherwise price that band UNDER a less-rare band — inverting the tiers. For a
+  // rarity value curve that is wrong: those cheap sales are DEALS (below the curve), not a lower worth.
+  // So we enforce non-increasing-in-rank (a rarer rank is never valued below any less-rare rank) as an
+  // upward envelope over a rank grid — keeping the sales-fit shape but restoring the rarity ordering.
+  const gridRanks: number[] = [];
+  const N = Math.max(1, Math.min(supply, 400));
+  if (N >= 2) for (let i = 0; i < N; i++) gridRanks.push(1 + Math.round((i / (N - 1)) * (supply - 1)));
+  else gridRanks.push(1);
+  for (const p of points) gridRanks.push(Math.round(clamp(p.rank, 1, Math.max(1, supply))));
+  const grid = [...new Set(gridRanks)].sort((a, b) => a - b);            // ascending rank = rarest first
+  const monoVals = grid.map(rawCurveValue);
+  for (let i = monoVals.length - 2; i >= 0; i--) monoVals[i] = Math.max(monoVals[i], monoVals[i + 1]);
+
+  function curveValue(rank: number): number {
+    if (grid.length === 1) return monoVals[0];
+    if (rank <= grid[0]) return monoVals[0];
+    if (rank >= grid[grid.length - 1]) return monoVals[monoVals.length - 1];
+    let lo = 0, hi = grid.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (grid[m] <= rank) lo = m; else hi = m; }
+    const span = grid[hi] - grid[lo] || 1;
+    const t = (rank - grid[lo]) / span;
+    return monoVals[lo] * (1 - t) + monoVals[hi] * t;
   }
   function supportAt(rank: number): number {
     let sw = 0;
