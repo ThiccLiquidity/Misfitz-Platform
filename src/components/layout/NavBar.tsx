@@ -43,7 +43,7 @@ export function NavBar() {
             <Link
               key={l.href}
               href={l.href}
-              className="text-sm font-semibold transition hover:opacity-70"
+              className="inline-flex min-h-[40px] items-center text-sm font-semibold transition hover:opacity-70"
               style={{ color: active ? activeColor : linkColor }}
             >
               {l.label}

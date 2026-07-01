@@ -149,7 +149,7 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
                 type="button"
                 onClick={() => removeWallet(id)}
                 aria-label={`Remove ${id}`}
-                className="text-subtle hover:opacity-70"
+                className="-my-1 -mr-1 flex h-7 w-7 items-center justify-center text-subtle hover:opacity-70"
               >
                 ✕
               </button>

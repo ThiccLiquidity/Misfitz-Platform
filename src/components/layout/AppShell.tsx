@@ -15,7 +15,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div data-theme={mode} style={cssVars as CSSProperties} className="min-h-screen bg-vault-bg text-title">
       {!isLanding && <NavBar />}
-      <main className={isLanding ? "" : "px-4 pt-3 pb-6 md:px-8"}>{children}</main>
+      <main
+        className={isLanding ? "" : "px-4 pt-3 pb-6 md:px-8"}
+        style={isLanding ? undefined : { paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+      >{children}</main>
     </div>
   );
 }

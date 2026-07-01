@@ -6,6 +6,7 @@ import type { CollectionData, NftData } from "@/types";
 import { BinderView } from "@/components/binder/BinderView";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
+import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatXch, formatUsd, formatXchShort, formatUsdShort } from "@/lib/format";
@@ -43,6 +44,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [priceMax, setPriceMax] = useState("");
   const [collectorOnly, setCollectorOnly] = useState(false);
   const [collectorTier, setCollectorTier] = useState(4); // keep collectible badges with tier <= this
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   const SHELL: CollectionData = useMemo(() => ({
     slug: view.id, name: view.name, description: view.description, bannerUrl: view.bannerUrl,
@@ -252,6 +254,10 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     return out.slice(0, 8);
   }, [hotTraits, traitOptions]);
 
+  const activeFilterCount =
+    (tier !== "all" ? 1 : 0) +
+    Object.values(traitFilters).filter((v) => v !== "").length +
+    (forSaleOnly ? 1 : 0) + (collectorOnly ? 1 : 0) + (priceMin || priceMax ? 1 : 0);
   const sidebarProps = {
     tierFilter: tier, onTierFilter: setTier,
     sort, onSort: setSort,
@@ -343,6 +349,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
 
       {/* Mobile */}
       <div className="md:hidden">
+        <div className="mb-2 flex justify-end px-1">
+          <MobileFilterButton onClick={() => setFilterSheetOpen(true)} activeCount={activeFilterCount} />
+        </div>
         <BinderView collection={SHELL} nfts={displayed} hideFullPageLink />
         {displayed.length < filtered.length && (
           <div className="mt-4 flex justify-center">
@@ -353,6 +362,11 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           </div>
         )}
       </div>
+
+      {/* Mobile filter sheet — sort + tier + traits + shop controls (same FilterSidebar as desktop) */}
+      <MobileFilterSheet open={filterSheetOpen} onClose={() => setFilterSheetOpen(false)}>
+        <FilterSidebar {...sidebarProps} sheet />
+      </MobileFilterSheet>
     </div>
   );
 }

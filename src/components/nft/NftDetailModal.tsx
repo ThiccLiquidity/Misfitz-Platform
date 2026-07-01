@@ -58,6 +58,8 @@ export function NftDetailModal({
   const { mode } = useThemeMode();
   const isLight = mode === "light";
   const [lightbox, setLightbox] = useState(false);
+  const [showValueInfo, setShowValueInfo] = useState(false); // tap-to-toggle (touch has no hover)
+  const [expandTrait, setExpandTrait] = useState(false);
   // Market-curve breakdown pieces (multiplicative: estimate = curve × traitMult × collectorMult).
   const curveBase = nft.valueCurve ?? 0;
   const traitMult = typeof nft.valueTraitMult === "number" ? nft.valueTraitMult : 1;
@@ -109,7 +111,7 @@ export function NftDetailModal({
           onClick={onClose}
           type="button"
           aria-label="Close"
-          className="absolute -right-2 -top-2 z-20 rounded-full bg-card-bg px-2 py-1 text-sm text-subtle shadow hover:opacity-70"
+          className="absolute -right-2 -top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-card-bg text-base text-subtle shadow hover:opacity-70"
         >
           ✕
         </button>
@@ -335,14 +337,25 @@ export function NftDetailModal({
             <div className="px-4 py-3">
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: lblColor }}>
                 Where this value comes from
-                <span
-                  title="How Value Is Estimated — Value is estimated using a market pricing curve anchored to the current floor price and shaped by recent sales across the collection. Trait demand and collector premiums are then applied to reflect current buyer interest."
-                  className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-black"
+                <button
+                  type="button"
+                  onClick={() => setShowValueInfo((v) => !v)}
+                  aria-label="How value is estimated"
+                  aria-expanded={showValueInfo}
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black"
                   style={{ border: `1px solid ${lblColor}`, color: lblColor }}
                 >
                   i
-                </span>
+                </button>
               </div>
+              {showValueInfo && (
+                <p className="mb-2 rounded-lg px-3 py-2 text-[11px] leading-snug" style={{ color: subColor, background: isLight ? "rgba(10,30,80,0.05)" : "rgba(255,255,255,0.04)", border: `1px solid ${divider}` }}>
+                  <span className="font-bold" style={{ color: lblColor }}>How value is estimated — </span>
+                  Value is estimated using a market pricing curve anchored to the current floor price and
+                  shaped by recent sales across the collection. Trait demand and collector premiums are then
+                  applied to reflect current buyer interest.
+                </p>
+              )}
 
               {nft.valueCurve != null ? (
                 <>
@@ -352,13 +365,15 @@ export function NftDetailModal({
                   </div>
                   {traitEffect >= 0.005 && (
                     <div className="flex items-baseline justify-between gap-2 py-1" style={{ borderBottom: `1px solid ${divider}` }}>
-                      <span
-                        className="min-w-0 truncate text-xs"
+                      <button
+                        type="button"
+                        onClick={() => setExpandTrait((v) => !v)}
+                        className={`min-w-0 text-left text-xs ${expandTrait ? "whitespace-normal break-words" : "truncate"}`}
                         style={{ color: subColor }}
                         title={hotTraitLabel(nft.valueTraitTop) ? `Trait demand · ${hotTraitLabel(nft.valueTraitTop)}` : "Trait demand"}
                       >
                         Trait demand{hotTraitLabel(nft.valueTraitTop) ? ` · \uD83D\uDD25 ${hotTraitLabel(nft.valueTraitTop)}` : ""}
-                      </span>
+                      </button>
                       <span className="shrink-0 text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
                     </div>
                   )}

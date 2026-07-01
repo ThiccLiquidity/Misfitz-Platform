@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Righteous, Inter } from "next/font/google";
 import "./globals.css";
 import { SessionProviderWrapper } from "@/components/auth/SessionProviderWrapper";
@@ -19,6 +19,18 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 export const metadata: Metadata = {
   title: "Traitfolio — The home of digital collecting",
   description: "Traitfolio — track your Chia NFT collections, discover new ones, and flex what you own. Built for collectors.",
+};
+
+// Explicit mobile viewport. viewportFit:"cover" lets us honour iOS safe-area insets; themeColor tints
+// the mobile browser chrome to match our dark/light shells.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0a0602" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

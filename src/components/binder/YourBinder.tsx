@@ -11,6 +11,7 @@ import { formatUsd, formatXch } from "@/lib/format";
 import type { MyHoldings } from "@/lib/portfolio/myHoldings";
 import { useHiddenCollections } from "@/lib/portfolio/useHiddenCollections";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
+import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
 
 const SHELL: CollectionData = {
   slug: "my-binder", name: "Your Binder", description: null, bannerUrl: null, iconUrl: null,
@@ -30,6 +31,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [tier, setTier] = useState<TierFilter>("all");
   const [sort, setSort] = useState<SortKey>("rank-asc");
   const [traitFilters, setTraitFilters] = useState<TraitFilters>({});
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const { hidden, toggle: toggleHidden, clear: clearHidden } = useHiddenCollections();
 
   // Progressive loading: the page hands us a FAST binder (list + per-collection metadata). Once
@@ -155,6 +157,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     hideTraits: !oneCollection,
   };
 
+  const activeFilterCount = (tier !== "all" ? 1 : 0) + Object.values(traitFilters).filter((v) => v !== "").length;
   const binderKey = `${collectionId}|${tier}|${sort}|${JSON.stringify(traitFilters)}`;
 
   return (
@@ -211,28 +214,21 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         />
       </div>
 
-      {/* Mobile: collection + sort, then binder */}
+      {/* Mobile: collection picker + Filters button (sort/tier/traits live in the sheet), then binder */}
       <div className="flex flex-col gap-2 md:hidden">
         <div className="flex gap-2">
           <select
             value={collectionId}
             onChange={(e) => pickCollection(e.target.value)}
-            className="text-title flex-1 rounded-lg border border-white/15 bg-card-bg px-3 py-2 text-xs font-semibold outline-none"
+            className="text-title min-w-0 flex-1 rounded-lg border border-white/15 bg-card-bg px-3 text-xs font-semibold outline-none"
+            style={{ minHeight: 40 }}
           >
             <option value="all">All collections ({visibleNfts.length})</option>
             {visibleCollections.map((c) => (
               <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
             ))}
           </select>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            className="text-title flex-1 rounded-lg border border-white/15 bg-card-bg px-3 py-2 text-xs font-semibold outline-none"
-          >
-            <option value="rank-asc">Rarest first</option>
-            <option value="rank-desc">Most common first</option>
-            <option value="deal-desc">Best deals first</option>
-          </select>
+          <MobileFilterButton onClick={() => setFilterSheetOpen(true)} activeCount={activeFilterCount} />
         </div>
         {hidden.size > 0 && (
           <button
@@ -245,6 +241,11 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         )}
         <BinderView key={`m-${binderKey}`} collection={SHELL} nfts={filtered} hideFullPageLink />
       </div>
+
+      {/* Mobile filter sheet — tier + traits + sort (same FilterSidebar as desktop, in a bottom sheet) */}
+      <MobileFilterSheet open={filterSheetOpen} onClose={() => setFilterSheetOpen(false)}>
+        <FilterSidebar {...sidebarProps} sheet />
+      </MobileFilterSheet>
     </div>
   );
 }
