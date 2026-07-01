@@ -50,24 +50,53 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     theme: { accent: "#8b5cf6" }, dexieCollectionId: view.id,
   }), [view, nfts.length]);
 
-  // Pull the entire collection (cached server-side), sorted rarest-first. While the sales model is
-  // still warming server-side, re-pull a few times so the values/hot-traits sharpen without a manual reload.
+  // Pull the entire collection (cached server-side), sorted rarest-first. The FIRST load sets the list;
+  // while the sales model is still warming we re-poll with BACKOFF and MERGE the refreshed values into the
+  // existing cards (never a full replace) — so enriched traits aren't discarded and the grid/filter bar
+  // don't churn. Hot-traits only update when they actually change (and never shrink to empty once shown),
+  // which is what stops the trending section flickering in and out.
+  const firstAllLoadRef = useRef(true);
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let tries = 0;
+    const hotKey = (h: { type: string; value: string; ratio: number }[]) => h.map((x) => `${x.type}|${x.value}`).join(",");
     const load = () => {
       setIndexing(true);
       fetch(`/api/collection/${view.id}/all`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean } | null) => {
           if (cancelled || !data?.nfts?.length) return;
-          setNfts(data.nfts);
+          if (firstAllLoadRef.current) {
+            firstAllLoadRef.current = false;
+            setNfts(data.nfts);
+          } else {
+            const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
+            setNfts((prev) => prev.map((card) => {
+              const fresh = byId.get(card.launcherId);
+              if (!fresh) return card;
+              // Refresh the (warmed) value/rank; KEEP the enriched traits + Dexie listing already on the card.
+              return {
+                ...card,
+                rarityRank: card.rarityRank ?? fresh.rarityRank,
+                rankEstimated: card.rarityRank != null ? card.rankEstimated : fresh.rankEstimated,
+                fairValue: fresh.fairValue ?? card.fairValue,
+                valueBasis: fresh.valueBasis ?? card.valueBasis,
+                valueConfidence: fresh.valueConfidence ?? card.valueConfidence,
+                valueCurve: fresh.valueCurve ?? card.valueCurve,
+                valueTraitMult: fresh.valueTraitMult ?? card.valueTraitMult,
+                valueTraitTop: fresh.valueTraitTop ?? card.valueTraitTop,
+              };
+            }));
+          }
           setCapped(Boolean(data.capped));
-          if (data.hotTraits) setHotTraits(data.hotTraits);
+          if (data.hotTraits && data.hotTraits.length > 0) {
+            setHotTraits((prev) => (hotKey(prev) === hotKey(data.hotTraits!) ? prev : data.hotTraits!));
+          }
           setWarming(Boolean(data.warming));
           setFullLoaded(true);
-          if (data.warming && tries < 24) { tries += 1; timer = setTimeout(load, 15_000); }
+          // Backoff instead of a fixed 15s x 24: ~20s, 34s, 58s, 60s… a few times, then stop.
+          if (data.warming && tries < 6) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); }
         })
         .catch(() => {})
         .finally(() => { if (!cancelled) setIndexing(false); });
