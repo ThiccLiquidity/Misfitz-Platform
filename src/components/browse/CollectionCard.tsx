@@ -4,12 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import type { CollectionSummary } from "@/types";
 import { formatXch } from "@/lib/format";
+import { memo } from "react";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // One collection tile on the /browse discovery grid. Tapping it opens the live collection binder.
 // Light mode gets a solid white card + sky-blue border (the old white/3 glass vanished on the light
 // page); dark mode keeps the glassy look.
-export function CollectionCard({ c }: { c: CollectionSummary }) {
+function CollectionCardImpl({ c }: { c: CollectionSummary }) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
   return (
@@ -52,3 +53,7 @@ export function CollectionCard({ c }: { c: CollectionSummary }) {
     </Link>
   );
 }
+
+// Memoized: browse grid tiles only re-render when their collection data changes (e.g. not on every
+// keystroke in the search box, which re-renders the parent).
+export const CollectionCard = memo(CollectionCardImpl);
