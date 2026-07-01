@@ -72,7 +72,7 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
     return (
       <div className="mx-2 mb-4 flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: cardBg, border: cardBorder }}>
         <div className="h-5 w-5 shrink-0 animate-spin rounded-full" style={{ border: "2px solid var(--card-border)", borderTopColor: "transparent" }} />
-        <span className="text-sm text-subtle">Loading your binder\u2026</span>
+        <span className="text-sm text-subtle">Loading your binder…</span>
       </div>
     );
   }

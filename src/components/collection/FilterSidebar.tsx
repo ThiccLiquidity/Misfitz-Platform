@@ -195,6 +195,31 @@ export function FilterSidebar({
         backdropFilter: isLight ? "blur(12px)" : undefined,
       }}
     >
+      {/* ── Sort (prominent, top) ──────────────────────── */}
+      <div className="flex flex-col gap-1.5">
+        <label
+          className="text-[11px] font-black uppercase tracking-widest"
+          style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.82)" }}
+        >
+          Sort by
+        </label>
+        <select
+          value={sort}
+          onChange={(e) => onSort(e.target.value as SortKey)}
+          style={{
+            ...selectStyle(isLight),
+            padding: "9px 10px",
+            fontSize: 13,
+            fontWeight: 700,
+            border: isLight ? "1.5px solid rgba(60,120,220,0.65)" : "1.5px solid rgba(140,160,255,0.5)",
+          }}
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
       {/* ── Trending traits (clickable) ────────────────── */}
       {!hideTraits && trendingTraits && trendingTraits.length > 0 && (
         <div className="flex flex-col gap-1.5">
@@ -371,25 +396,6 @@ export function FilterSidebar({
         </div>
       </div>
       )}
-
-      {/* ── Sort ───────────────────────────────────────── */}
-      <div className="flex flex-col gap-1">
-        <label
-          className="text-[10px] font-black uppercase tracking-widest"
-          style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.7)" }}
-        >
-          Sort
-        </label>
-        <select
-          value={sort}
-          onChange={(e) => onSort(e.target.value as SortKey)}
-          style={selectStyle(isLight)}
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
 
       {/* ── Footer ─────────────────────────────────────── */}
       <div

@@ -246,19 +246,20 @@ export function NftDetailModal({
           {/* What the buyer must give — full breakdown (XCH + any CATs), with the CAT warning */}
           {nft.listing && (nft.listingRequested?.length ?? 0) > 0 && (
             <div
-              className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px] leading-snug"
+              className="mx-4 mt-3 rounded-lg px-3 py-3 text-center"
               style={{ border: `1px solid ${divider}`, background: isLight ? "rgba(10,30,80,0.04)" : "rgba(255,255,255,0.03)" }}
             >
-              <span className="font-bold uppercase tracking-widest" style={{ color: lblColor }}>You pay</span>
-              <div className="mt-1 flex flex-wrap gap-x-3" style={{ color: subColor }}>
+              <div className="text-[11px] font-bold uppercase tracking-widest" style={{ color: lblColor }}>You pay</div>
+              <div className="mt-1.5 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1">
                 {nft.listingRequested!.map((r) => (
-                  <span key={r.code}>
-                    <span className="font-semibold" style={{ color: valColor }}>{r.amount}</span> {r.code}
+                  <span key={r.code} className="inline-flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black leading-none" style={{ color: valColor }}>{r.amount}</span>
+                    <span className="text-xs font-semibold" style={{ color: subColor }}>{r.code}</span>
                   </span>
                 ))}
               </div>
               {(nft.listingAssets ?? []).some((a) => a !== "XCH") && (
-                <div className="mt-1.5 text-amber-300">
+                <div className="mt-2 text-[11px] leading-snug text-amber-300">
                   ⚠ This offer ALSO requires the CAT token(s) above — the{" "}
                   <span className="font-bold">{formatXch(nft.listing.priceXch)}</span> is only the XCH part of the price.
                   We don&apos;t value CATs, so no deal score is shown; check the full offer on Dexie before buying.
@@ -351,7 +352,11 @@ export function NftDetailModal({
                   </div>
                   {traitEffect >= 0.005 && (
                     <div className="flex items-baseline justify-between gap-2 py-1" style={{ borderBottom: `1px solid ${divider}` }}>
-                      <span className="min-w-0 truncate text-xs" style={{ color: subColor }}>
+                      <span
+                        className="min-w-0 truncate text-xs"
+                        style={{ color: subColor }}
+                        title={hotTraitLabel(nft.valueTraitTop) ? `Trait demand · ${hotTraitLabel(nft.valueTraitTop)}` : "Trait demand"}
+                      >
                         Trait demand{hotTraitLabel(nft.valueTraitTop) ? ` · \uD83D\uDD25 ${hotTraitLabel(nft.valueTraitTop)}` : ""}
                       </span>
                       <span className="shrink-0 text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>

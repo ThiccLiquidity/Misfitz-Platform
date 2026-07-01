@@ -1,4 +1,5 @@
 import { listAddressNfts, getNftDetail, getCollection } from "./client";
+import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { isDisplayableNft } from "./map";
 import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 
@@ -69,7 +70,22 @@ export interface OwnerListings {
   truncated: boolean;
 }
 
+// Holdings change only when the collector buys/sells, so a short DB cache makes re-opening the same
+// wallet (or a saved multi-wallet profile) near-instant without going stale for long. Keyed by the
+// normalized owner id. This is the per-user hot path the indexer plan (Phase 1) set out to cover.
+const HOLDINGS_TTL = 10 * 60_000;
+interface CachedListings { items: MgListItem[]; collections: [string, MgCollection][]; truncated: boolean }
+
 export async function fetchOwnerListings(address: string): Promise<OwnerListings> {
+  const cacheKey = `holdings:${address.trim().toLowerCase()}`;
+  try {
+    const hit = await cacheGet(cacheKey, HOLDINGS_TTL);
+    if (hit) {
+      const c = JSON.parse(hit) as CachedListings;
+      return { items: c.items, collections: new Map(c.collections), truncated: c.truncated };
+    }
+  } catch { /* cache miss / unavailable -> fetch live */ }
+
   const items: MgListItem[] = [];
   let cursor: string | null | undefined = undefined;
   let truncated = false;
@@ -86,6 +102,11 @@ export async function fetchOwnerListings(address: string): Promise<OwnerListings
   const cols = await mapPool(colIds, 8, (id) => getCollection(id).catch(() => null));
   const collections = new Map<string, MgCollection>();
   colIds.forEach((id, i) => { const c = cols[i]; if (c) collections.set(id, c); });
+
+  try {
+    const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
+    cachePut(cacheKey, JSON.stringify(payload)); // write-through for the next open of this wallet
+  } catch { /* cache optional */ }
 
   return { items, collections, truncated };
 }

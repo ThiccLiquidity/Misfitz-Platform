@@ -7,7 +7,7 @@ function Shimmer({ className = "" }: { className?: string }) {
   return (
     <div
       className={`animate-pulse rounded-lg ${className}`}
-      style={{ background: "var(--card-border)", opacity: 0.16 }}
+      style={{ background: "rgba(128,128,128,0.18)" }}
     />
   );
 }

@@ -92,9 +92,17 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
   if (perNft.length === 0) return null; // no traits anywhere -> nothing to rank by
 
   // Now that we have the whole-collection frequency table, score + rank every NFT ourselves.
-  const estimator = buildRankEstimator(freq, ids.length);
+  // IMPORTANT: rank by SORTING all NFTs by rarity score (rarest first) and assigning sequential 1..N
+  // ranks. The estimator's percentile-based rankOf() ties many NFTs at the same rank (they share trait
+  // combos), which made the tier COUNTS nonsensical (rare/uncommon bigger than common, too many mythic).
+  // A proper sort gives a clean 1..N spread, so each tier band gets its correct share.
+  const estimator = buildRankEstimator(freq, perNft.length);
   const rankById: Record<string, number> = {};
-  if (estimator) for (const n of perNft) rankById[n.id] = estimator.rankOf(n.traits);
+  if (estimator) {
+    const scored = perNft.map((nft) => ({ id: nft.id, score: estimator.scoreOf(nft.traits) }));
+    scored.sort((a, b) => b.score - a.score); // highest score = rarest = rank 1
+    scored.forEach((entry, i) => { rankById[entry.id] = i + 1; });
+  }
 
   const result: CollectionFrequency = { freq, total: ids.length, rankById };
   await writeDisk(colId, result); // persist so the slow scan happens exactly once, ever

@@ -1,6 +1,6 @@
 // Instant skeleton while /browse server-renders the trending collections. Theme-aware.
 function Shimmer({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse ${className}`} style={{ background: "var(--card-border)", opacity: 0.16 }} />;
+  return <div className={`animate-pulse ${className}`} style={{ background: "rgba(128,128,128,0.18)" }} />;
 }
 
 export default function BrowseLoading() {

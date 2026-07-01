@@ -1,7 +1,9 @@
 // Instant skeleton while the live collection page server-renders (collection meta + first cards +
 // floor). Theme-aware so it reads in light and dark. Keeps navigation feeling immediate.
 function Shimmer({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse ${className}`} style={{ background: "var(--card-border)", opacity: 0.16 }} />;
+  // Neutral gray (not the gold --card-border) so the skeleton reads as a plain placeholder in both
+  // themes instead of flashing "golden squares" that look like the collection's branded border.
+  return <div className={`animate-pulse ${className}`} style={{ background: "rgba(128,128,128,0.18)" }} />;
 }
 
 export default function CollectionLoading() {
