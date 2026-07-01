@@ -9,7 +9,7 @@ import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 // thousands of requests; the caller is told when results were truncated.
 
 export const MAX_HOLDINGS = 120;
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 120; // one round-trip for a typical wallet (was 50 = up to 3 sequential pages)
 const DETAIL_CONCURRENCY = 12;
 
 // Minimal concurrency pool — runs `worker` over `items`, at most `limit` in flight.
@@ -77,11 +77,14 @@ const HOLDINGS_TTL = 10 * 60_000;
 interface CachedListings { items: MgListItem[]; collections: [string, MgCollection][]; truncated: boolean }
 
 export async function fetchOwnerListings(address: string): Promise<OwnerListings> {
+  const t0 = Date.now();
+  const short = `${address.slice(0, 8)}…${address.slice(-4)}`;
   const cacheKey = `holdings:${address.trim().toLowerCase()}`;
   try {
     const hit = await cacheGet(cacheKey, HOLDINGS_TTL);
     if (hit) {
       const c = JSON.parse(hit) as CachedListings;
+      console.log(`[binder-perf] ${short} holdings CACHE HIT in ${Date.now() - t0}ms (${c.items.length} nfts, ${c.collections.length} cols)`);
       return { items: c.items, collections: new Map(c.collections), truncated: c.truncated };
     }
   } catch { /* cache miss / unavailable -> fetch live */ }
@@ -89,17 +92,23 @@ export async function fetchOwnerListings(address: string): Promise<OwnerListings
   const items: MgListItem[] = [];
   let cursor: string | null | undefined = undefined;
   let truncated = false;
+  let pages = 0;
+  const tPage = Date.now();
   do {
     const page = await listAddressNfts(address, cursor, PAGE_SIZE);
+    pages += 1;
     for (const item of page.items) {
       if (items.length >= MAX_HOLDINGS) { truncated = true; break; }
       if (isDisplayableNft({ is_blocked: item.is_blocked, blocked_content: item.collection_blocked_content })) items.push(item);
     }
     cursor = page.next;
   } while (cursor && items.length < MAX_HOLDINGS);
+  const pageMs = Date.now() - tPage;
 
   const colIds = Array.from(new Set(items.map((i) => i.collection_id)));
+  const tCol = Date.now();
   const cols = await mapPool(colIds, 8, (id) => getCollection(id).catch(() => null));
+  const colMs = Date.now() - tCol;
   const collections = new Map<string, MgCollection>();
   colIds.forEach((id, i) => { const c = cols[i]; if (c) collections.set(id, c); });
 
@@ -108,5 +117,6 @@ export async function fetchOwnerListings(address: string): Promise<OwnerListings
     cachePut(cacheKey, JSON.stringify(payload)); // write-through for the next open of this wallet
   } catch { /* cache optional */ }
 
+  console.log(`[binder-perf] ${short} holdings LIVE in ${Date.now() - t0}ms — paging ${pageMs}ms (${pages}p, ${items.length} nfts), collections ${colMs}ms (${colIds.length})`);
   return { items, collections, truncated };
 }

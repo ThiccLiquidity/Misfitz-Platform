@@ -20,10 +20,19 @@ const DEFAULT_TIMEOUT_MS = 6_000; // normal responses are <1s; a longer wait mea
 // are never stuck behind a queue of background work. This is what keeps address pulls snappy.
 const MIN_GAP_MS = 45; // ~22 requests/sec ceiling for background bulk scans
 let _nextStart = 0;
-let _cooldownUntil = 0;
+// SEPARATE 429 cooldowns for background vs interactive. A whole-collection background scan trips
+// MintGarden's rate limit routinely; if that pushed a SHARED cooldown, the user's wallet/collection
+// (interactive) requests would stall behind it — which is exactly the "wallet load is slow after I
+// visited a collection" regression. So a background 429 only slows background work; interactive
+// requests keep their own (rarely-set) cooldown and stay snappy.
+let _bgCooldownUntil = 0;
+let _fgCooldownUntil = 0;
 async function pace(background: boolean): Promise<void> {
   const now = Date.now();
-  let start = Math.max(now, _cooldownUntil); // everyone waits out a 429 cooldown
+  // Interactive respects only its own cooldown; background respects both (if an interactive call got
+  // 429'd, background should ease off too).
+  const cooldown = background ? Math.max(_bgCooldownUntil, _fgCooldownUntil) : _fgCooldownUntil;
+  let start = Math.max(now, cooldown);
   if (background) {
     start = Math.max(start, _nextStart);     // background bulk scans additionally self-throttle
     _nextStart = start + MIN_GAP_MS;
@@ -31,8 +40,9 @@ async function pace(background: boolean): Promise<void> {
   const wait = start - now;
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 }
-function noteRateLimited(): void {
-  _cooldownUntil = Math.max(_cooldownUntil, Date.now() + 1_500); // collective breather after a 429
+function noteRateLimited(background: boolean): void {
+  if (background) _bgCooldownUntil = Math.max(_bgCooldownUntil, Date.now() + 1_500);
+  else _fgCooldownUntil = Math.max(_fgCooldownUntil, Date.now() + 1_500);
 }
 
 export class MintGardenError extends Error {
@@ -55,7 +65,7 @@ async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS, backgrou
       signal: controller.signal,
     });
     if (!res.ok) {
-      if (res.status === 429) noteRateLimited();
+      if (res.status === 429) noteRateLimited(background);
       throw new MintGardenError(`MintGarden ${path} -> HTTP ${res.status}`, res.status);
     }
     return (await res.json()) as T;
@@ -79,7 +89,7 @@ async function getJsonOrNull<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS, ba
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${BASE}${path}`, { headers: { accept: "application/json" }, signal: controller.signal });
-    if (!res.ok) { if (res.status === 429) noteRateLimited(); return null; }
+    if (!res.ok) { if (res.status === 429) noteRateLimited(background); return null; }
     const text = await res.text();
     if (!text) return null;
     return JSON.parse(text) as T;

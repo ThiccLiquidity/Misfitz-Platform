@@ -92,6 +92,7 @@ export async function getMyHoldingsFull(addresses: string[]): Promise<MyHoldings
 // cheapest current listing among holdings) so values are consistent from the first paint.
 export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings> {
   if (addresses.length === 0) return EMPTY;
+  const t0 = Date.now();
 
   const [rate, ...owners] = await Promise.all([
     fetchXchUsdRate(),
@@ -148,6 +149,7 @@ export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings
     return { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
   });
 
+  console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
   return summarize(nfts, xchUsdRate, addresses, truncated, false);
 }
 
