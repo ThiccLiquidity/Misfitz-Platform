@@ -188,21 +188,9 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <div className="text-subtle mt-1 text-xs">
             {visibleCollections.length} collection{visibleCollections.length === 1 ? "" : "s"}{holdings.truncated ? " · capped" : ""}
           </div>
-          {enriching && (
-            <div className="mt-1 text-[11px] text-violet-300/90">Refining rarity… {Math.round(progress * 100)}%</div>
-          )}
         </div>
       </div>
 
-      {/* Enrichment progress bar — fills as per-NFT traits + ranks stream in */}
-      {enriching && (
-        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full transition-[width] duration-300 ease-out"
-            style={{ width: `${Math.round(progress * 100)}%`, background: "linear-gradient(90deg, #8b5cf6, #ec4899)" }}
-          />
-        </div>
-      )}
 
       {/* Full-width tier stats bar */}
       <TierStatsBar collection={SHELL} nfts={scoped} />

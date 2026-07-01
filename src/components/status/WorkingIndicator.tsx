@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // A consistent, always-visible "the site is working" pill. Fixed to the bottom-right so it shows on
@@ -17,9 +18,18 @@ export function WorkingIndicator({
 }) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
-  if (!active) return null;
+  // Linger briefly after work stops so the quick gaps BETWEEN enrichment batches don't flicker the pill
+  // in and out. The last label/progress are held during the linger.
+  const [visible, setVisible] = useState(active);
+  const [shown, setShown] = useState({ label, progress });
+  useEffect(() => {
+    if (active) { setVisible(true); setShown({ label, progress }); return; }
+    const t = setTimeout(() => setVisible(false), 800);
+    return () => clearTimeout(t);
+  }, [active, label, progress]);
+  if (!visible) return null;
 
-  const pct = typeof progress === "number" ? Math.round(Math.max(0, Math.min(1, progress)) * 100) : null;
+  const pct = typeof shown.progress === "number" ? Math.round(Math.max(0, Math.min(1, shown.progress)) * 100) : null;
 
   return (
     <div
@@ -38,7 +48,7 @@ export function WorkingIndicator({
         style={{ border: `2px solid ${isLight ? "rgba(41,128,200,0.35)" : "rgba(240,192,64,0.35)"}`, borderTopColor: "transparent" }}
       />
       <span className="whitespace-nowrap">
-        {label}
+        {shown.label}
         {pct !== null ? ` · ${pct}%` : ""}
       </span>
     </div>

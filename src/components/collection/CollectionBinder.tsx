@@ -286,18 +286,6 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         </div>
       </div>
 
-      {(indexing || enriching) && (
-        <div className="mb-4">
-          <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="text-title font-semibold">
-              {indexing
-                ? `Loading all ${view.totalSupply.toLocaleString()} NFTs + live sale data…`
-                : "Loading rarity, traits & deal scores…"}
-            </span>
-          </div>
-          <div className="tf-loadbar"><div className="tf-loadbar-fill" /></div>
-        </div>
-      )}
 
       <TierStatsBar collection={SHELL} nfts={nfts} />
 
