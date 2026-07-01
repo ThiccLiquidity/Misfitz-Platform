@@ -5,7 +5,27 @@ import { decodeChiaAddress } from "@/lib/chia/bech32";
 // Isolated here so MintGardenDataSource and mappers never touch URLs or transport concerns.
 
 const BASE = process.env.MINTGARDEN_API_BASE ?? "https://api.mintgarden.io";
-const DEFAULT_TIMEOUT_MS = 12_000;
+const DEFAULT_TIMEOUT_MS = 6_000; // normal responses are <1s; a longer wait means throttled/stuck — give up sooner
+
+// ── Global request pacing ───────────────────────────────────────────────────────────────────────
+// MintGarden's public data API is rate-limited. With many pooled workers firing at once we trip the
+// limit and get 429s — and if every request then retries immediately into another 429, a 2-minute
+// build turns into 10+. So we (a) start requests at least MIN_GAP_MS apart (caps bursts), and (b) after
+// a 429 pause the WHOLE pool briefly so it stops hammering a limit that's already tripped. Trades a
+// little peak throughput for avoiding the catastrophic death-spiral.
+const MIN_GAP_MS = 45; // ~22 requests/sec ceiling across the whole app
+let _nextStart = 0;
+let _cooldownUntil = 0;
+async function pace(): Promise<void> {
+  const now = Date.now();
+  const start = Math.max(now, _nextStart, _cooldownUntil);
+  _nextStart = start + MIN_GAP_MS;
+  const wait = start - now;
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+}
+function noteRateLimited(): void {
+  _cooldownUntil = Math.max(_cooldownUntil, Date.now() + 1_500); // collective breather after a 429
+}
 
 export class MintGardenError extends Error {
   constructor(
@@ -18,6 +38,7 @@ export class MintGardenError extends Error {
 }
 
 async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+  await pace();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -26,6 +47,7 @@ async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise
       signal: controller.signal,
     });
     if (!res.ok) {
+      if (res.status === 429) noteRateLimited();
       throw new MintGardenError(`MintGarden ${path} -> HTTP ${res.status}`, res.status);
     }
     return (await res.json()) as T;
@@ -44,11 +66,12 @@ async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise
 // of throwing. Used for address holdings, where "this address holds nothing" is a normal, non-error
 // outcome that must NOT surface as "couldn't reach MintGarden".
 async function getJsonOrNull<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T | null> {
+  await pace();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${BASE}${path}`, { headers: { accept: "application/json" }, signal: controller.signal });
-    if (!res.ok) return null;
+    if (!res.ok) { if (res.status === 429) noteRateLimited(); return null; }
     const text = await res.text();
     if (!text) return null;
     return JSON.parse(text) as T;
@@ -97,7 +120,7 @@ export function getNftDetail(nftId: string): Promise<MgNftDetail> {
         return await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`);
       } catch (e) {
         lastErr = e;
-        await new Promise((r) => setTimeout(r, 250 * (attempt + 1))); // backoff for transient 429s/timeouts
+        await new Promise((r) => setTimeout(r, Math.min(3_000, 400 * 2 ** attempt))); // exp backoff for transient 429s/timeouts
       }
     }
     throw lastErr;

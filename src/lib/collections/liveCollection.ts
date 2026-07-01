@@ -1,6 +1,6 @@
 import { getCollection, listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
@@ -40,6 +40,17 @@ async function resolveCollectionFloorXch(id: string, mgFloor: number | null): Pr
   return null;
 }
 
+// Non-blocking floor for SSR first paint: use the cached Dexie floor if warm, else MintGarden's floor,
+// else the cached sale floor — never awaits the network. The exact Dexie floor lands via /all shortly
+// after. Keeps the collection page painting in ~1-2s instead of waiting on Dexie.
+function resolveCollectionFloorXchWarm(id: string, mgFloor: number | null): number | null {
+  const dexie = fetchCollectionFloorWarm(id);
+  if (typeof dexie === "number") return dexie;
+  if (mgFloor !== null) return mgFloor;
+  const sale = fetchCollectionSaleFloorWarm(id);
+  return typeof sale === "number" ? sale : null;
+}
+
 function cardsFrom(items: Awaited<ReturnType<typeof listCollectionNfts>>["items"], col: MgCollection, floorXch: number | null, rate: number): NftData[] {
   return items
     .filter((it) => isDisplayableNft({ is_blocked: it.is_blocked, blocked_content: it.collection_blocked_content }))
@@ -54,10 +65,8 @@ export async function getCollectionView(id: string, size = 60): Promise<Collecti
   const [col, rate] = await Promise.all([getCollection(id).catch(() => null), fetchXchUsdRate()]);
   if (!col) return null;
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
-  const [page, floorXch] = await Promise.all([
-    listCollectionNfts(id, undefined, size).catch(() => ({ items: [], next: null, previous: null })),
-    resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null),
-  ]);
+  const page = await listCollectionNfts(id, undefined, size).catch(() => ({ items: [], next: null, previous: null }));
+  const floorXch = resolveCollectionFloorXchWarm(id, typeof col.floor_price === "number" ? col.floor_price : null);
 
   return {
     id,
