@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   description: SITE_DESC,
   applicationName: "Traitfolio",
   keywords: ["Chia", "NFT", "collection", "rarity", "MintGarden", "Dexie", "Traitfolio", "collector"],
-  icons: { icon: "/logo-mark.png", apple: "/logo-mark.png" },
+  icons: { icon: "/brand/logo-mark.png", apple: "/brand/logo-mark.png" },
   manifest: "/manifest.webmanifest",
   openGraph: {
     type: "website",
@@ -39,13 +39,13 @@ export const metadata: Metadata = {
     title: "Traitfolio — The home of digital collecting",
     description: SITE_DESC,
     url: SITE_URL,
-    images: [{ url: "/landing-hero.png", alt: "Traitfolio — Chia NFT collector platform" }],
+    images: [{ url: "/brand/landing-hero.png", alt: "Traitfolio — Chia NFT collector platform" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Traitfolio — The home of digital collecting",
     description: SITE_DESC,
-    images: ["/landing-hero.png"],
+    images: ["/brand/landing-hero.png"],
   },
 };
 

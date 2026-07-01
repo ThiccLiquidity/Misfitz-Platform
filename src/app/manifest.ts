@@ -10,7 +10,7 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#0a0602",
     theme_color: "#0a0602",
     icons: [
-      { src: "/logo-mark.png", sizes: "any", type: "image/png", purpose: "any" },
+      { src: "/brand/logo-mark.png", sizes: "any", type: "image/png", purpose: "any" },
     ],
   };
 }
