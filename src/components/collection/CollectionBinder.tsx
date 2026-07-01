@@ -67,7 +67,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           if (data.hotTraits) setHotTraits(data.hotTraits);
           setWarming(Boolean(data.warming));
           setFullLoaded(true);
-          if (data.warming && tries < 5) { tries += 1; timer = setTimeout(load, 12_000); }
+          if (data.warming && tries < 24) { tries += 1; timer = setTimeout(load, 15_000); }
         })
         .catch(() => {})
         .finally(() => { if (!cancelled) setIndexing(false); });

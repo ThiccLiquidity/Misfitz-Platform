@@ -3,6 +3,8 @@ import path from "path";
 import { listCollectionNfts, getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import type { MgPage, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
+import { buildRankEstimator } from "@/lib/rarity/estimateRank";
+import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +
 // attributes_frequency_counts both null) but whose NFTs DO carry CHIP-0007 traits (e.g. the "NFT"
@@ -15,6 +17,7 @@ import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 export interface CollectionFrequency {
   freq: Record<string, Record<string, number>>;
   total: number;
+  rankById: Record<string, number>; // hex NFT id -> our estimated OpenRarity rank (1 = rarest)
 }
 
 const TTL = 45 * 60_000;
@@ -38,9 +41,9 @@ const DISK_TTL = 30 * 24 * 60 * 60_000;
 async function readDisk(colId: string): Promise<CollectionFrequency | null> {
   try {
     const raw = await fs.readFile(path.join(CACHE_DIR, `${colId}.json`), "utf8");
-    const j = JSON.parse(raw) as { freq?: CollectionFrequency["freq"]; total?: number; builtAt?: number };
+    const j = JSON.parse(raw) as { freq?: CollectionFrequency["freq"]; total?: number; rankById?: Record<string, number>; builtAt?: number };
     if (j?.freq && typeof j.total === "number" && typeof j.builtAt === "number" && Date.now() - j.builtAt < DISK_TTL) {
-      return { freq: j.freq, total: j.total };
+      return { freq: j.freq, total: j.total, rankById: j.rankById ?? {} };
     }
   } catch { /* no cached file yet */ }
   return null;
@@ -66,15 +69,17 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
   if (ids.length === 0) return null;
 
   const freq: Record<string, Record<string, number>> = {};
-  let withTraits = 0;
+  const perNft: { id: string; traits: Trait[] }[] = [];
   let idx = 0;
   async function worker() {
     while (idx < ids.length) {
-      const d = await getNftDetail(ids[idx++]).catch(() => null);
+      const i = idx++;
+      const id = ids[i];
+      const d = await getNftDetail(id).catch(() => null);
       if (!d) continue;
       const traits = mapTraits(d);
       if (traits.length === 0) continue;
-      withTraits += 1;
+      perNft.push({ id, traits });
       for (const t of traits) {
         const type = t.trait_type.toLowerCase();
         const val = String(t.value).toLowerCase();
@@ -84,8 +89,14 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONC, ids.length) }, worker));
-  if (withTraits === 0) return null; // no traits anywhere -> nothing to rank by
-  const result: CollectionFrequency = { freq, total: ids.length };
+  if (perNft.length === 0) return null; // no traits anywhere -> nothing to rank by
+
+  // Now that we have the whole-collection frequency table, score + rank every NFT ourselves.
+  const estimator = buildRankEstimator(freq, ids.length);
+  const rankById: Record<string, number> = {};
+  if (estimator) for (const n of perNft) rankById[n.id] = estimator.rankOf(n.traits);
+
+  const result: CollectionFrequency = { freq, total: ids.length, rankById };
   await writeDisk(colId, result); // persist so the slow scan happens exactly once, ever
   return result;
 }

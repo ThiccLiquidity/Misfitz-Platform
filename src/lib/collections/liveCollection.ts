@@ -3,6 +3,8 @@ import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgard
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
+import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
+import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
 import type { NftData } from "@/types";
@@ -208,14 +210,38 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
 // in the background it appears on the very next request — it is NOT trapped behind the 10-min card cache.
 export async function getAllCollectionCards(id: string): Promise<FullCollection> {
   const base = await buildBaseCollection(id);
-  const result = (cards: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) =>
-    ({ nfts: cards, total: cards.length, capped: base.capped, hotTraits, warming });
-  if (!isCompsEnabled()) return result(base.cards, [], false);
-  const comps = await getCompsModel(id).catch(() => null);
-  if (!comps) return result(base.cards, [], true); // cold model → warming; old values until the background build warms up
-
   const { floorXch, xchUsdRate } = base;
-  const nfts = base.cards.map((card) => {
+
+  // If MintGarden hasn't ranked this collection, apply OUR OWN computed ranks (from the persisted rarity
+  // build). The collection is fully browsable meanwhile; once the build finishes, `warming` flips off and
+  // the ranks/tiers appear on the next poll. Guarded so ranked collections are untouched.
+  let cards = base.cards;
+  let rarityWarming = false;
+  if (id.startsWith("col1") && !base.cards.some((c) => c.rarityRank != null)) {
+    const rarity = await getCollectionFrequency(id).catch(() => null);
+    if (rarity && Object.keys(rarity.rankById).length > 0) {
+      cards = base.cards
+        .map((c) => {
+          const r = rarity.rankById[c.id];
+          if (r == null) return c;
+          const fairValue = floorXch != null
+            ? estimateFairValue({ floorXch, rarityRank: r, totalSupply: c.totalSupply ?? rarity.total, xchUsdRate })
+            : c.fairValue;
+          return { ...c, rarityRank: r, rankEstimated: true, fairValue };
+        })
+        .sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity));
+    } else {
+      rarityWarming = true; // our rarity build isn't ready yet
+    }
+  }
+
+  const result = (nfts: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) =>
+    ({ nfts, total: nfts.length, capped: base.capped, hotTraits, warming: warming || rarityWarming });
+  if (!isCompsEnabled()) return result(cards, [], false);
+  const comps = await getCompsModel(id).catch(() => null);
+  if (!comps) return result(cards, [], true); // cold model → warming; old values until the background build warms up
+
+  const nfts = cards.map((card) => {
     if (card.rarityRank == null || !card.fairValue) return card;
     const traits = card.traits?.map((t) => ({ k: t.trait_type, v: String(t.value) }));
     const cv = comps.valueOf(card.rarityRank, traits);
