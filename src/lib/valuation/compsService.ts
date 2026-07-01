@@ -16,6 +16,8 @@ import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
+import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 
 interface CacheEntry { model: CompsModel | null; expiresAt: number; building?: Promise<CompsModel | null> }
 const _cache = new Map<string, CacheEntry>();
@@ -59,6 +61,10 @@ function modelFromPersisted(p: PersistedComps): CompsModel | null {
   });
 }
 
+// One fetched sale before we\'ve resolved a usable rank. mgRank is MintGarden\'s rank if present, else
+// null (a collection MintGarden hasn\'t ranked — we fall back to OUR computed ranks below).
+interface SaleRow { id: string; mgRank: number | null; price: number; ageDays: number; soldAt: number; traits: Trait[] }
+
 async function build(colId: string): Promise<CompsModel | null> {
   const [sales, floorXch] = await Promise.all([
     fetchCollectionCompletedSales(colId),
@@ -72,26 +78,49 @@ async function build(colId: string): Promise<CompsModel | null> {
 
   let supply = 0; // collection size, for rank percentile + rank-distance bandwidth
   let traitFreq: TraitFreq | undefined;
-  const built: (({ soldAt: number } & Sale) | null)[] = await pool(recent, CONC, async (s) => {
+  const rows: (SaleRow | null)[] = await pool(recent, CONC, async (s) => {
     const d = await getNftDetail(s.id, true).catch(() => null);
     if (!d) return null;
     const col = d.collection as { nft_count?: number; attributes_frequency_counts?: TraitFreq } | undefined;
     if (typeof col?.nft_count === "number" && col.nft_count > supply) supply = col.nft_count;
     if (!traitFreq && col?.attributes_frequency_counts) traitFreq = col.attributes_frequency_counts;
     const rank = Number(d.openrarity_rank);
-    if (!Number.isFinite(rank) || rank <= 0) return null;
-    const traits = (d.data?.metadata_json?.attributes ?? [])
-      .filter((a) => a && a.trait_type != null && a.value != null)
-      .map((a) => ({ k: String(a.trait_type), v: String(a.value) }));
+    const traits = mapTraits(d).map((t) => ({ k: t.trait_type, v: String(t.value) })); // tolerant of type/name keys
     const soldAt = s.date ? new Date(s.date).getTime() : now - 365 * 86_400_000;
-    const ageDays = (now - soldAt) / 86_400_000;
-    return { rank, price: s.price, ageDays, traits, soldAt };
+    return { id: s.id, mgRank: Number.isFinite(rank) && rank > 0 ? rank : null, price: s.price, ageDays: (now - soldAt) / 86_400_000, soldAt, traits };
   });
+  const fetched = rows.filter((x): x is SaleRow => x !== null);
+  if (fetched.length === 0) return null;
 
-  const usable = built.filter((x): x is { soldAt: number } & Sale => x !== null);
+  // Resolve a rank per sale. Ranked collections use MintGarden\'s rank directly. For collections
+  // MintGarden hasn\'t ranked, fall back to OUR own computed ranks (getCollectionFrequency) + our trait
+  // table — SCALED to supply exactly like the collection cards, so the fitted curve lines up with the
+  // ranks shown on screen. This is what gives unranked collections a real sale-driven curve + hot traits.
+  const haveMgRanks = fetched.some((r) => r.mgRank != null);
+  let rankOf: (r: SaleRow) => number | null;
+  if (haveMgRanks) {
+    if (supply <= 0) supply = fetched.reduce((m, r) => Math.max(m, r.mgRank ?? 0), 0);
+    rankOf = (r) => r.mgRank;
+  } else {
+    const freqData = await getCollectionFrequency(colId, { wait: true }).catch(() => null);
+    if (!freqData || Object.keys(freqData.rankById).length === 0) return null; // can\'t rank -> no model
+    const M = Object.keys(freqData.rankById).length;
+    if (supply <= 0) supply = freqData.total;
+    if (!traitFreq) traitFreq = freqData.freq;
+    const S = supply;
+    rankOf = (r) => {
+      const raw = freqData.rankById[r.id];
+      return raw == null ? null : Math.max(1, Math.min(S, Math.round(((raw - 0.5) / M) * S)));
+    };
+  }
+
+  const usable: (({ soldAt: number } & Sale))[] = [];
+  for (const r of fetched) {
+    const rank = rankOf(r);
+    if (rank == null) continue;
+    usable.push({ rank, price: r.price, ageDays: r.ageDays, traits: r.traits, soldAt: r.soldAt });
+  }
   if (usable.length === 0) return null;
-  // Fallback supply if the API didn't give nft_count: the largest rank we saw is a lower bound.
-  if (supply <= 0) supply = usable.reduce((m, x) => Math.max(m, x.rank), 0);
   const floor = typeof floorXch === "number" ? floorXch : 0;
 
   // Write the INPUTS through to the DB so a cold process rehydrates instantly (no refetch).
