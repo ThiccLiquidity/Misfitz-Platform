@@ -129,7 +129,8 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
         backdropFilter: "blur(12px)",
       }}
     >
-      <div className="flex items-stretch overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+      {/* Mobile: 3x2 grid so long tier labels have room; desktop: single flex row */}
+      <div className="grid grid-cols-3 md:flex md:items-stretch">
         {TIER_ORDER.map((id, i) => {
           const v     = getTierVisual(id);
           const count = tierCounts[id] ?? 0;
@@ -141,8 +142,8 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
           if (isLight) {
             const lv = TIER_LIGHT[id];
             return (
-              <div key={id} className="flex-1 relative flex flex-col items-center justify-center py-5 gap-1"
-                style={{ background: lv.bg, borderRight: divider, minWidth: 80 }}>
+              <div key={id} className="min-w-0 flex-1 relative flex flex-col items-center justify-center py-4 md:py-5 gap-1"
+                style={{ background: lv.bg, borderRight: divider }}>
                 {/* Top accent bar */}
                 <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background: lv.topBorder, borderRadius:"2px 2px 0 0" }} />
                 {/* Emoji */}
@@ -167,8 +168,8 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
           const dv = TIER_DARK[id];
           const gradStyle = { background: dv.textGradient, WebkitBackgroundClip:"text" as const, backgroundClip:"text" as const, WebkitTextFillColor:"transparent", color:"transparent" };
           return (
-            <div key={id} className="flex-1 relative flex flex-col items-center justify-center py-5 gap-1"
-              style={{ background: dv.bg, borderRight: divider, boxShadow: `inset 0 0 40px ${dv.glow}22`, minWidth: 80 }}>
+            <div key={id} className="min-w-0 flex-1 relative flex flex-col items-center justify-center py-4 md:py-5 gap-1"
+              style={{ background: dv.bg, borderRight: divider, boxShadow: `inset 0 0 40px ${dv.glow}22` }}>
               <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background: dv.topBorder, borderRadius:"2px 2px 0 0" }} />
               <span style={{ fontSize:22, lineHeight:1, marginBottom:2 }}>{v.emoji}</span>
               <span style={{ ...gradStyle, fontWeight:900, fontSize:11, letterSpacing:"0.14em", textTransform:"uppercase" as const, lineHeight:1 }}>{v.label}</span>

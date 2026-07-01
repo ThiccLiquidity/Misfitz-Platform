@@ -84,7 +84,7 @@ export async function fetchOwnerListings(address: string): Promise<OwnerListings
     const hit = await cacheGet(cacheKey, HOLDINGS_TTL);
     if (hit) {
       const c = JSON.parse(hit) as CachedListings;
-      console.log(`[binder-perf] ${short} holdings CACHE HIT in ${Date.now() - t0}ms (${c.items.length} nfts, ${c.collections.length} cols)`);
+      if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings CACHE HIT in ${Date.now() - t0}ms (${c.items.length} nfts, ${c.collections.length} cols)`);
       return { items: c.items, collections: new Map(c.collections), truncated: c.truncated };
     }
   } catch { /* cache miss / unavailable -> fetch live */ }
@@ -122,6 +122,6 @@ export async function fetchOwnerListings(address: string): Promise<OwnerListings
     } catch { /* cache optional */ }
   }
 
-  console.log(`[binder-perf] ${short} holdings LIVE in ${Date.now() - t0}ms — paging ${pageMs}ms (${pages}p, ${items.length} nfts), collections ${colMs}ms (${colIds.length})`);
+  if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings LIVE in ${Date.now() - t0}ms — paging ${pageMs}ms (${pages}p, ${items.length} nfts), collections ${colMs}ms (${colIds.length})`);
   return { items, collections, truncated };
 }

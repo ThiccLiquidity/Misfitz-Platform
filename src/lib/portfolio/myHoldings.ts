@@ -149,7 +149,7 @@ export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings
     return { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
   });
 
-  console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
+  if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
   return summarize(nfts, xchUsdRate, addresses, truncated, false);
 }
 
