@@ -346,7 +346,7 @@ export function FilterSidebar({
                   className="truncate text-[10px] font-bold uppercase tracking-wider"
                   style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}
                 >
-                  {traitType}{values.some((v) => hotTraitKeys?.has(`${traitType.toLowerCase()}|${String(v).toLowerCase()}`)) ? " 🔥" : ""}
+                  {traitType}
                 </label>
                 <select
                   value={traitFilters[traitType] ?? ""}
