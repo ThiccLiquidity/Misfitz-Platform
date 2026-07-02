@@ -4,9 +4,7 @@ import { fetchOwnerListings } from "@/lib/data-sources/mintgarden/owner";
 import { mapListItemToCard } from "@/lib/data-sources/mintgarden/map";
 import { fetchXchUsdRate, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/types";
-import { getCollectionBySlug, listNftsForCollection } from "@/lib/db/queries";
-import { enrichNfts } from "@/lib/rarity/enrich";
-import { fetchMarketContext, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 
 // Aggregates a collector's holdings across one or more addresses into a single flat binder feed.
 // Each NFT carries its own collection's totalSupply + name so rarity is computed correctly per
@@ -151,20 +149,4 @@ export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings
 
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
   return summarize(nfts, xchUsdRate, addresses, truncated, false);
-}
-
-// Demo: seeded Misfitz, shown as a stand-in binder while the live holdings fetch is finalized.
-export async function getDemoHoldings(): Promise<MyHoldings> {
-  const collection = await getCollectionBySlug("misfitz");
-  if (!collection) return EMPTY;
-  const [raw, market] = await Promise.all([
-    listNftsForCollection("misfitz", 0, 90),
-    fetchMarketContext(collection.dexieCollectionId),
-  ]);
-  const enriched = enrichNfts(raw, collection.totalSupply, market).map((n) => ({
-    ...n,
-    totalSupply: collection.totalSupply,
-    collectionName: collection.name,
-  }));
-  return summarize(enriched, market.xchUsdRate, [], false, true);
 }
