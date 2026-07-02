@@ -186,6 +186,29 @@ isn't a clean per-NFT XCH figure).
 
 ---
 
+## 9. Manipulation resistance — wash trading (threat model)
+
+Because trait demand is premium-only, fake sales are a pump vector: heat a trait, earn a 🔥 chip, lift
+estimates, and get one's own listing scored as a deal. We treat this as a first-class concern.
+
+**Defenses in place (statistical — no identity needed):**
+- **Per-NFT dedup:** the sales feed keeps only the most-recent sale per NFT, so selling ONE NFT back and
+  forth contributes a single data point, not many.
+- **Distinct-NFT minimum:** a trait must have ≥ `minTraitN` (4) recent sales — i.e. ≥4 *distinct* NFTs
+  (given dedup) — before it can register demand or a 🔥 chip. Raises the cost of a pump.
+- **Ratio cap:** each trait's observed/expected ratio is capped (6×) and the combined demand multiplier
+  at 1.6×, so even a successful pump is bounded in effect.
+- **Winsorized fit:** sale prices are clipped to [p5,p95] before the curve fit, so absurdly-priced wash
+  sales can't drag the curve.
+- **Confidence indicator:** a thinly-traded pump shows LOW sales confidence in the UI (§5c).
+
+**Not defensible from current data (documented limitation):** the strongest defenses — capping any single
+buyer/seller *wallet-pair's* weight, and requiring *distinct buyers* for heat — need trade counterparties.
+Dexie's completed-offer API does **not** expose them (`known_taker` is typically null; there is no maker
+field; only raw `involved_coins` hashes are given). True Sybil/wash resistance therefore requires an
+on-chain trace pipeline (coin → owner via a full node or indexer) — a deliberate future phase, not shipped.
+Until then, the statistical defenses above bound the achievable manipulation.
+
 ## 8. Known limitations / open questions for reviewers
 1. **Rarity model** is OpenRarity-style information content assuming trait independence. Is IC the right basis
    vs. e.g. trait-normalized or statistical rarity? Should meta "trait count" be included?
