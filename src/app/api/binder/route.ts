@@ -15,7 +15,8 @@ export async function GET(req: Request) {
   const addresses = raw
     .split(",")
     .map((a) => a.trim())
-    .filter((a) => isValidChiaOwnerId(a));
+    .filter((a) => isValidChiaOwnerId(a))
+    .slice(0, 25); // bound number of wallets per request
   if (addresses.length === 0) return NextResponse.json({ nfts: [] });
 
   const holdings = await getMyHoldingsFull(addresses);
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ nfts: [] });
   }
-  const ids = Array.isArray(body.ids) ? body.ids.filter((s) => typeof s === "string") : [];
+  const ids = (Array.isArray(body.ids) ? body.ids.filter((s) => typeof s === "string") : []).slice(0, 120); // bound payload
   const floors = body.floors && typeof body.floors === "object" ? body.floors : {};
   const rate = typeof body.xchUsdRate === "number" ? body.xchUsdRate : XCH_USD_FALLBACK;
   if (ids.length === 0) return NextResponse.json({ nfts: [] });

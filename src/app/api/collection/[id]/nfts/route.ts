@@ -4,8 +4,12 @@ import { getCollectionNftsPage } from "@/lib/collections/liveCollection";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const cursor = new URL(req.url).searchParams.get("cursor") ?? "";
+  if (!params.id || !params.id.startsWith("col1")) return NextResponse.json({ nfts: [], cursor: null });
+  const cursor = (new URL(req.url).searchParams.get("cursor") ?? "").slice(0, 512); // bound opaque cursor
   if (!cursor) return NextResponse.json({ nfts: [], cursor: null });
-  const r = await getCollectionNftsPage(params.id, cursor);
-  return NextResponse.json(r);
+  try {
+    return NextResponse.json(await getCollectionNftsPage(params.id, cursor));
+  } catch {
+    return NextResponse.json({ nfts: [], cursor: null });
+  }
 }
