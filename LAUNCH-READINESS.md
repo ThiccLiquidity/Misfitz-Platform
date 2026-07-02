@@ -57,6 +57,26 @@ live, (3) recommended-but-optional polish, and (4) known limitations / the next 
 - **Verify the production build on your machine.** I can't run the Next SWC compiler in my sandbox, so I gate
   on `tsc` + unit tests. Run `npm run build` locally once — it should pass; if anything surfaces, send it to me.
 
+### 2a-gate. Valuation backtest — the LAUNCH GATE (validate against reality)
+
+Everything else in the valuation review was reasoning; this is the one step that checks the model against
+real outcomes, so hold launch behind it. A harness is written and ready:
+
+```
+npx tsx scripts/backtest-valuation.ts col1<yourCollectionId> [--max=800]
+```
+
+For every past clean XCH sale it rebuilds the comps model from ONLY the sales before that sale
+(leave-future-out), estimates the NFT's value at that moment, and compares to the actual sale price. It
+prints median/mean absolute % error and hit-rates (±25% / ±50%), and — folding in the other open item —
+**counts how many real sales the [0.2×, 5×] baseline clamp would have clipped**, so you can confirm the
+clamp bounds catch wash/outliers and don't clip legitimate grail buys.
+
+What to do: run it on 2–3 real collections (ranked and unranked). If error is reasonable and clamp clips
+are dominated by genuine outliers/wash (not normal sales), the model is validated — otherwise tune
+`baselineClampHi` / the ridge / half-lives and re-run. This needs your machine (network + live APIs); I
+can't run it from here.
+
 ### 2b. Hosting + domain
 
 - **Pick a host.** Next.js App Router deploys cleanly to **Vercel** (recommended, zero-config). A Node host
@@ -112,6 +132,7 @@ live, (3) recommended-but-optional polish, and (4) known limitations / the next 
 - [ ] Choose host; confirm caches have a persistent disk **or** schedule Phase 2 shared-storage migration
 - [ ] Buy domain; set `NEXT_PUBLIC_SITE_URL` (+ `NEXTAUTH_URL`) to it
 - [ ] `npm run build` passes locally
+- [ ] **Valuation backtest passes** (`npm run backtest col1…`) on 2–3 real collections — error acceptable AND clamp clips are outliers/wash, not legit sales (the launch gate)
 - [ ] Legal review of disclaimer; add Terms/Privacy if desired
 - [ ] (Optional) branded 1200×630 OG image, analytics, error monitoring
 - [ ] Smoke test on a real phone (binder, collection, filters, buy links go out to Dexie/MintGarden)

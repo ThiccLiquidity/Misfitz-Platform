@@ -186,10 +186,14 @@ isn't a clean per-NFT XCH figure).
 
 ---
 
-## 9. Manipulation resistance — wash trading (threat model)
+## 9. Manipulation resistance — wash trading (bounded & made uneconomical, not "prevented")
 
 Because trait demand is premium-only, fake sales are a pump vector: heat a trait, earn a 🔥 chip, lift
-estimates, and get one's own listing scored as a deal. We treat this as a first-class concern.
+estimates, and get one's own listing scored as a deal. We treat this as a first-class concern — but state
+the ceiling plainly: **on a pseudonymous chain the identity defenses are sybil-soft.** Fresh addresses are
+free on Chia, so pair-decay and the distinct-buyer gate stop *lazy* rings (wallet reuse) but not wallet
+rotation. That is the ceiling of identity-based defense here, not an implementation flaw. The real security
+is therefore **economic**: an attack is bounded in effect and made expensive relative to its payoff.
 
 **Defenses in place (statistical — no identity needed):**
 - **Per-NFT dedup:** the sales feed keeps only the most-recent sale per NFT, so selling ONE NFT back and
@@ -202,7 +206,7 @@ estimates, and get one's own listing scored as a deal. We treat this as a first-
   sales can't drag the curve.
 - **Confidence indicator:** a thinly-traded pump shows LOW sales confidence in the UI (§5c).
 
-**Identity-based defenses (adopted — via MintGarden provenance):** Dexie's offer API doesn't expose
+**Identity-based defenses (adopted, but sybil-SOFT — via MintGarden provenance):** Dexie's offer API doesn't expose
 counterparties, but MintGarden's per-NFT `events` DO (`previous_address` = seller, `address` = buyer,
 `xch_price`, `payments`) — and we already fetch those events during the comps build, so it's free. Using them:
 - **Pair-decay in the fit:** repeat sales between the SAME (seller → buyer) wallet pair are geometrically
@@ -223,9 +227,20 @@ counterparties, but MintGarden's per-NFT `events` DO (`previous_address` = selle
 - **Visible hedge:** thin/low-confidence estimates show "Low · N sales" and a "thinly traded — rough guide"
   note in the UI, so a sparse or poisoned collection reads as untrustworthy at a glance.
 
-**Remaining (future phase):** cross-collection wash-ring graph clustering (addresses that repeatedly
-transact with each other across many NFTs/collections) and deep on-chain coin tracing. The above raise the
-cost and bound the effect of the practical attacks; the ring-graph layer is the next escalation.
+**Why it's uneconomical (rough attack cost under current parameters):** to move anything, an attacker must
+actually OWN the NFTs — one-sale-per-NFT dedup means each fake sale needs a different NFT. To heat a trait:
+≥4 distinct NFTs of that trait, and (identity gate) ≥3 distinct buyer wallets. To lift the *curve* past 2×
+baseline: ≥8 distinct NFTs sold. Every wash sale pays royalties (commonly 5–10% on Chia) + fees, and those
+are pure loss on a self-sale; the baseline clamp caps the price that counts to 5× baseline, so the royalty
+bill scales with the (elevated) prices needed to move anything. Net: cost ≈ (NFTs owned) × (royalty% ×
+clamped price) × (number of fakes), while the payoff is hard-capped (trait ≤ 1.6×, curve ≤ 2× baseline
+until 8 distinct NFTs) and shown as "Low · N sales / thinly traded" throughout. The attacker pays real
+royalties for a bounded, visibly-flagged lift — the model is designed so that rarely pencils out.
+
+**Remaining (future phase):** cross-collection wash-ring graph clustering. Even when trading wallets
+rotate, rings tend to **reuse funding sources** — the wallet(s) that seed the throwaway addresses — so
+clustering by common funding is the durable signal that survives wallet rotation. Pairs with deep on-chain
+coin tracing. This is the next rung above the sybil-soft identity layer.
 
 ## 8. Known limitations / open questions for reviewers
 1. **Rarity model** is OpenRarity-style information content assuming trait independence. Is IC the right basis
