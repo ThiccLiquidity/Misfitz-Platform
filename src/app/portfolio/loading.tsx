@@ -3,7 +3,7 @@
 // hardcoded white-alpha version was invisible on the light page.
 function Shimmer({ className = "" }: { className?: string }) {
   return (
-    <div className={`animate-pulse rounded ${className}`} style={{ background: "var(--card-border)", opacity: 0.16 }} />
+    <div className={`animate-pulse rounded ${className}`} style={{ background: "rgba(128,128,128,0.18)" }} />
   );
 }
 

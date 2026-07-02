@@ -44,7 +44,7 @@ export default async function CollectionLivePage({ params }: { params: { id: str
   };
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
       <CollectionBinder key={view.id} view={view} />
     </>
   );
