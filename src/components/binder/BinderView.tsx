@@ -72,6 +72,18 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
   const flipperRef   = useRef<HTMLDivElement | null>(null);
   const rightAreaRef = useRef<HTMLDivElement | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  // Mobile shows ONE page at a time. The desktop two-page spread hides the LEFT page on phones, which
+  // made mobile open on page 2 (the right page, index 1) and skip every odd page. Independent index.
+  const [mobilePage, setMobilePage] = useState(0);
+  const touchStartXMobileRef = useRef<number | null>(null);
+  const mobileFlip = (dir: 1 | -1) => setMobilePage((prev) => Math.max(0, Math.min(pages.length - 1, prev + dir)));
+  function handleMobileTouchStart(e: TouchEvent) { touchStartXMobileRef.current = e.touches[0].clientX; }
+  function handleMobileTouchEnd(e: TouchEvent) {
+    if (touchStartXMobileRef.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartXMobileRef.current;
+    if (Math.abs(dx) > 40) mobileFlip(dx < 0 ? 1 : -1);
+    touchStartXMobileRef.current = null;
+  }
 
   function flipSpread(direction: 1 | -1) {
     if (animatingRef.current) return;
@@ -175,7 +187,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
 
         {/* ── SPREAD ──────────────────────────────────────────────────────────── */}
         <div
-          className="relative w-full"
+          className="relative hidden w-full md:block"
           style={{ perspective: "1100px" }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
@@ -319,6 +331,20 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
           </div>
         </div>
 
+        {/* MOBILE — one page at a time, starts at page 1, swipe or use controls to advance */}
+        <div className="md:hidden" onTouchStart={handleMobileTouchStart} onTouchEnd={handleMobileTouchEnd}>
+          <div style={{ height: "clamp(480px, 72vh, 860px)" }}>
+            <BinderPage
+              nfts={pages[mobilePage] ?? []}
+              collectionName={collection.name}
+              onOpen={setOpenLauncherId}
+              totalSupply={collection.totalSupply}
+              rarityTiers={collection.rarityTiers}
+              side="right"
+            />
+          </div>
+        </div>
+
       </div>
 
       {openNft && (
@@ -333,14 +359,25 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
       )}
     </div>
 
-    {/* Controls float freely below the binder shell */}
-    <BinderPageControls
-      pageIndex={displaySpread}
-      pageCount={spreadCount}
-      onPrev={() => flipSpread(-1)}
-      onNext={() => flipSpread(1)}
-      disabled={animating}
-    />
+    {/* Controls float freely below the binder shell — spread paging on desktop, single-page on mobile */}
+    <div className="hidden md:block">
+      <BinderPageControls
+        pageIndex={displaySpread}
+        pageCount={spreadCount}
+        onPrev={() => flipSpread(-1)}
+        onNext={() => flipSpread(1)}
+        disabled={animating}
+      />
+    </div>
+    <div className="md:hidden">
+      <BinderPageControls
+        pageIndex={mobilePage}
+        pageCount={pages.length}
+        onPrev={() => mobileFlip(-1)}
+        onNext={() => mobileFlip(1)}
+        disabled={false}
+      />
+    </div>
     </div>
   );
 }
