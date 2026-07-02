@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // Reusable mobile filter bottom-sheet (shared by the collection shop, the collection binder, and the
@@ -19,6 +20,12 @@ export function MobileFilterSheet({
 }) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
 
   return (

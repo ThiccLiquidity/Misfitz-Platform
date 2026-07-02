@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
@@ -60,6 +60,15 @@ export function NftDetailModal({
   const [lightbox, setLightbox] = useState(false);
   const [showValueInfo, setShowValueInfo] = useState(false); // tap-to-toggle (touch has no hover)
   const [expandTrait, setExpandTrait] = useState(false);
+  // Keyboard: Escape closes the lightbox if open, otherwise the modal (a11y).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (lightbox) setLightbox(false); else onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox, onClose]);
   // Market-curve breakdown pieces (multiplicative: estimate = curve × traitMult × collectorMult).
   const curveBase = nft.valueCurve ?? 0;
   const traitMult = typeof nft.valueTraitMult === "number" ? nft.valueTraitMult : 1;
