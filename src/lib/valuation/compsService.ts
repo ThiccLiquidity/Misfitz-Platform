@@ -27,7 +27,7 @@ const MAX_NFTS = 300; // cap on detail fetches for a cold build (bounds cost; re
 const CONC = 6;
 
 type TraitFreq = Record<string, Record<string, number>>;
-interface PersistedSale { rank: number; price: number; soldAt: number; traits?: Trait[] }
+interface PersistedSale { rank: number; price: number; soldAt: number; traits?: Trait[]; seller?: string; buyer?: string }
 interface PersistedComps { supply: number; floor: number; traitFreq?: TraitFreq; sales: PersistedSale[]; builtAt: number }
 
 async function pool<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -53,6 +53,8 @@ function modelFromPersisted(p: PersistedComps): CompsModel | null {
     price: s.price,
     ageDays: (now - s.soldAt) / 86_400_000,
     traits: s.traits,
+    seller: s.seller,
+    buyer: s.buyer,
   }));
   return buildCompsModel(sales, p.supply, {
     floor: p.floor,
@@ -63,7 +65,7 @@ function modelFromPersisted(p: PersistedComps): CompsModel | null {
 
 // One fetched sale before we\'ve resolved a usable rank. mgRank is MintGarden\'s rank if present, else
 // null (a collection MintGarden hasn\'t ranked — we fall back to OUR computed ranks below).
-interface SaleRow { id: string; mgRank: number | null; price: number; ageDays: number; soldAt: number; traits: Trait[] }
+interface SaleRow { id: string; mgRank: number | null; price: number; ageDays: number; soldAt: number; traits: Trait[]; seller?: string; buyer?: string }
 
 async function build(colId: string): Promise<CompsModel | null> {
   const [sales, floorXch] = await Promise.all([
@@ -87,7 +89,13 @@ async function build(colId: string): Promise<CompsModel | null> {
     const rank = Number(d.openrarity_rank);
     const traits = mapTraits(d).map((t) => ({ k: t.trait_type, v: String(t.value) })); // tolerant of type/name keys
     const soldAt = s.date ? new Date(s.date).getTime() : now - 365 * 86_400_000;
-    return { id: s.id, mgRank: Number.isFinite(rank) && rank > 0 ? rank : null, price: s.price, ageDays: (now - soldAt) / 86_400_000, soldAt, traits };
+    // Counterparties for wash-trade defenses: the NFT's most-recent XCH sale event carries the seller
+    // (previous_address) and buyer (address). Already in this payload — no extra fetch. Graceful if absent.
+    const saleEvents = (d.events ?? []).filter((e) => e && e.type === 2 && typeof e.xch_price === "number" && (e.xch_price ?? 0) > 0);
+    const last = saleEvents.length ? saleEvents[saleEvents.length - 1] : null;
+    const seller = last?.previous_address?.encoded_id ?? undefined;
+    const buyer = last?.address?.encoded_id ?? undefined;
+    return { id: s.id, mgRank: Number.isFinite(rank) && rank > 0 ? rank : null, price: s.price, ageDays: (now - soldAt) / 86_400_000, soldAt, traits, seller, buyer };
   });
   const fetched = rows.filter((x): x is SaleRow => x !== null);
   if (fetched.length === 0) return null;
@@ -118,7 +126,7 @@ async function build(colId: string): Promise<CompsModel | null> {
   for (const r of fetched) {
     const rank = rankOf(r);
     if (rank == null) continue;
-    usable.push({ rank, price: r.price, ageDays: r.ageDays, traits: r.traits, soldAt: r.soldAt });
+    usable.push({ rank, price: r.price, ageDays: r.ageDays, traits: r.traits, soldAt: r.soldAt, seller: r.seller, buyer: r.buyer });
   }
   if (usable.length === 0) return null;
   const floor = typeof floorXch === "number" ? floorXch : 0;
@@ -126,7 +134,7 @@ async function build(colId: string): Promise<CompsModel | null> {
   // Write the INPUTS through to the DB so a cold process rehydrates instantly (no refetch).
   const persisted: PersistedComps = {
     supply, floor, traitFreq, builtAt: now,
-    sales: usable.map((s) => ({ rank: s.rank, price: s.price, soldAt: s.soldAt, traits: s.traits })),
+    sales: usable.map((s) => ({ rank: s.rank, price: s.price, soldAt: s.soldAt, traits: s.traits, seller: s.seller, buyer: s.buyer })),
   };
   try { cachePut(`comps:${colId}`, JSON.stringify(persisted)); } catch { /* cache optional */ }
 

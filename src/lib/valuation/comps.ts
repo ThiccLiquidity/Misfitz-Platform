@@ -13,7 +13,7 @@
 //      • collectorMult: applied by the caller from the collectible-number weight.
 
 export interface Trait { k: string; v: string }
-export interface Sale { rank: number; price: number; ageDays: number; traits?: Trait[] }
+export interface Sale { rank: number; price: number; ageDays: number; traits?: Trait[]; seller?: string; buyer?: string }
 
 export interface CompsValue {
   value: number | null;  // curveValue × traitDemandMult (collector applied by caller), or null
@@ -50,6 +50,12 @@ export interface CompsOptions {
   minTraitN?: number;          // min DISTINCT-NFT trait sales to register demand (default 4)
   ridgeCScale?: number;        // extra ridge penalty on the curvature term c (default 6) — rare-tail guard
   maxTraitRatio?: number;      // cap on a single trait's observed/expected ratio (default 6) — anti double-count/wash
+  pairDecay?: number;          // repeat same-(seller,buyer) sales downweighted by this^k in the fit (default 0.3)
+  minDistinctBuyers?: number;  // trait heat needs this many distinct buyers WHEN buyer data exists (default 3)
+  baselineClampLo?: number;    // clamp each fit price to >= this × baseline(rank) (default 0.2)
+  baselineClampHi?: number;    // clamp each fit price to <= this × baseline(rank) (default 5)
+  thinMaxDeviation?: number;   // cap curve to <= this × baseline until enough distinct NFTs sold (default 2)
+  thinDistinctThreshold?: number; // distinct NFTs sold below which the thin-collection cap applies (default 8)
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -97,6 +103,12 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   const minTraitN = opts.minTraitN ?? 4;
   const ridgeCScale = opts.ridgeCScale ?? 6;
   const maxTraitRatio = opts.maxTraitRatio ?? 6;
+  const pairDecay = opts.pairDecay ?? 0.3;
+  const minDistinctBuyers = opts.minDistinctBuyers ?? 3;
+  const baselineClampLo = opts.baselineClampLo ?? 0.2;
+  const baselineClampHi = opts.baselineClampHi ?? 5;
+  const thinMaxDeviation = opts.thinMaxDeviation ?? 2;
+  const thinDistinctThreshold = opts.thinDistinctThreshold ?? 8;
 
   const usable = sales.filter((s) => Number.isFinite(s.rank) && s.rank > 0 && Number.isFinite(s.price) && s.price > 0);
   if (usable.length === 0) return null;
@@ -107,6 +119,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     w: wRec(s.ageDays, halfLife),         // price-curve recency
     wd: wRec(s.ageDays, demandHalfLife),  // trait-volume recency
     traits: s.traits ?? [],
+    seller: s.seller, buyer: s.buyer,
   }));
 
   // ── Parabolic rarity curve, fit to sales ────────────────────────────────────────────────────────
@@ -135,6 +148,27 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   let rfMax = 0;
   for (const p of points) rfMax = Math.max(rfMax, rfAt(p.rank));
 
+  // Floor-anchored baseline value at a rarity (= the fallback estimator: floor + floor·rf). Used both
+  // to clamp fake-high sale prices (below) and to cap the fitted curve in thin markets. Anchored to the
+  // floor, which is expensive to fake — so it's a manipulation-resistant reference.
+  const baselineAt = (rf: number) => (floor > 0 ? floor * (1 + rf) : 0);
+
+  // Pair-decay effective weights: repeat sales between the SAME (seller → buyer) wallet pair are
+  // downweighted geometrically (pairDecay^k), so a two-wallet wash ring bouncing NFTs can't stack
+  // weight and drag the whole curve. The highest-recency sale of each pair keeps full weight. When
+  // counterparties are unknown (no MintGarden events), no decay is applied (graceful degradation).
+  const effW = new Array<number>(points.length).fill(0);
+  const pairSeen = new Map<string, number>();
+  points.map((p, i) => ({ p, i })).sort((x, y) => y.p.w - x.p.w).forEach(({ p, i }) => {
+    if (p.seller && p.buyer) {
+      const key = `${p.seller}>${p.buyer}`;
+      const k = pairSeen.get(key) ?? 0; pairSeen.set(key, k + 1);
+      effW[i] = p.w * Math.pow(pairDecay, k);
+    } else {
+      effW[i] = p.w;
+    }
+  });
+
   let a = floor, b = floor, c = 0;
   if (floor > 0 && points.length > 0) {
     const prior: [number, number, number] = [floor, floor, 0];
@@ -145,26 +179,40 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     const lambdaC = lambda * ridgeCScale;
     const A = [[lambda, 0, 0], [0, lambda, 0], [0, 0, lambdaC]];
     const g: [number, number, number] = [lambda * prior[0], lambda * prior[1], lambdaC * prior[2]];
-    for (const p of points) {
+    for (let idx = 0; idx < points.length; idx++) {
+      const p = points[idx];
       const rf = rfAt(p.rank);
       const ph = [1, rf, rf * rf];
-      const w = p.w;
-      const price = winsor(p.price);
+      const w = effW[idx];
+      // Winsorize, THEN clamp to a band around the floor-anchored baseline. Winsorize goes inert in thin
+      // samples (p5≈min, p95≈max) and can't help when fakes ARE the sample; the baseline clamp does,
+      // because it references the (hard-to-fake) floor rather than the poisoned sale distribution.
+      const base = baselineAt(rf);
+      let price = winsor(p.price);
+      if (base > 0) price = clamp(price, baselineClampLo * base, baselineClampHi * base);
       for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) A[i][j] += w * ph[i] * ph[j]; g[i] += w * ph[i] * price; }
     }
     const sol = solve3(A, g);
     if (sol) { a = sol[0]; b = Math.max(0, sol[1]); c = Math.max(0, sol[2]); }
   }
+
+  // Thin-collection safety cap: until enough DISTINCT NFTs have sold (one sale per NFT upstream), bound
+  // the fitted curve to thinMaxDeviation× the baseline so a handful of fake sales can't lift the whole
+  // parabola. min of two rf-monotonic curves stays monotonic; floor still applies below.
+  const distinctNftsSold = points.length;
+  const thin = distinctNftsSold < thinDistinctThreshold;
   const globalScale = floor > 0 ? (a + b + c) / floor : 1; // rough curve-level indicator for diagnostics
 
   const curveRaw = (rf: number) => a + b * rf + c * rf * rf;
   function curveValue(rank: number): number {
     const rf = rfAt(rank);
-    if (rfMax <= 0 || rf <= rfMax) return Math.max(floor, curveRaw(rf));
-    // Beyond the rarest ACTUAL sale: continue linearly (slope at rfMax) rather than trust unsupported
-    // quadratic extrapolation. slope = b + 2c·rfMax ≥ 0, so it stays monotonic (rarer ≥ less-rare).
-    const slope = b + 2 * c * rfMax;
-    return Math.max(floor, curveRaw(rfMax) + slope * (rf - rfMax));
+    let v = (rfMax <= 0 || rf <= rfMax)
+      ? curveRaw(rf)
+      // Beyond the rarest ACTUAL sale: continue linearly (slope at rfMax) rather than trust unsupported
+      // quadratic extrapolation. slope = b + 2c·rfMax ≥ 0, so it stays monotonic (rarer ≥ less-rare).
+      : curveRaw(rfMax) + (b + 2 * c * rfMax) * (rf - rfMax);
+    if (thin && floor > 0) v = Math.min(v, thinMaxDeviation * baselineAt(rf)); // thin-collection cap
+    return Math.max(floor, v);
   }
 
   function supportAt(rank: number): number {
@@ -174,14 +222,14 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   }
 
   // ── Trait demand from recent VOLUME: traits selling more often than their prevalence run hot ────
-  const traitRecent = new Map<string, { w: number; n: number }>();
+  const traitRecent = new Map<string, { w: number; n: number; buyers: Set<string> }>();
   let totalRecentW = 0;
   for (const p of points) {
     totalRecentW += p.wd;
     for (const t of p.traits) {
       const k = `${norm(t.k)}=${norm(t.v)}`;
-      const e = traitRecent.get(k) ?? { w: 0, n: 0 };
-      e.w += p.wd; e.n += 1; traitRecent.set(k, e);
+      const e = traitRecent.get(k) ?? { w: 0, n: 0, buyers: new Set<string>() };
+      e.w += p.wd; e.n += 1; if (p.buyer) e.buyers.add(p.buyer); traitRecent.set(k, e);
     }
   }
   const freqOf = (k: string, v: string): number | null => {
@@ -199,6 +247,9 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     for (const t of traits ?? []) {
       const rec = traitRecent.get(`${norm(t.k)}=${norm(t.v)}`);
       if (!rec || rec.n < minTraitN) continue;
+      // When we know the buyers, a trait must be bought by ≥ minDistinctBuyers distinct wallets to count —
+      // defeats one wallet wash-buying many NFTs of a trait. If buyers are unknown, fall back to n only.
+      if (rec.buyers.size > 0 && rec.buyers.size < minDistinctBuyers) continue;
       const freq = freqOf(t.k, t.v);
       if (freq == null) continue;
       const expectedShare = freq / supply;            // how often it SHOULD appear in sales
@@ -223,6 +274,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     const out: { type: string; value: string; ratio: number }[] = [];
     for (const [kv, rec] of traitRecent) {
       if (rec.n < minTraitN) continue;
+      if (rec.buyers.size > 0 && rec.buyers.size < minDistinctBuyers) continue;
       const eq = kv.indexOf("=");
       if (eq < 0) continue;
       const type = kv.slice(0, eq);

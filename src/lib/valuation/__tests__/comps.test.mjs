@@ -18,7 +18,7 @@ test("single sale -> one smooth, monotonic parabola (no waves), never below floo
   // rare end above the common end. (The old local model left distant commons at floor; the parabola
   // averages a level instead — sparse data is regularized toward the baseline but still lifts.)
   const sales = [{ rank: 50, price: 80, ageDays: 5 }];
-  const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: (p) => (p >= 50 ? 0 : 1) });
+  const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: (p) => (p >= 50 ? 0 : 1), thinDistinctThreshold: 0, baselineClampHi: 1e9, baselineClampLo: 0 });
   assert.ok(m.curveValue(50) > m.curveValue(900), "rarer must value >= commoner");
   assert.ok(m.curveValue(900) >= 5, "never below floor");
   assert.ok(m.curveValue(50) >= 40, `rare end reflects the sale, got ${m.curveValue(50)}`);
@@ -63,7 +63,7 @@ test("recency: a fresh high sale outweighs a stale low one at the same rank", ()
     { rank: 480, price: 19, ageDays: 1 },
     { rank: 520, price: 21, ageDays: 1 },
   ];
-  const m = buildCompsModel(sales, 1000, { floor: 2, rarityFactor: () => 0 });
+  const m = buildCompsModel(sales, 1000, { floor: 2, rarityFactor: () => 0, thinDistinctThreshold: 0, baselineClampHi: 1e9, baselineClampLo: 0 });
   assert.ok(m.curveValue(500) >= 15, `expected fresh ~20, got ${m.curveValue(500)}`);
 });
 
@@ -117,4 +117,35 @@ test("minTraitN raised to 4: three sales of a trait are not enough to register d
   const freq = { y: { rare: 5, common: 995 } };
   const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: () => 0, traitFreq: freq });
   assert.equal(m.traitDemand([{ k: "Y", v: "Rare" }]).mult, 1, "3 sales < minTraitN(4) => no premium");
+});
+
+// ── Thin-collection wash attack (provenance + thin-market hardening) ─────────────────────────────
+test("thin-collection wash pump is bounded: fake ring can't inflate the curve or heat a trait", () => {
+  const rf = (p) => (p <= 2 ? 6 : p <= 8 ? 2 : p <= 30 ? 0.4 : 0);
+  const floor = 5;
+  // Attacker owns 5 NFTs, wash-sells each once between the SAME two wallets (A -> B) at 100x floor.
+  const sales = [];
+  for (let i = 0; i < 5; i++) {
+    sales.push({ rank: 100 + i, price: 500, ageDays: 1, seller: "A", buyer: "B", traits: [{ k: "Fake", v: "Pump" }] });
+  }
+  const freq = { fake: { pump: 5, other: 995 } };
+  const m = buildCompsModel(sales, 1000, { floor, rarityFactor: rf, traitFreq: freq });
+
+  // Curve at a pumped rank is bounded near the floor-anchored baseline (thin cap 2x + baseline clamp),
+  // NOT dragged toward the 500 fake price.
+  const base100 = floor * (1 + rf(10)); // rank 100 => 10th pct => rf 0.4 => baseline 7
+  assert.ok(m.curveValue(100) <= 2 * base100 + 1e-6, `pumped curve must stay <= 2x baseline; got ${m.curveValue(100)} vs ${2 * base100}`);
+
+  // Trait heat is blocked: all buys came from ONE buyer (< minDistinctBuyers), so no premium.
+  assert.equal(m.traitDemand([{ k: "Fake", v: "Pump" }]).mult, 1, "single-buyer wash must not heat a trait");
+});
+
+test("distinct-buyer gate is precise: genuine demand from many buyers still registers", () => {
+  const sales = [];
+  // 6 distinct NFTs of a trait, each bought by a DIFFERENT wallet (organic demand), plenty of volume.
+  for (let i = 0; i < 6; i++) sales.push({ rank: 200 + i, price: 20, ageDays: 3, seller: "S" + i, buyer: "B" + i, traits: [{ k: "Hat", v: "Gold" }] });
+  for (let i = 0; i < 6; i++) sales.push({ rank: 600 + i, price: 20, ageDays: 3, seller: "T" + i, buyer: "C" + i, traits: [{ k: "Hat", v: "Plain" }] });
+  const freq = { hat: { gold: 60, plain: 940 } }; // Gold 6% but half of recent sales -> genuinely hot
+  const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: () => 0, traitFreq: freq });
+  assert.ok(m.traitDemand([{ k: "Hat", v: "Gold" }]).mult > 1, "organic multi-buyer demand should register");
 });

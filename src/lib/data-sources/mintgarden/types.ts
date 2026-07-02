@@ -60,7 +60,13 @@ export interface MgNftDetail {
   openrarity_rank?: string | number | null;
   // Recent on-chain events; sale events carry an xch_price we use as a value anchor when the
   // collection has no floor.
-  events?: { type?: number | null; xch_price?: number | null }[] | null;
+  events?: {
+    type?: number | null;          // 2 = transfer/sale
+    xch_price?: number | null;
+    address?: { encoded_id?: string | null } | null;          // buyer / new owner
+    previous_address?: { encoded_id?: string | null } | null; // seller
+    payments?: { asset_id?: string | null }[] | null;         // asset_id null => XCH leg
+  }[] | null;
   is_blocked?: boolean | null;
   blocked_content?: boolean | null;
   sensitive_content?: boolean | null;
