@@ -240,6 +240,7 @@ export async function enrichNftsByIds(
       card.fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: round(total * xchUsdRate, 2) };
       card.valueBasis = cv.basis;
       card.valueConfidence = round(cv.confidence, 2);
+      card.valueSampleSize = model.sampleSize;
       card.valueCurve = cv.curve != null ? round(cv.curve, 3) : null;
       card.valueTraitMult = round(cv.traitMult, 3);
       card.valueTraitTop = cv.traitTop ?? null;

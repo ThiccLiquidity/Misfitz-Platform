@@ -77,6 +77,7 @@ export interface NftData {
   // valueConfidence 0..1 = how much real sales backed it; valueBasis = short human explanation.
   valueBasis?: string | null;
   valueConfidence?: number | null;
+  valueSampleSize?: number | null; // # recent clean sales behind the comps model (for the UI hedge)
   // Sales-fitted market curve (src/lib/valuation/comps). valueCurve = the rank-fitted curve score
   // (floor+rarity+comps merged); valueTraitMult = trait amplifier applied on top. totalEstimate =
   // valueCurve × valueTraitMult + collector-number premium.

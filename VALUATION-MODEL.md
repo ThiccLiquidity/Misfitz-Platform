@@ -202,12 +202,30 @@ estimates, and get one's own listing scored as a deal. We treat this as a first-
   sales can't drag the curve.
 - **Confidence indicator:** a thinly-traded pump shows LOW sales confidence in the UI (§5c).
 
-**Not defensible from current data (documented limitation):** the strongest defenses — capping any single
-buyer/seller *wallet-pair's* weight, and requiring *distinct buyers* for heat — need trade counterparties.
-Dexie's completed-offer API does **not** expose them (`known_taker` is typically null; there is no maker
-field; only raw `involved_coins` hashes are given). True Sybil/wash resistance therefore requires an
-on-chain trace pipeline (coin → owner via a full node or indexer) — a deliberate future phase, not shipped.
-Until then, the statistical defenses above bound the achievable manipulation.
+**Identity-based defenses (adopted — via MintGarden provenance):** Dexie's offer API doesn't expose
+counterparties, but MintGarden's per-NFT `events` DO (`previous_address` = seller, `address` = buyer,
+`xch_price`, `payments`) — and we already fetch those events during the comps build, so it's free. Using them:
+- **Pair-decay in the fit:** repeat sales between the SAME (seller → buyer) wallet pair are geometrically
+  downweighted (`pairDecay` 0.3^k, highest-recency sale kept at full weight), so a two-wallet ring bouncing
+  NFTs can't stack weight and drag the curve.
+- **Distinct-buyer gate for heat:** when buyer data is present, a trait needs ≥ `minDistinctBuyers` (3)
+  distinct buyers before it can register demand or a 🔥 chip — defeats one wallet wash-buying many NFTs of
+  a trait. Falls back to the distinct-NFT rule when counterparties are unknown (graceful).
+
+**Thin-market defenses (adopted — where fakes are cheapest):**
+- **Baseline price clamp:** winsorization goes inert in thin/poisoned samples, so each sale is also clamped
+  to [0.2×, 5×] of the floor-anchored baseline (`floor·(1+rf)`) before fitting. This references the floor
+  (expensive to fake), not the poisoned sale distribution. (Bounds are configurable; validate against real
+  cached sales so genuine grail buys aren't clipped.)
+- **Thin-collection curve cap:** until ≥ `thinDistinctThreshold` (8) distinct NFTs have sold, the curve is
+  capped to ≤ `thinMaxDeviation` (2×) the baseline — so a handful of fakes can't lift the parabola in a
+  sparse collection. Monotonicity and the floor lower bound are preserved.
+- **Visible hedge:** thin/low-confidence estimates show "Low · N sales" and a "thinly traded — rough guide"
+  note in the UI, so a sparse or poisoned collection reads as untrustworthy at a glance.
+
+**Remaining (future phase):** cross-collection wash-ring graph clustering (addresses that repeatedly
+transact with each other across many NFTs/collections) and deep on-chain coin tracing. The above raise the
+cost and bound the effect of the practical attacks; the ring-graph layer is the next escalation.
 
 ## 8. Known limitations / open questions for reviewers
 1. **Rarity model** is OpenRarity-style information content assuming trait independence. Is IC the right basis

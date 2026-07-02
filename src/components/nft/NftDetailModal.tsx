@@ -408,16 +408,29 @@ export function NftDetailModal({
                 </>
               )}
 
-              {(nft.valueConfidence != null || nft.rarityRank == null) && (
-                <div className="mt-2 flex items-center justify-between border-t pt-2 text-[10px]" style={{ borderColor: divider, color: subColor }}>
-                  <span>{nft.rarityRank == null ? "Unranked \u2014 floor estimate" : "Sales confidence"}</span>
-                  {nft.valueConfidence != null && nft.rarityRank != null && (
-                    <span style={{ color: lblColor, fontWeight: 700 }}>
-                      {nft.valueConfidence >= 0.66 ? "High" : nft.valueConfidence >= 0.4 ? "Medium" : "Low"}
-                    </span>
-                  )}
-                </div>
-              )}
+              {(nft.valueConfidence != null || nft.rarityRank == null) && (() => {
+                const n = nft.valueSampleSize ?? null;
+                const conf = nft.valueConfidence ?? null;
+                const level = conf == null ? null : conf >= 0.66 ? "High" : conf >= 0.4 ? "Medium" : "Low";
+                const thin = nft.rarityRank != null && ((n != null && n < 8) || level === "Low");
+                return (
+                  <div className="mt-2 border-t pt-2 text-[10px]" style={{ borderColor: divider, color: subColor }}>
+                    <div className="flex items-center justify-between">
+                      <span>{nft.rarityRank == null ? "Unranked \u2014 floor estimate" : "Sales confidence"}</span>
+                      {level && nft.rarityRank != null && (
+                        <span style={{ color: level === "Low" ? "#f4a940" : lblColor, fontWeight: 700 }}>
+                          {level}{n != null ? ` \u00b7 ${n} sale${n === 1 ? "" : "s"}` : ""}
+                        </span>
+                      )}
+                    </div>
+                    {thin && (
+                      <div className="mt-1" style={{ color: "#f4a940" }}>
+                        Thinly traded \u2014 estimate is a rough guide, not a firm price.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

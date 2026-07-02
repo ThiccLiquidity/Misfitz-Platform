@@ -301,6 +301,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       ...card, fairValue, dealScore,
       valueBasis: cv.basis,
       valueConfidence: Math.round(cv.confidence * 100) / 100,
+      valueSampleSize: comps.sampleSize,
       valueCurve: cv.curve != null ? Math.round(cv.curve * 1000) / 1000 : null,
       valueTraitMult: Math.round(cv.traitMult * 1000) / 1000,
       valueTraitTop: cv.traitTop ?? null,
