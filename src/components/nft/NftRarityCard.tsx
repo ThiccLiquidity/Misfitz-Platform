@@ -155,21 +155,31 @@ function NftRarityCardImpl({
           {isDetail && (
             <div className="tcg-art-clean-label">Art as minted</div>
           )}
-          {/* For-sale tell — slim, minimal price pill, centered at the top of the card. */}
-          {nft.listing && !isDetail && (
-            <div
-              style={{
-                position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5,
-                whiteSpace: "nowrap",
-                background: "rgba(16,138,70,0.92)", color: "#eafff1",
-                fontSize: 10, fontWeight: 700, letterSpacing: "0.02em", lineHeight: 1.5,
-                padding: "1px 9px", borderRadius: 999,
-                border: "1px solid rgba(120,230,160,0.5)", boxShadow: "0 1px 5px rgba(0,0,0,0.4)",
-              }}
-            >
-              {formatXch(nft.listing.priceXch)}
-            </div>
-          )}
+          {/* For-sale tell — price pill, COLORED BY DEAL QUALITY so a good/fair/bad deal reads at a glance
+              without opening the card. Deal score exists only for clean XCH-only offers; CAT/unverified
+              offers fall back to a neutral green "for sale" pill (no deal claim). A ↓/≈/↑ marker keeps it
+              readable without relying on color alone. */}
+          {nft.listing && !isDetail && (() => {
+            const label = nft.dealScore?.label;
+            const accent = label ? colorForLabel(label) : "rgba(16,138,70,0.92)";
+            const mark = label === "GREAT DEAL" || label === "GOOD DEAL" ? "↓ "
+              : label === "OVERPRICED" ? "↑ " : label === "FAIR DEAL" ? "≈ " : "";
+            return (
+              <div
+                title={label ? funLabel(label) : "For sale"}
+                style={{
+                  position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5,
+                  whiteSpace: "nowrap",
+                  background: accent, color: "#fff",
+                  fontSize: 10, fontWeight: 800, letterSpacing: "0.02em", lineHeight: 1.5,
+                  padding: "1px 9px", borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.35)", boxShadow: "0 1px 5px rgba(0,0,0,0.5)",
+                }}
+              >
+                {mark}{formatXch(nft.listing.priceXch)}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── PANEL — all effects scoped here ── */}
