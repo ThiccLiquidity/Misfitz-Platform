@@ -82,3 +82,39 @@ test("rarity-monotone: a cheap deal in a rare band never inverts the tiers (rare
   let prev = Infinity;
   for (let r = 1; r <= 1000; r += 25) { const v = m.curveValue(r); assert.ok(v <= prev + 1e-9, `non-increasing at rank ${r}`); prev = v; }
 });
+
+// ── Robustness guards (external review hardening) ────────────────────────────────────────────────
+test("winsorize: one extreme outlier sale can't blow up the curve level", () => {
+  const sales = [];
+  for (let i = 0; i < 12; i++) sales.push({ rank: 500 + i, price: 10, ageDays: 5 });
+  sales.push({ rank: 506, price: 1000, ageDays: 1 }); // fat-finger / wash outlier
+  const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: () => 0 });
+  assert.ok(m.curveValue(506) < 30, `outlier should be winsorized out; got ${m.curveValue(506)}`);
+});
+
+test("rare-tail: value extrapolates LINEARLY beyond the rarest actual sale (no c·rf^2 runaway)", () => {
+  const rf = (p) => 100 - p; // supply 1000: rank r -> percentile 0.1r -> rf = 100 - 0.1r (linear in rank)
+  const sales = [];
+  for (let r = 900; r <= 990; r += 10) sales.push({ rank: r, price: 20, ageDays: 5 }); // rf 10..1 => rfMax 10
+  const m = buildCompsModel(sales, 1000, { floor: 1, rarityFactor: rf });
+  const v100 = m.curveValue(100), v300 = m.curveValue(300), v500 = m.curveValue(500); // rf 90,70,50 (> rfMax)
+  assert.ok(Math.abs(v100 - 2 * v300 + v500) < 1e-6, `tail must be linear; 2nd diff=${v100 - 2 * v300 + v500}`);
+  assert.ok(v100 >= v300 && v300 >= v500, "rarer still valued >= less-rare in the tail");
+});
+
+test("trait ratio is capped (rare-trait double-count / wash guard)", () => {
+  const sales = [];
+  for (let i = 0; i < 20; i++) sales.push({ rank: 100 + i, price: 20, ageDays: 2, traits: [{ k: "X", v: "Hot" }] });
+  const freq = { x: { hot: 1, cold: 99999 } }; // uncapped ratio would be in the thousands
+  const m = buildCompsModel(sales, 100000, { floor: 5, rarityFactor: () => 0, traitFreq: freq });
+  const hot = m.traitDemand([{ k: "X", v: "Hot" }]);
+  assert.ok(hot.top && hot.top.ratio <= 6 + 1e-9, `ratio must be capped at 6; got ${hot.top && hot.top.ratio}`);
+});
+
+test("minTraitN raised to 4: three sales of a trait are not enough to register demand", () => {
+  const sales = [];
+  for (let i = 0; i < 3; i++) sales.push({ rank: 100 + i, price: 20, ageDays: 2, traits: [{ k: "Y", v: "Rare" }] });
+  const freq = { y: { rare: 5, common: 995 } };
+  const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: () => 0, traitFreq: freq });
+  assert.equal(m.traitDemand([{ k: "Y", v: "Rare" }]).mult, 1, "3 sales < minTraitN(4) => no premium");
+});

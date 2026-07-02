@@ -47,7 +47,9 @@ export interface CompsOptions {
   traitFreq?: Record<string, Record<string, number>>; // collection trait counts (attributes_frequency_counts)
   demandDamp?: number;         // trait-demand sensitivity (default 0.16)
   maxTraitDemand?: number;     // cap on the combined trait-demand multiplier (default 1.6)
-  minTraitN?: number;          // min trait sales to register demand (default 3)
+  minTraitN?: number;          // min DISTINCT-NFT trait sales to register demand (default 4)
+  ridgeCScale?: number;        // extra ridge penalty on the curvature term c (default 6) — rare-tail guard
+  maxTraitRatio?: number;      // cap on a single trait's observed/expected ratio (default 6) — anti double-count/wash
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -92,7 +94,9 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   const traitFreq = opts.traitFreq;
   const demandDamp = opts.demandDamp ?? 0.16;
   const maxTraitDemand = opts.maxTraitDemand ?? 1.6;
-  const minTraitN = opts.minTraitN ?? 3;
+  const minTraitN = opts.minTraitN ?? 4;
+  const ridgeCScale = opts.ridgeCScale ?? 6;
+  const maxTraitRatio = opts.maxTraitRatio ?? 6;
 
   const usable = sales.filter((s) => Number.isFinite(s.rank) && s.rank > 0 && Number.isFinite(s.price) && s.price > 0);
   if (usable.length === 0) return null;
@@ -115,26 +119,52 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   // but sparse/noisy sales stay near the baseline and it always resolves to one clean parabola. b,c are
   // clamped ≥0 so it's monotonic (rarer ≥ less-rare); an off-curve sale is a DEAL, never a dent.
   const rfAt = (rank: number) => rarityFactor(clamp((rank / supply) * 100, 0, 100));
+
+  // Winsorize sale prices to a robust band before fitting so ONE extreme (or wash-traded) sale can't
+  // dominate the squared-error loss. Only applied with enough samples to define percentiles; below that
+  // the ridge prior already regularizes. Robustness guard (VALUATION-MODEL.md).
+  let loP = 0, hiP = Infinity;
+  if (points.length >= 8) {
+    const sorted = points.map((p) => p.price).sort((x, y) => x - y);
+    const q = (f: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(f * (sorted.length - 1))))];
+    loP = q(0.05); hiP = q(0.95);
+  }
+  const winsor = (price: number) => Math.min(hiP, Math.max(loP, price));
+
+  // Rarest rf actually observed in sales — beyond this the curve extrapolates with NO evidence.
+  let rfMax = 0;
+  for (const p of points) rfMax = Math.max(rfMax, rfAt(p.rank));
+
   let a = floor, b = floor, c = 0;
   if (floor > 0 && points.length > 0) {
     const prior: [number, number, number] = [floor, floor, 0];
-    const lambda = 0.7; // pull toward the baseline parabola (≈ this many effective sales of regularization)
-    const A = [[lambda, 0, 0], [0, lambda, 0], [0, 0, lambda]];
-    const g: [number, number, number] = [lambda * prior[0], lambda * prior[1], lambda * prior[2]];
+    const lambda = 0.7; // ridge pull toward the floor-anchored baseline parabola
+    // Penalize the CURVATURE term c much harder (ridgeCScale×): grails rarely trade, so c is inferred
+    // from mid-rarity sales yet carries ~rf²≈196× leverage at the mythic end. A heavy prior keeps c
+    // near 0 unless the data strongly supports curvature — stops noise from inflating every grail.
+    const lambdaC = lambda * ridgeCScale;
+    const A = [[lambda, 0, 0], [0, lambda, 0], [0, 0, lambdaC]];
+    const g: [number, number, number] = [lambda * prior[0], lambda * prior[1], lambdaC * prior[2]];
     for (const p of points) {
       const rf = rfAt(p.rank);
       const ph = [1, rf, rf * rf];
       const w = p.w;
-      for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) A[i][j] += w * ph[i] * ph[j]; g[i] += w * ph[i] * p.price; }
+      const price = winsor(p.price);
+      for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) A[i][j] += w * ph[i] * ph[j]; g[i] += w * ph[i] * price; }
     }
     const sol = solve3(A, g);
     if (sol) { a = sol[0]; b = Math.max(0, sol[1]); c = Math.max(0, sol[2]); }
   }
   const globalScale = floor > 0 ? (a + b + c) / floor : 1; // rough curve-level indicator for diagnostics
 
+  const curveRaw = (rf: number) => a + b * rf + c * rf * rf;
   function curveValue(rank: number): number {
     const rf = rfAt(rank);
-    return Math.max(floor, a + b * rf + c * rf * rf);
+    if (rfMax <= 0 || rf <= rfMax) return Math.max(floor, curveRaw(rf));
+    // Beyond the rarest ACTUAL sale: continue linearly (slope at rfMax) rather than trust unsupported
+    // quadratic extrapolation. slope = b + 2c·rfMax ≥ 0, so it stays monotonic (rarer ≥ less-rare).
+    const slope = b + 2 * c * rfMax;
+    return Math.max(floor, curveRaw(rfMax) + slope * (rf - rfMax));
   }
 
   function supportAt(rank: number): number {
@@ -174,10 +204,14 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
       const expectedShare = freq / supply;            // how often it SHOULD appear in sales
       const observedShare = rec.w / totalRecentW;     // how often it DID, recently (recency-weighted)
       const ratio = observedShare / expectedShare;    // > 1 => selling hotter than its prevalence
-      if (ratio <= 1) continue;                       // demand only ADDS
+      if (ratio <= 1) continue;                       // demand only ADDS (premium-only by design)
+      // Cap the ratio so a very rare trait (tiny expectedShare) can't earn a runaway premium from a
+      // couple of sales — that re-rewards rarity the rank already priced (double-count) and is the
+      // cheapest wash-trade lever. Bounded signal, not removed.
+      const capped = Math.min(ratio, maxTraitRatio);
       const reliability = rec.n / (rec.n + 8);
-      logSum += Math.log(ratio) * demandDamp * reliability;
-      if (!top || ratio > top.ratio) top = { kv: `${t.k}:${t.v}`, ratio, n: rec.n };
+      logSum += Math.log(capped) * demandDamp * reliability;
+      if (!top || capped > top.ratio) top = { kv: `${t.k}:${t.v}`, ratio: capped, n: rec.n };
     }
     return { mult: clamp(Math.exp(logSum), 1, maxTraitDemand), top };
   }
@@ -196,7 +230,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
       const freq = freqOf(type, value);
       if (freq == null) continue;
       const ratio = (rec.w / totalRecentW) / (freq / supply);
-      if (ratio > 1.15) out.push({ type, value, ratio }); // threshold: only clearly-hot surface a flame
+      if (ratio > 1.15) out.push({ type, value, ratio: Math.min(ratio, maxTraitRatio) }); // clearly-hot only
     }
     return out.sort((a, b) => b.ratio - a.ratio);
   }
