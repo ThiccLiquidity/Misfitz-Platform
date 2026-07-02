@@ -20,8 +20,32 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
 export default async function CollectionLivePage({ params }: { params: { id: string } }) {
   const view = await getCollectionView(params.id);
   if (!view) notFound();
-  return <CollectionBinder key={view.id} view={view} />;
+  // JSON-LD structured data so search engines/social understand the collection page.
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: view.name,
+    ...(view.description ? { description: view.description } : {}),
+    ...(view.imageUrl ? { image: view.imageUrl } : {}),
+    url: `${SITE_URL}/collection/${view.id}`,
+    isPartOf: { "@type": "WebSite", name: "Traitfolio", url: SITE_URL },
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Browse", item: `${SITE_URL}/browse` },
+        { "@type": "ListItem", position: 2, name: view.name, item: `${SITE_URL}/collection/${view.id}` },
+      ],
+    },
+  };
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
+      <CollectionBinder key={view.id} view={view} />
+    </>
+  );
 }
