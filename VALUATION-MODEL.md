@@ -51,6 +51,14 @@ We compute our own OpenRarity-style rank:
 
 ---
 
+### 2c. NFTs we cannot rank (traitless, or metadata fetch gaps)
+Some NFTs carry no usable traits (empty attributes) or fail to fetch. They get **no rank**, and by design
+their estimate falls back to the **floor**: the baseline estimator maps a null rank to the 50th-percentile
+rarity factor (= 0), so estimate = floor + any collector-number premium, and the comps model returns null
+for a null rank. Intentional — with no rarity signal we make no rarity claim and anchor at the collection
+floor rather than guess. The UI marks these unranked (the tier bar shows a "not yet scored by the rarity
+index" count; the NFT card notes a floor estimate).
+
 ## 3. Tiers
 
 Cumulative percentile thresholds (rank/supply×100 ≤ threshold):
@@ -139,9 +147,17 @@ Trait demand can only ADD to value; it never discounts. This is deliberate, not 
 where collectorMult = 1 + (collector-number weight). So the market curve replaces floor+rarity; trait demand
 and collector number are multiplicative bumps; the floor is a hard lower bound.
 
-### 5c. Confidence
-Local sales support at a rank via a Gaussian kernel over sale ranks (bandwidth = max(supply×0.01, 100)),
-squashed to [0, 0.92]. Thin evidence ⇒ low confidence ⇒ the estimate stays essentially at baseline.
+### 5c. Confidence — design decision: a DISPLAY signal, not a point-estimate modulator
+`supportAt(rank)` measures LOCAL sales support: a Gaussian kernel over the ranks of recent sales
+(bandwidth = max(supply×0.01, 100)), squashed to [0, 0.92] — "how many real sales sit near this rarity,
+recently?"
+
+It is deliberately **not** multiplied into the point estimate. The estimate is already regularized
+*globally* by the ridge prior (thin/quiet collections stay near the floor-anchored baseline because the
+fit cannot overcome the prior). Folding confidence in on top would double-regularize and systematically
+undervalue well-supported NFTs. Instead confidence is surfaced as a per-NFT **confidence indicator** so
+collectors can see how sales-backed an estimate is. If a future version wants a visible uncertainty band,
+derive it from this confidence — do not bake it into the point estimate.
 
 ---
 
@@ -175,12 +191,14 @@ isn't a clean per-NFT XCH figure).
    vs. e.g. trait-normalized or statistical rarity? Should meta "trait count" be included?
 2. **Rarity premium anchors** (Section 4 table) are hand-calibrated. Are the multiples (14× at 0.1%, etc.)
    reasonable across collections of different sizes/liquidity?
-3. **Comps ridge prior (λ=0.7)** and **half-lives (120d price / 21d demand)** are judgment calls. Too sticky?
-   Too twitchy? Should λ scale with sample size?
+3. **Comps ridge prior (λ=0.7)** and **half-lives (120d price / 21d demand)** are judgment calls. (Hardened:
+   the curvature term c now gets a 6× heavier ridge, and sale prices are winsorized to [p5,p95] before the
+   fit. We kept λ self-scaling via the recency-weight sum rather than forcing λ(n), which would gut thin data.)
 4. **Monotonic clamp (b,c ≥ 0)**: we forbid the curve from ever valuing a rarer NFT below a less-rare one.
    Correct, or are there collections where that's genuinely wrong?
-5. **Trait demand** uses recent sale *volume* vs prevalence, capped at 1.6×. Should price (not just volume)
-   inform demand? Is the cap right?
+5. **Trait demand** uses recent sale *volume* vs prevalence, capped at 1.6×. (Hardened: each trait's
+   observed/expected ratio is now capped at 6× and requires ≥4 distinct-NFT sales, limiting rare-trait
+   double-count and wash-trade leverage.) Open: should price, not just volume, inform demand?
 6. **Floor precedence** and the "cheapest signal among holdings" fallback — sound, or does it bias small wallets?
 7. **Cold-start**: collections with few sales lean on the baseline. Is the baseline a good prior, or should
    thin-data collections show wider ranges / lower confidence more aggressively?

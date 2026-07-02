@@ -407,6 +407,17 @@ export function NftDetailModal({
                   </div>
                 </>
               )}
+
+              {(nft.valueConfidence != null || nft.rarityRank == null) && (
+                <div className="mt-2 flex items-center justify-between border-t pt-2 text-[10px]" style={{ borderColor: divider, color: subColor }}>
+                  <span>{nft.rarityRank == null ? "Unranked \u2014 floor estimate" : "Sales confidence"}</span>
+                  {nft.valueConfidence != null && nft.rarityRank != null && (
+                    <span style={{ color: lblColor, fontWeight: 700 }}>
+                      {nft.valueConfidence >= 0.66 ? "High" : nft.valueConfidence >= 0.4 ? "Medium" : "Low"}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
