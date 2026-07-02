@@ -149,3 +149,22 @@ test("distinct-buyer gate is precise: genuine demand from many buyers still regi
   const m = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: () => 0, traitFreq: freq });
   assert.ok(m.traitDemand([{ k: "Hat", v: "Gold" }]).mult > 1, "organic multi-buyer demand should register");
 });
+
+test("pair-decay: a repeated same-pair ring moves the curve less than distinct pairs", () => {
+  const rf = () => 1;
+  const mk = (samePair) => {
+    const sales = [];
+    for (let i = 0; i < 5; i++) sales.push({ rank: 100 + i, price: 100, ageDays: 2, seller: samePair ? "A" : "S" + i, buyer: samePair ? "B" : "B" + i });
+    return buildCompsModel(sales, 1000, { floor: 5, rarityFactor: rf, baselineClampHi: 1e9, baselineClampLo: 0, thinDistinctThreshold: 0 });
+  };
+  const ring = mk(true), organic = mk(false);
+  assert.ok(organic.curveValue(100) > ring.curveValue(100), `distinct pairs lift more; ring=${ring.curveValue(100)} organic=${organic.curveValue(100)}`);
+});
+
+test("thin cap releases once enough distinct NFTs have sold", () => {
+  const opts = { floor: 5, rarityFactor: () => 1 };
+  const mk = (n) => { const s = []; for (let i = 0; i < n; i++) s.push({ rank: 100 + i, price: 100, ageDays: 2, seller: "S" + i, buyer: "B" + i }); return buildCompsModel(s, 1000, opts); };
+  const base = 5 * (1 + 1); // 10
+  assert.ok(mk(6).curveValue(100) <= 2 * base + 1e-6, "thin (<8 NFTs) capped at 2x baseline");
+  assert.ok(mk(10).curveValue(100) > 2 * base, "cap released with >=8 distinct NFTs");
+});
