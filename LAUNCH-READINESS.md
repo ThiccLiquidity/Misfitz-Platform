@@ -63,19 +63,31 @@ Everything else in the valuation review was reasoning; this is the one step that
 real outcomes, so hold launch behind it. A harness is written and ready:
 
 ```
-npx tsx scripts/backtest-valuation.ts col1<yourCollectionId> [--max=800]
+npx tsx scripts/backtest-valuation.ts col1<id> [col1<id> ...] [--max=800] [--since=YYYY-MM-DD]
 ```
 
-For every past clean XCH sale it rebuilds the comps model from ONLY the sales before that sale
-(leave-future-out), estimates the NFT's value at that moment, and compares to the actual sale price. It
-prints median/mean absolute % error and hit-rates (±25% / ±50%), and — folding in the other open item —
-**counts how many real sales the [0.2×, 5×] baseline clamp would have clipped**, so you can confirm the
-clamp bounds catch wash/outliers and don't clip legitimate grail buys.
+Leave-future-out: each past clean XCH sale is estimated from ONLY the sales strictly before it, then
+compared to what it actually sold for. Pass MULTIPLE collection ids — the **pooled** number across
+collections is the trustworthy one (per-Chia samples are thin); per-collection breakdowns are for
+diagnosis, not tuning. The report is shaped for honest reading:
+- **Median** absolute % error as the headline, **mean** alongside (prices are heavy-tailed — a gap
+  between them shows how much one missed grail is swinging the mean).
+- **Signed bias** (+ = the model overestimates), not just magnitude — our mechanisms are premium-only /
+  floored, so we want to know the *direction* of error.
+- Breakdowns by **confidence tier** (High/Med/Low) and **rarity band** — error on Low/mythic is expected;
+  error in High-confidence commons would be a real problem hidden in the aggregate.
+- **Clamp clip-rate** with example clipped sales (rank / price / baseline / ratio) so you can eyeball
+  whether the [0.2×,5×] bound is catching wash/outliers or wrongly suppressing genuine grail buys. It
+  flags a clip-rate over ~5% as "5× may be too tight."
+- A header stating the sample: # collections, # sales evaluated, date range, and the split method.
 
-What to do: run it on 2–3 real collections (ranked and unranked). If error is reasonable and clamp clips
-are dominated by genuine outliers/wash (not normal sales), the model is validated — otherwise tune
-`baselineClampHi` / the ridge / half-lives and re-run. This needs your machine (network + live APIs); I
-can't run it from here.
+**Discipline (important):** do NOT tune parameters against these results — report first. Choosing
+parameters while staring at the test set contaminates the only reality-based validation we have. If
+tuning turns out to be needed, discuss it, change it, then **re-validate on a fresh held-out time slice**
+via `--since=YYYY-MM-DD` (evaluates only sales on/after that date, training on everything before).
+
+This needs your machine (network + live APIs; the sandbox has a platform-mismatched esbuild binary). Run
+it, paste the report, and we read it together before any parameter change.
 
 ### 2b. Hosting + domain
 
