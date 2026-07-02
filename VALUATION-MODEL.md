@@ -121,6 +121,17 @@ Traits selling **more often recently than their prevalence** run hot:
   requiring **≥ 3** sales of that trait to count. Combined multiplier = clamp(exp(Σ), 1, **1.6**).
 - Collection-wide "trending traits" (the 🔥 chips) surface any trait with ratio > **1.15**.
 
+### 5a-note. Design decision — trait demand is PREMIUM-ONLY (intentional)
+
+Trait demand can only ADD to value; it never discounts. This is deliberate, not an oversight:
+- A trait "cooling off" is already expressed two ways without a discount term: (1) the rarity **curve
+  refits downward** as recent sale prices fall, and (2) trait heat **decays automatically** as older
+  sales age out of the 21-day demand window (the recency weight `wd` shrinks, so observedShare drops
+  back toward prevalence and the multiplier relaxes to 1.0).
+- Letting demand go below 1.0 would double-count weakness (the curve already dropped) and could push an
+  NFT below a floor-anchored value it can still realistically fetch. Premium-only keeps the floor as an
+  honest lower bound and the model easy to explain to collectors.
+
 ### 5b. Final blend
 
     estimate = max( floor, curveValue × traitDemandMult × collectorMult )
