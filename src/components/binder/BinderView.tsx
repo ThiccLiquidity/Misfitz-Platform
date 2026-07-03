@@ -188,7 +188,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
 
         {/* ── SPREAD ──────────────────────────────────────────────────────────── */}
         <div
-          className="relative hidden w-full lg:block"
+          className="relative hidden w-full xl:block"
           style={{ perspective: "1100px" }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
@@ -336,7 +336,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
         {/* Phones + tablets: a readable, aspect-locked grid. Cards keep a 5:7 shape at any width;
             the 3-D flip spread is reserved for large desktops (lg+) where it renders cleanly. */}
         <div
-          className="tcg-binder-page tcg-binder-grid grid grid-cols-2 gap-2 rounded-xl p-2 sm:grid-cols-3 lg:hidden"
+          className="tcg-binder-page tcg-binder-grid grid grid-cols-2 gap-2 rounded-xl p-2 sm:grid-cols-3 lg:grid-cols-4 xl:hidden"
           onTouchStart={handleMobileTouchStart}
           onTouchEnd={handleMobileTouchEnd}
         >
@@ -368,7 +368,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
     </div>
 
     {/* Controls float freely below the binder shell — spread paging on desktop, single-page on mobile */}
-    <div className="hidden lg:block">
+    <div className="hidden xl:block">
       <BinderPageControls
         pageIndex={displaySpread}
         pageCount={spreadCount}
