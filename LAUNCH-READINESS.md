@@ -39,6 +39,23 @@ live, (3) recommended-but-optional polish, and (4) known limitations / the next 
 
 **Accessibility** — verified alt text on all images, aria-labels on icon buttons, aria roles on modals/lightbox.
 
+**Mobile / responsive & UX polish (latest session)**
+- Binder is a readable, aspect-locked **portrait trading-card grid** on phones + tablets (2/3/4 cols), with
+  **prev/next paging (12/page) + swipe** instead of endless scroll. The 3-D flip spread is desktop-only (xl+),
+  so tablet landscape no longer distorts cards.
+- Filter rail overhaul: NFT search, CAT-offer Show/Hide/Only, deal-tag legend, reordered sorts, collapsible
+  sections. Portfolio gets its own sort set (no marketplace-only sorts).
+- Light-mode contrast pass: theme-aware accent (`--gold`: bright gold on dark, **emerald `#059669`** on light),
+  dark text on the gold landing CTA, readable "showing rarest N".
+- Detail modal locks page scroll (no scroll-leak); tier-stat squares shrink on mobile; nav fits phones.
+- Loading is obvious on mobile: centered "working" pill + a spinner while the grid is still empty.
+- Special-number audit: dropped the blanket "Early Mint" premium; killed a rounding-residual phantom.
+- CAT offers (task #110): honest lower-bound + wallet-verify messaging shipped and launch-safe; full
+  CAT→XCH pricing stays deferred until a **verified stablecoin asset-id allowlist** is provided (owner input).
+
+_Known dev-only noise: Next.js "image height 0" warnings from the hidden (display:none) desktop spread and
+first-frame flex layout — stripped in the production build, not user-visible._
+
 ---
 
 ## 2. Before launch — things only YOU can do
