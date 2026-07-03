@@ -145,7 +145,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   // it so a restart doesn't re-page the whole collection; refresh window is modest (new mints appear then).
   let items: MgListItem[] = [];
   let capped = false;
-  const slimHit = await cacheGet(`slimlist:${id}`, 30 * 60_000);
+  const slimHit = await cacheGet(`slimlist2:${id}`, 30 * 60_000);
   if (slimHit) {
     try {
       const parsed = JSON.parse(slimHit) as { items: MgListItem[]; capped: boolean };
@@ -156,14 +156,24 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   if (items.length === 0) {
     let cursor: string | null | undefined = undefined;
     let pages = 0;
+    let complete = true; // stays true only if EVERY page fetched OK — a truncated scan must NOT be cached
     do {
-      const page: MgPage<MgListItem> = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true).catch(() => ({ items: [], next: null, previous: null }));
+      // Retry a transiently-failed page (MintGarden 429 / timeout) before giving up. One hiccup mid-scan
+      // must not silently truncate the collection — that drops every for-sale NFT past the failure point.
+      let page: MgPage<MgListItem> | null = null;
+      for (let attempt = 0; attempt < 3 && !page; attempt++) {
+        page = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true).catch(() => null);
+        if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+      if (!page) { complete = false; break; } // abort this scan WITHOUT caching a partial list
       items.push(...(page.items ?? []));
       cursor = page.next;
       pages += 1;
       if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
     } while (cursor);
-    if (items.length > 0) cachePut(`slimlist:${id}`, JSON.stringify({ items, capped }));
+    // Only persist a COMPLETE scan (natural end or a clean MAX_PAGES cap). A truncated scan is still used
+    // for THIS render, but not cached — so the next request retries and fills the full collection + listings.
+    if (complete && items.length > 0) cachePut(`slimlist2:${id}`, JSON.stringify({ items, capped }));
   }
 
   const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
