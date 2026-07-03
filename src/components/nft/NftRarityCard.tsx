@@ -161,15 +161,21 @@ function NftRarityCardImpl({
               readable without relying on color alone. */}
           {nft.listing && !isDetail && (() => {
             const label = nft.dealScore?.label;
+            // A CAT-inclusive offer is never deal-scored; its XCH price is only the XCH leg, so the tag
+            // shows a trailing "+" to signal "at least this, plus CAT tokens" (a floor, not the total).
+            const catInclusive = (nft.listingAssets ?? []).some((a) => a !== "XCH");
             // Deal-scored (clean Dexie offer) -> colored by quality. Listed but UNSCORED (MintGarden-only
             // listing or a CAT/bundle offer we can't fully value) -> NEUTRAL slate, never green, so an
             // unscored ask can't read as a "good deal". A "•" marks it as listed-but-not-scored.
             const accent = label ? colorForLabel(label) : "rgba(71,85,105,0.92)";
             const mark = label === "GREAT DEAL" || label === "GOOD DEAL" ? "↓ "
               : label === "OVERPRICED" ? "↑ " : label === "FAIR DEAL" ? "≈ " : "• ";
+            const title = catInclusive
+              ? `Costs at least ${formatXch(nft.listing.priceXch)} XCH, plus CAT tokens — open to verify`
+              : label ? funLabel(label) : "Listed — deal not scored (off-Dexie listing)";
             return (
               <div
-                title={label ? funLabel(label) : "Listed — deal not scored (off-Dexie listing or includes CATs)"}
+                title={title}
                 style={{
                   position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5,
                   whiteSpace: "nowrap",
@@ -179,7 +185,7 @@ function NftRarityCardImpl({
                   border: "1px solid rgba(255,255,255,0.35)", boxShadow: "0 1px 5px rgba(0,0,0,0.5)",
                 }}
               >
-                {mark}{formatXch(nft.listing.priceXch)}
+                {mark}{formatXch(nft.listing.priceXch)}{catInclusive ? " +" : ""}
               </div>
             );
           })()}
@@ -383,9 +389,6 @@ function TraitRow({
               {visual.emoji} {trait.rarityPercent.toFixed(1)}%
             </span>
           )}
-        </div>
-        <div className="flex items-center justify-between gap-1">
-          <span className="tcg-trait-val truncate">{trait.value}</span>
         </div>
       </div>
     </div>
