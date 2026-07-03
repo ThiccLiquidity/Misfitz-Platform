@@ -161,12 +161,15 @@ function NftRarityCardImpl({
               readable without relying on color alone. */}
           {nft.listing && !isDetail && (() => {
             const label = nft.dealScore?.label;
-            const accent = label ? colorForLabel(label) : "rgba(16,138,70,0.92)";
+            // Deal-scored (clean Dexie offer) -> colored by quality. Listed but UNSCORED (MintGarden-only
+            // listing or a CAT/bundle offer we can't fully value) -> NEUTRAL slate, never green, so an
+            // unscored ask can't read as a "good deal". A "•" marks it as listed-but-not-scored.
+            const accent = label ? colorForLabel(label) : "rgba(71,85,105,0.92)";
             const mark = label === "GREAT DEAL" || label === "GOOD DEAL" ? "↓ "
-              : label === "OVERPRICED" ? "↑ " : label === "FAIR DEAL" ? "≈ " : "";
+              : label === "OVERPRICED" ? "↑ " : label === "FAIR DEAL" ? "≈ " : "• ";
             return (
               <div
-                title={label ? funLabel(label) : "For sale"}
+                title={label ? funLabel(label) : "Listed — deal not scored (off-Dexie listing or includes CATs)"}
                 style={{
                   position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5,
                   whiteSpace: "nowrap",
