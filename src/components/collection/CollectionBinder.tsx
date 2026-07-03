@@ -5,7 +5,7 @@ import Image from "next/image";
 import type { CollectionData, NftData } from "@/types";
 import { BinderView } from "@/components/binder/BinderView";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
-import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters } from "@/components/collection/FilterSidebar";
+import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters, type CatFilter } from "@/components/collection/FilterSidebar";
 import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
@@ -22,6 +22,10 @@ function pct(n: NftData): number {
 function tokenNum(n: NftData): number {
   const m = n.name.match(/#?(\d+)\s*$/);
   return m ? parseInt(m[1], 10) : 0;
+}
+// A listing is CAT-inclusive when it asks for any non-XCH asset.
+function isCatListing(n: NftData): boolean {
+  return n.listing != null && (n.listingAssets ?? []).some((a) => a !== "XCH");
 }
 
 export function CollectionBinder({ view }: { view: CollectionView }) {
@@ -44,6 +48,8 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [priceMax, setPriceMax] = useState("");
   const [collectorOnly, setCollectorOnly] = useState(false);
   const [collectorTier, setCollectorTier] = useState(4); // keep collectible badges with tier <= this
+  const [catFilter, setCatFilter] = useState<CatFilter>("all");
+  const [search, setSearch] = useState("");
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   const SHELL: CollectionData = useMemo(() => ({
@@ -122,11 +128,25 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     const hasPrice = Number.isFinite(minP) || Number.isFinite(maxP);
 
     let r = nfts;
+
+    // Search by token #number or (partial) launcher id / name.
+    const q = search.trim().toLowerCase().replace(/^#/, "");
+    if (q) {
+      r = r.filter((n) => {
+        if (n.launcherId.toLowerCase().includes(q)) return true;
+        if (/^\d+$/.test(q) && String(tokenNum(n)) === q) return true;
+        return n.name.toLowerCase().includes(q);
+      });
+    }
+
     if (tier !== "all") r = r.filter((n) => (n.rarityRank ? tierIdForPercentile(pct(n)) === tier : false));
     const activeTraits = Object.entries(traitFilters).filter(([, v]) => v !== "");
     if (activeTraits.length) {
       r = r.filter((n) => activeTraits.every(([t, v]) => n.traits.some((tr) => tr.trait_type === t && String(tr.value) === v)));
     }
+    // CAT-offer visibility: hide CAT-inclusive listings, or show only those.
+    if (catFilter === "only") r = r.filter((n) => isCatListing(n));
+    else if (catFilter === "hide") r = r.filter((n) => !isCatListing(n));
     // Shop filters: only listed NFTs, within the price range.
     if (forSaleOnly || hasPrice) r = r.filter((n) => n.listing != null);
     if (hasPrice) {
@@ -152,9 +172,10 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
       case "token-desc": s.sort((a, b) => tokenNum(b) - tokenNum(a)); break;
     }
     return s;
-  }, [nfts, tier, traitFilters, sort, forSaleOnly, priceMin, priceMax, collectorOnly, collectorTier]);
+  }, [nfts, tier, traitFilters, sort, forSaleOnly, priceMin, priceMax, collectorOnly, collectorTier, catFilter, search]);
 
   const listedCount = useMemo(() => nfts.reduce((c, n) => c + (n.listing ? 1 : 0), 0), [nfts]);
+  const catCount = useMemo(() => nfts.reduce((c, n) => c + (isCatListing(n) ? 1 : 0), 0), [nfts]);
   // Market cap (industry standard) = floor × supply. Traitfolio cap = sum of our estimates, scaled to
   // full supply when the load is capped, for a more realistic second number.
   const marketCap = useMemo(
@@ -175,7 +196,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const displayed = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
 
   // Reset the window when the filter/sort changes so you always see the top of the new order.
-  useEffect(() => { setVisible(PAGE); }, [tier, sort, traitFilters, forSaleOnly, priceMin, priceMax, collectorOnly, collectorTier]);
+  useEffect(() => { setVisible(PAGE); }, [tier, sort, traitFilters, forSaleOnly, priceMin, priceMax, collectorOnly, collectorTier, catFilter, search]);
 
   // ── Enrich just the visible cards (traits + estimated ranks), tracked so we never re-fetch one ──
   const enrichedRef = useRef<Set<string>>(new Set());
@@ -257,7 +278,8 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const activeFilterCount =
     (tier !== "all" ? 1 : 0) +
     Object.values(traitFilters).filter((v) => v !== "").length +
-    (forSaleOnly ? 1 : 0) + (collectorOnly ? 1 : 0) + (priceMin || priceMax ? 1 : 0);
+    (forSaleOnly ? 1 : 0) + (collectorOnly ? 1 : 0) + (priceMin || priceMax ? 1 : 0) +
+    (catFilter !== "all" ? 1 : 0) + (search.trim() ? 1 : 0);
   const sidebarProps = {
     tierFilter: tier, onTierFilter: setTier,
     sort, onSort: setSort,
@@ -266,11 +288,13 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     hotTraitKeys,
     trendingTraits,
     resultCount: filtered.length, totalCount: nfts.length,
+    searchQuery: search, onSearch: setSearch,
     forSaleOnly,
     onForSaleOnly: (v: boolean) => { setForSaleOnly(v); if (v) setSort("deal-desc"); },
     priceMin, priceMax,
     onPriceRange: (min: string, max: string) => { setPriceMin(min); setPriceMax(max); },
     listedCount,
+    catFilter, onCatFilter: setCatFilter, catCount,
     collectorOnly, onCollectorOnly: setCollectorOnly,
     collectorTier, onCollectorTier: setCollectorTier,
     collectorCount,

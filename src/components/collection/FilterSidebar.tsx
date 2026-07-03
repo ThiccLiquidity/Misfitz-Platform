@@ -7,6 +7,8 @@ import { useThemeMode } from "@/components/theme/ThemeProvider";
 export type TierFilter = "all" | TierId;
 export type SortKey = "rank-asc" | "rank-desc" | "deal-desc" | "price-asc" | "price-desc" | "token-asc" | "token-desc";
 export type TraitFilters = Record<string, string>;
+/** Marketplace CAT-offer visibility: show everything, hide CAT-inclusive offers, or show only those. */
+export type CatFilter = "all" | "hide" | "only";
 
 interface FilterSidebarProps {
   tierFilter: TierFilter;
@@ -16,7 +18,7 @@ interface FilterSidebarProps {
   traitFilters: TraitFilters;
   onTraitFilter: (traitType: string, value: string) => void;
   traitOptions: Record<string, string[]>;
-  hotTraitKeys?: Set<string>; // "type|value" (lowercase) entries currently in demand -> show 🔥
+  hotTraitKeys?: Set<string>; // "type|value" (lowercase) entries currently in demand -> show fire
   trendingTraits?: { traitType: string; value: string; ratio: number }[]; // clickable hot-trait chips
   resultCount: number;
   totalCount: number;
@@ -24,6 +26,9 @@ interface FilterSidebarProps {
   sheet?: boolean;
   /** Hide the trait dropdowns (e.g. Your Binder until a single collection is picked). */
   hideTraits?: boolean;
+  /** Search by token #number or launcher id — only rendered when onSearch is provided. */
+  searchQuery?: string;
+  onSearch?: (q: string) => void;
   /** Marketplace/shop controls — only rendered when onForSaleOnly is provided (collection shop). */
   forSaleOnly?: boolean;
   onForSaleOnly?: (v: boolean) => void;
@@ -31,32 +36,45 @@ interface FilterSidebarProps {
   priceMax?: string;
   onPriceRange?: (min: string, max: string) => void;
   listedCount?: number;
+  /** CAT-offer visibility — only rendered when onCatFilter is provided (collection shop). */
+  catFilter?: CatFilter;
+  onCatFilter?: (v: CatFilter) => void;
+  catCount?: number;
   /** Collector-number (numerology) filter — only rendered when onCollectorOnly is provided. */
   collectorOnly?: boolean;
   onCollectorOnly?: (v: boolean) => void;
-  collectorTier?: number; // keep collectible badges with tier <= this (1=grail … 4=fun)
+  collectorTier?: number; // keep collectible badges with tier <= this (1=grail ... 4=fun)
   onCollectorTier?: (t: number) => void;
   collectorCount?: number;
 }
 
+// Ordered by what collectors reach for most: rarity, then deals/price, then the long tail.
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "rank-asc",   label: "Rarest first"      },
-  { value: "rank-desc",  label: "Most common first"  },
+  { value: "rank-asc",   label: "Rarest first"       },
   { value: "deal-desc",  label: "Best deals first"   },
   { value: "price-asc",  label: "Price: low to high" },
   { value: "price-desc", label: "Price: high to low" },
-  { value: "token-asc",  label: "Token # ↑"          },
-  { value: "token-desc", label: "Token # ↓"          },
+  { value: "rank-desc",  label: "Most common first"  },
+  { value: "token-asc",  label: "Token # up"         },
+  { value: "token-desc", label: "Token # down"       },
+];
+
+// The deal-tag legend — mirrors the for-sale card tags exactly (mark + colour + meaning).
+const DEAL_LEGEND: { mark: string; color: string; label: string }[] = [
+  { mark: "↓", color: "#22c55e",              label: "Deal — under our estimate" },
+  { mark: "≈", color: "#3b82f6",              label: "Fair — around our estimate" },
+  { mark: "↑", color: "#e8a13a",              label: "Above our estimate" },
+  { mark: "•", color: "rgba(71,85,105,0.95)", label: "CAT / not scored" },
 ];
 
 // Visual config per tier — dark bg for dark mode, frosted tint for light mode
 const TIER_CHIP_STYLES: Record<string, {
-  bgDark:       string;   // dark mode cell background
-  bgLight:      string;   // light mode cell background (frosted tint)
-  border:       string;   // gradient border (same both modes)
-  glow:         string;   // rgba glow
-  textDark:     string;   // gradient text (dark mode — vibrant on dark bg)
-  textLight:    string;   // solid color (light mode — reads cleanly on frosted bg)
+  bgDark:       string;
+  bgLight:      string;
+  border:       string;
+  glow:         string;
+  textDark:     string;
+  textLight:    string;
 }> = {
   all: {
     bgDark:    "linear-gradient(135deg, #0a1428 0%, #060e1e 100%)",
@@ -116,8 +134,6 @@ const TIER_CHIP_STYLES: Record<string, {
   },
 };
 
-// Solid, crisp label colors for dark mode. Gradient-clipped text (background-clip:text) renders soft
-// and fuzzy at small sizes, so we use a bright solid color per tier instead.
 const TIER_SOLID_DARK: Record<string, string> = {
   all:       "#d6e4ff",
   mythic:    "#e6a8ff",
@@ -128,7 +144,6 @@ const TIER_SOLID_DARK: Record<string, string> = {
   common:    "#9bb8ff",
 };
 
-// selectStyle is now applied inline so we can theme with isLight
 function selectStyle(isLight: boolean): React.CSSProperties {
   return {
     width: "100%",
@@ -139,17 +154,41 @@ function selectStyle(isLight: boolean): React.CSSProperties {
     cursor: "pointer",
     outline: "none",
     appearance: "auto" as React.CSSProperties["appearance"],
-    background: isLight
-      ? "rgba(10,30,80,0.07)"
-      : "rgba(18,16,28,0.97)",
-    border: isLight
-      ? "1.5px solid rgba(60,120,220,0.45)"
-      : "1.5px solid rgba(255,255,255,0.18)",
+    background: isLight ? "rgba(10,30,80,0.07)" : "rgba(18,16,28,0.97)",
+    border: isLight ? "1.5px solid rgba(60,120,220,0.45)" : "1.5px solid rgba(255,255,255,0.18)",
     color: isLight ? "#0a1e50" : "rgba(255,255,255,0.88)",
-    boxShadow: isLight
-      ? "inset 0 1px 3px rgba(0,40,120,0.08)"
-      : "inset 0 1px 3px rgba(0,0,0,0.3)",
+    boxShadow: isLight ? "inset 0 1px 3px rgba(0,40,120,0.08)" : "inset 0 1px 3px rgba(0,0,0,0.3)",
   };
+}
+
+function labelColor(isLight: boolean): string {
+  return isLight ? "#1a3a7a" : "rgba(255,255,255,0.72)";
+}
+
+function SectionLabel({ children, isLight, color }: { children: React.ReactNode; isLight: boolean; color?: string }) {
+  return (
+    <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: color ?? labelColor(isLight) }}>
+      {children}
+    </span>
+  );
+}
+
+// Collapsible section via native <details> — no extra state, keyboard-accessible, and lets a long
+// section (Traits, Collector) fold away so the rail never runs off-screen.
+function Collapsible({
+  title, isLight, defaultOpen = true, color, children,
+}: {
+  title: string; isLight: boolean; defaultOpen?: boolean; color?: string; children: React.ReactNode;
+}) {
+  return (
+    <details open={defaultOpen} className="group flex flex-col">
+      <summary className="flex cursor-pointer select-none list-none items-center justify-between marker:hidden [&::-webkit-details-marker]:hidden">
+        <SectionLabel isLight={isLight} color={color}>{title}</SectionLabel>
+        <span className="text-[10px] transition-transform group-open:rotate-90" style={{ color: color ?? labelColor(isLight), opacity: 0.65 }}>&#9656;</span>
+      </summary>
+      <div className="mt-2 flex flex-col gap-2">{children}</div>
+    </details>
+  );
 }
 
 export function FilterSidebar({
@@ -162,18 +201,24 @@ export function FilterSidebar({
   resultCount, totalCount,
   sheet = false,
   hideTraits = false,
+  searchQuery, onSearch,
   forSaleOnly, onForSaleOnly, priceMin, priceMax, onPriceRange, listedCount,
+  catFilter = "all", onCatFilter, catCount,
   collectorOnly, onCollectorOnly, collectorTier = 4, onCollectorTier, collectorCount,
 }: FilterSidebarProps) {
   const { mode } = useThemeMode();
   const isLight = mode === "light";
   const hasTraitFilter = Object.values(traitFilters).some((v) => v !== "");
-  const isFiltered = tierFilter !== "all" || hasTraitFilter;
+  const isFiltered = tierFilter !== "all" || hasTraitFilter || (searchQuery ?? "") !== "" || catFilter !== "all";
 
   function clearAll() {
     onTierFilter("all");
     Object.keys(traitFilters).forEach((k) => onTraitFilter(k, ""));
+    onSearch?.("");
+    onCatFilter?.("all");
   }
+
+  const tierLabel = tierFilter === "all" ? null : getTierVisual(tierFilter).label;
 
   return (
     <div
@@ -182,25 +227,47 @@ export function FilterSidebar({
         : "flex flex-col gap-5 flex-shrink-0 rounded-xl p-4 sticky top-4"
       }
       style={sheet ? {} : {
-        width: 248,
-        background: isLight
-          ? "rgba(255,255,255,0.72)"
-          : "linear-gradient(175deg, #1e1e22 0%, #121214 100%)",
-        border: isLight
-          ? "1px solid rgba(100, 180, 255, 0.35)"
-          : "1px solid rgba(255,255,255,0.08)",
+        width: 260,
+        maxHeight: "calc(100vh - 2rem)",
+        overflowY: "auto",
+        background: isLight ? "rgba(255,255,255,0.72)" : "linear-gradient(175deg, #1e1e22 0%, #121214 100%)",
+        border: isLight ? "1px solid rgba(100, 180, 255, 0.35)" : "1px solid rgba(255,255,255,0.08)",
         boxShadow: isLight
           ? "0 4px 24px rgba(0, 80, 160, 0.12), inset 0 1px 0 rgba(255,255,255,0.8)"
           : "0 4px 24px rgba(0,0,0,0.4)",
         backdropFilter: isLight ? "blur(12px)" : undefined,
       }}
     >
-      {/* ── Sort (prominent, top) ──────────────────────── */}
+      {/* Search */}
+      {onSearch && (
+        <div className="flex flex-col gap-1.5">
+          <SectionLabel isLight={isLight}>Find an NFT</SectionLabel>
+          <div className="relative">
+            <input
+              value={searchQuery ?? ""}
+              onChange={(e) => onSearch(e.target.value)}
+              inputMode="search"
+              placeholder="#number or nft1... id"
+              style={{ ...selectStyle(isLight), paddingRight: 28, cursor: "text" }}
+            />
+            {(searchQuery ?? "") !== "" && (
+              <button
+                type="button"
+                onClick={() => onSearch("")}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded text-xs opacity-60 hover:opacity-100"
+                style={{ color: isLight ? "#0a1e50" : "rgba(255,255,255,0.8)" }}
+              >
+                &#10005;
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sort */}
       <div className="flex flex-col gap-1.5">
-        <label
-          className="text-[11px] font-black uppercase tracking-widest"
-          style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.82)" }}
-        >
+        <label className="text-[11px] font-black uppercase tracking-widest" style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.82)" }}>
           Sort by
         </label>
         <select
@@ -220,119 +287,10 @@ export function FilterSidebar({
         </select>
       </div>
 
-      {/* ── Trending traits (clickable) ────────────────── */}
-      {!hideTraits && trendingTraits && trendingTraits.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: isLight ? "#b45309" : "#f4a940" }}>
-            🔥 Trending traits
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {trendingTraits.map((t) => {
-              const active = (traitFilters[t.traitType] ?? "") === t.value;
-              return (
-                <button
-                  key={`${t.traitType}|${t.value}`}
-                  type="button"
-                  onClick={() => onTraitFilter(t.traitType, active ? "" : t.value)}
-                  title={`${t.traitType}: ${t.value} — selling about ${t.ratio.toFixed(1)}× as often as its share of the collection`}
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold transition hover:opacity-90"
-                  style={{
-                    background: active
-                      ? (isLight ? "rgba(180,83,9,0.16)" : "rgba(244,169,64,0.20)")
-                      : (isLight ? "rgba(180,83,9,0.07)" : "rgba(255,255,255,0.05)"),
-                    border: `1px solid ${active ? (isLight ? "#b45309" : "#f4a940") : (isLight ? "rgba(180,83,9,0.30)" : "rgba(255,255,255,0.12)")}`,
-                    color: isLight ? "#7a3d00" : "#ffddab",
-                  }}
-                >
-                  🔥 {t.value}
-                  <span style={{ opacity: 0.55 }}> · {t.traitType}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Marketplace (shop) ─────────────────────────── */}
-      {onForSaleOnly && (
-        <div className="flex flex-col gap-2">
-          <span className="mb-0.5 text-[10px] font-black uppercase tracking-widest"
-            style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.7)" }}>
-            Marketplace
-          </span>
-          <button type="button" onClick={() => onForSaleOnly(!forSaleOnly)}
-            className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
-            style={{
-              border: forSaleOnly
-                ? "1.5px solid rgba(80,200,120,0.65)"
-                : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
-              background: forSaleOnly ? "rgba(40,180,90,0.14)" : "transparent",
-              color: forSaleOnly ? "#5fce7a" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
-            }}>
-            <span>🛒 For sale only</span>
-            <span>{forSaleOnly ? `ON · ${(listedCount ?? 0).toLocaleString()}` : "OFF"}</span>
-          </button>
-          <div className="flex items-center gap-2">
-            <input inputMode="decimal" placeholder="Min" value={priceMin ?? ""}
-              onChange={(e) => onPriceRange?.(e.target.value, priceMax ?? "")} style={selectStyle(isLight)} />
-            <span className="text-subtle text-xs">–</span>
-            <input inputMode="decimal" placeholder="Max" value={priceMax ?? ""}
-              onChange={(e) => onPriceRange?.(priceMin ?? "", e.target.value)} style={selectStyle(isLight)} />
-          </div>
-          <span className="text-subtle text-[10px]">Price range (XCH)</span>
-        </div>
-      )}
-
-      {/* ── Collector numbers (numerology) ─────────────── */}
-      {onCollectorOnly && (
-        <div className="flex flex-col gap-2">
-          <span className="mb-0.5 text-[10px] font-black uppercase tracking-widest"
-            style={{ color: isLight ? "#7a5500" : "rgba(255,255,255,0.7)" }}>
-            Collector numbers
-          </span>
-          <button type="button" onClick={() => onCollectorOnly(!collectorOnly)}
-            className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
-            style={{
-              border: collectorOnly
-                ? "1.5px solid rgba(240,192,0,0.65)"
-                : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
-              background: collectorOnly ? "rgba(240,192,0,0.14)" : "transparent",
-              color: collectorOnly ? "#f0c000" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
-            }}>
-            <span>★ Collector #s only</span>
-            <span>{collectorOnly ? `ON · ${(collectorCount ?? 0).toLocaleString()}` : "OFF"}</span>
-          </button>
-          {collectorOnly && (
-            <select value={collectorTier} onChange={(e) => onCollectorTier?.(Number(e.target.value))} style={selectStyle(isLight)}>
-              <option value={4}>All special numbers</option>
-              <option value={3}>Notable &amp; better</option>
-              <option value={2}>Strong &amp; grails</option>
-              <option value={1}>Grails only ★</option>
-            </select>
-          )}
-          <span className="text-subtle text-[10px]">e.g. 69, 420, 777, 1, palindromes, runs</span>
-        </div>
-      )}
-
-      {/* ── Tiers ──────────────────────────────────────── */}
+      {/* Tiers */}
       <div className="flex flex-col gap-2">
-        <span
-          className="text-[10px] font-black uppercase tracking-widest mb-0.5"
-          style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.7)" }}
-        >
-          Tier
-        </span>
-
-        {/* All */}
-        <TierChip
-          tierId="all"
-          label="All"
-          emoji="✦"
-          active={tierFilter === "all"}
-          onClick={() => onTierFilter("all")}
-          isLight={isLight}
-        />
-
+        <SectionLabel isLight={isLight}>Tier</SectionLabel>
+        <TierChip tierId="all" label="All" emoji="✦" active={tierFilter === "all"} onClick={() => onTierFilter("all")} isLight={isLight} />
         {TIER_ORDER.map((id) => {
           const v = getTierVisual(id);
           return (
@@ -349,70 +307,172 @@ export function FilterSidebar({
         })}
       </div>
 
-      {/* ── Traits ─────────────────────────────────────── */}
-      {!hideTraits && Object.keys(traitOptions).length > 0 && (
-      <div className="flex flex-col gap-2">
-        <span
-          className="text-[10px] font-black uppercase tracking-widest"
-          style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.7)" }}
-        >
-          Traits
-        </span>
-        {/* Two-wide, internally scrolled so a trait-heavy collection never pushes the binder away */}
-        <div
-          className="grid grid-cols-2 gap-x-2 gap-y-2 overflow-y-auto pr-1"
-          style={sheet ? {} : { maxHeight: 300 }}
-        >
-          {Object.entries(traitOptions).map(([traitType, values]) => {
-            const active = (traitFilters[traitType] ?? "") !== "";
-            return (
-              <div key={traitType} className="flex min-w-0 flex-col gap-1">
-                <label
-                  className="truncate text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}
-                >
-                  {traitType}
-                </label>
-                <select
-                  value={traitFilters[traitType] ?? ""}
-                  onChange={(e) => onTraitFilter(traitType, e.target.value)}
-                  style={{
-                    ...selectStyle(isLight),
-                    ...(active
-                      ? { borderColor: isLight ? "rgba(60,120,220,0.7)" : "rgba(140,160,255,0.6)" }
-                      : {}),
-                  }}
-                >
-                  <option value="">Any</option>
-                  {values.map((v) => (
-                    <option key={v} value={v}>
-                      {v}{hotTraitKeys?.has(`${traitType.toLowerCase()}|${String(v).toLowerCase()}`) ? " 🔥" : ""}
-                    </option>
-                  ))}
-                </select>
+      {/* Marketplace */}
+      {onForSaleOnly && (
+        <Collapsible title="Marketplace" isLight={isLight} defaultOpen>
+          <button type="button" onClick={() => onForSaleOnly(!forSaleOnly)}
+            className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
+            style={{
+              border: forSaleOnly ? "1.5px solid rgba(80,200,120,0.65)" : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
+              background: forSaleOnly ? "rgba(40,180,90,0.14)" : "transparent",
+              color: forSaleOnly ? "#5fce7a" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
+            }}>
+            <span>&#128722; For sale only</span>
+            <span>{forSaleOnly ? `ON · ${(listedCount ?? 0).toLocaleString()}` : "OFF"}</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <input inputMode="decimal" placeholder="Min" value={priceMin ?? ""}
+              onChange={(e) => onPriceRange?.(e.target.value, priceMax ?? "")} style={{ ...selectStyle(isLight), cursor: "text" }} />
+            <span className="text-subtle text-xs">&ndash;</span>
+            <input inputMode="decimal" placeholder="Max" value={priceMax ?? ""}
+              onChange={(e) => onPriceRange?.(priceMin ?? "", e.target.value)} style={{ ...selectStyle(isLight), cursor: "text" }} />
+          </div>
+          <span className="text-subtle text-[10px]">Price range (XCH)</span>
+
+          {onCatFilter && (
+            <div className="mt-1 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}>
+                CAT-token offers{typeof catCount === "number" ? ` · ${catCount.toLocaleString()}` : ""}
+              </span>
+              <div className="grid grid-cols-3 gap-1">
+                {([
+                  { key: "all",  label: "Show" },
+                  { key: "hide", label: "Hide" },
+                  { key: "only", label: "Only" },
+                ] as const).map((seg) => {
+                  const active = catFilter === seg.key;
+                  return (
+                    <button key={seg.key} type="button" onClick={() => onCatFilter(seg.key)}
+                      className="rounded-md px-2 py-1.5 text-[11px] font-bold transition"
+                      style={{
+                        border: active ? "1.5px solid rgba(140,160,255,0.6)" : isLight ? "1px solid rgba(60,120,220,0.28)" : "1px solid rgba(255,255,255,0.12)",
+                        background: active ? (isLight ? "rgba(40,100,220,0.12)" : "rgba(120,140,255,0.16)") : "transparent",
+                        color: active ? (isLight ? "#1144cc" : "#a0b4ff") : (isLight ? "#0a1e50" : "rgba(255,255,255,0.62)"),
+                      }}>
+                      {seg.label}
+                    </button>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      </div>
+              <span className="text-subtle text-[10px]">CAT offers show a lower-bound XCH price (tag ends in &ldquo;+&rdquo;).</span>
+            </div>
+          )}
+
+          <div className="mt-2 flex flex-col gap-1.5 rounded-lg px-2.5 py-2"
+            style={{ border: isLight ? "1px solid rgba(60,120,220,0.2)" : "1px solid rgba(255,255,255,0.08)", background: isLight ? "rgba(10,30,80,0.03)" : "rgba(255,255,255,0.02)" }}>
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}>
+              What the tags mean
+            </span>
+            {DEAL_LEGEND.map((d) => (
+              <div key={d.label} className="flex items-center gap-2">
+                <span className="inline-flex shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white"
+                  style={{ background: d.color, minWidth: 30, padding: "1px 6px", border: "1px solid rgba(255,255,255,0.35)" }}>
+                  {d.mark}
+                </span>
+                <span className="text-[11px]" style={{ color: isLight ? "#334a72" : "rgba(255,255,255,0.72)" }}>{d.label}</span>
+              </div>
+            ))}
+          </div>
+        </Collapsible>
       )}
 
-      {/* ── Footer ─────────────────────────────────────── */}
-      <div
-        className="mt-auto flex flex-col gap-2 pt-2 border-t"
-        style={{ borderColor: isLight ? "rgba(100,180,255,0.25)" : "rgba(255,255,255,0.05)" }}
-      >
+      {/* Trending traits */}
+      {!hideTraits && trendingTraits && trendingTraits.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <SectionLabel isLight={isLight} color={isLight ? "#b45309" : "#f4a940"}>&#128293; Trending traits</SectionLabel>
+          <div className="flex flex-wrap gap-1.5">
+            {trendingTraits.map((t) => {
+              const active = (traitFilters[t.traitType] ?? "") === t.value;
+              return (
+                <button
+                  key={`${t.traitType}|${t.value}`}
+                  type="button"
+                  onClick={() => onTraitFilter(t.traitType, active ? "" : t.value)}
+                  title={`${t.traitType}: ${t.value} — selling about ${t.ratio.toFixed(1)}x as often as its share of the collection`}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold transition hover:opacity-90"
+                  style={{
+                    background: active ? (isLight ? "rgba(180,83,9,0.16)" : "rgba(244,169,64,0.20)") : (isLight ? "rgba(180,83,9,0.07)" : "rgba(255,255,255,0.05)"),
+                    border: `1px solid ${active ? (isLight ? "#b45309" : "#f4a940") : (isLight ? "rgba(180,83,9,0.30)" : "rgba(255,255,255,0.12)")}`,
+                    color: isLight ? "#7a3d00" : "#ffddab",
+                  }}
+                >
+                  &#128293; {t.value}
+                  <span style={{ opacity: 0.55 }}> · {t.traitType}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Collector numbers */}
+      {onCollectorOnly && (
+        <Collapsible title="Collector numbers" isLight={isLight} defaultOpen={false} color={isLight ? "#7a5500" : "rgba(255,255,255,0.7)"}>
+          <button type="button" onClick={() => onCollectorOnly(!collectorOnly)}
+            className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
+            style={{
+              border: collectorOnly ? "1.5px solid rgba(240,192,0,0.65)" : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
+              background: collectorOnly ? "rgba(240,192,0,0.14)" : "transparent",
+              color: collectorOnly ? "#f0c000" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
+            }}>
+            <span>&#9733; Collector #s only</span>
+            <span>{collectorOnly ? `ON · ${(collectorCount ?? 0).toLocaleString()}` : "OFF"}</span>
+          </button>
+          {collectorOnly && (
+            <select value={collectorTier} onChange={(e) => onCollectorTier?.(Number(e.target.value))} style={selectStyle(isLight)}>
+              <option value={4}>All special numbers</option>
+              <option value={3}>Notable &amp; better</option>
+              <option value={2}>Strong &amp; grails</option>
+              <option value={1}>Grails only &#9733;</option>
+            </select>
+          )}
+          <span className="text-subtle text-[10px]">e.g. 69, 420, 777, 1, palindromes, runs</span>
+        </Collapsible>
+      )}
+
+      {/* Traits */}
+      {!hideTraits && Object.keys(traitOptions).length > 0 && (
+        <Collapsible title="Traits" isLight={isLight} defaultOpen={!sheet}>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-2 overflow-y-auto pr-1" style={sheet ? {} : { maxHeight: 280 }}>
+            {Object.entries(traitOptions).map(([traitType, values]) => {
+              const active = (traitFilters[traitType] ?? "") !== "";
+              return (
+                <div key={traitType} className="flex min-w-0 flex-col gap-1">
+                  <label className="truncate text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}>
+                    {traitType}
+                  </label>
+                  <select
+                    value={traitFilters[traitType] ?? ""}
+                    onChange={(e) => onTraitFilter(traitType, e.target.value)}
+                    style={{ ...selectStyle(isLight), ...(active ? { borderColor: isLight ? "rgba(60,120,220,0.7)" : "rgba(140,160,255,0.6)" } : {}) }}
+                  >
+                    <option value="">Any</option>
+                    {values.map((v) => (
+                      <option key={v} value={v}>
+                        {v}{hotTraitKeys?.has(`${traitType.toLowerCase()}|${String(v).toLowerCase()}`) ? " 🔥" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </Collapsible>
+      )}
+
+      {/* Footer */}
+      <div className="mt-auto flex flex-col gap-2 pt-2 border-t" style={{ borderColor: isLight ? "rgba(100,180,255,0.25)" : "rgba(255,255,255,0.05)" }}>
         <span className="text-[11px] text-subtle">
-          {isFiltered
-            ? `${resultCount.toLocaleString()} of ${totalCount.toLocaleString()} cards`
-            : `${totalCount.toLocaleString()} cards`}
+          {forSaleOnly && sort === "deal-desc" && tierLabel
+            ? `Best ${tierLabel} deals · ${resultCount.toLocaleString()} of ${totalCount.toLocaleString()}`
+            : isFiltered
+              ? `${resultCount.toLocaleString()} of ${totalCount.toLocaleString()} cards`
+              : `${totalCount.toLocaleString()} cards`}
         </span>
         {isFiltered && (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="text-[11px] text-subtle underline underline-offset-2 hover:text-title transition-colors text-left"
-          >
+          <button type="button" onClick={clearAll}
+            className="text-[11px] text-subtle underline underline-offset-2 hover:text-title transition-colors text-left">
             Clear filters
           </button>
         )}
@@ -421,7 +481,6 @@ export function FilterSidebar({
   );
 }
 
-// Mini card chip — gradient border wrapper + tier-appropriate bg + label text
 function TierChip({
   tierId, label, emoji, active, onClick, isLight,
 }: {
@@ -436,7 +495,6 @@ function TierChip({
   const borderThickness = active ? 2.5 : 1.5;
   const bg = isLight ? cfg.bgLight : cfg.bgDark;
 
-  // Shadow: in light mode, reduce the outer glow so it doesn't feel heavy
   const shadow = active
     ? isLight
       ? `0 0 12px ${cfg.glow}88, 0 2px 6px rgba(0,0,0,0.12)`
@@ -469,36 +527,20 @@ function TierChip({
           display: "flex",
           alignItems: "center",
           gap: 7,
-          // Light mode: frosted white overlay so tint reads over the sidebar bg
           backdropFilter: isLight ? "blur(4px)" : undefined,
         }}
       >
         <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{emoji}</span>
-        {isLight ? (
-          // Solid color in light mode — reads cleanly on frosted bg
-          <span style={{
-            color: cfg.textLight,
-            fontWeight: 800,
-            fontSize: 13,
-            letterSpacing: "0.03em",
-            textTransform: "uppercase",
-            lineHeight: 1,
-          }}>
-            {label}
-          </span>
-        ) : (
-          // Solid bright color in dark mode — crisp (no gradient-clip fuzz)
-          <span style={{
-            color: TIER_SOLID_DARK[tierId] ?? "#e6ecff",
-            fontWeight: 800,
-            fontSize: 13,
-            letterSpacing: "0.03em",
-            textTransform: "uppercase",
-            lineHeight: 1,
-          }}>
-            {label}
-          </span>
-        )}
+        <span style={{
+          color: isLight ? cfg.textLight : (TIER_SOLID_DARK[tierId] ?? "#e6ecff"),
+          fontWeight: 800,
+          fontSize: 13,
+          letterSpacing: "0.03em",
+          textTransform: "uppercase",
+          lineHeight: 1,
+        }}>
+          {label}
+        </span>
       </div>
     </div>
   );
