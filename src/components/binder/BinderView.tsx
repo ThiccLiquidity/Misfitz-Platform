@@ -333,7 +333,8 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
 
         {/* MOBILE — one page at a time, starts at page 1, swipe or use controls to advance */}
         <div className="md:hidden" onTouchStart={handleMobileTouchStart} onTouchEnd={handleMobileTouchEnd}>
-          <div style={{ height: "clamp(480px, 72vh, 860px)" }}>
+          {/* Smaller, centered on phones — the full-bleed 3×3 felt oversized on mobile. */}
+          <div className="mx-auto" style={{ height: "clamp(360px, 58vh, 560px)", maxWidth: 340 }}>
             <BinderPage
               nfts={pages[mobilePage] ?? []}
               collectionName={collection.name}
