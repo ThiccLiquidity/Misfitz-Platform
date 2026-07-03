@@ -22,7 +22,7 @@
 }
 
 [data-theme="light"] {
-  --gold: #7c3aed;
+  --gold: #059669;
   --rc-ink: #0a1e38;
   --rc-divider: rgba(10,40,90,0.18);
 }
@@ -204,7 +204,6 @@ body {
 ════════════════════════════════════════════════════════════ */
 .tcg-art-zone {
   position: relative;
-  container-type: inline-size;  /* lets card chrome (e.g. the sale tag) scale with card width via cqi */
   height: 148px;  /* grid default */
   overflow: hidden;
 }

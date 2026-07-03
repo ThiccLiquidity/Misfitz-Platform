@@ -345,7 +345,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
         {/* Phones + tablets: a readable, aspect-locked grid. Cards keep a 5:7 shape at any width;
             the 3-D flip spread is reserved for large desktops (lg+) where it renders cleanly. */}
         <div
-          className="tcg-binder-page tcg-binder-grid grid grid-cols-2 gap-2 rounded-xl p-2 sm:grid-cols-3 lg:grid-cols-4 xl:hidden"
+          className="tcg-binder-page tcg-binder-grid grid items-start grid-cols-2 gap-2 rounded-xl p-2 sm:grid-cols-3 lg:grid-cols-4 xl:hidden"
           onTouchStart={handleMobileTouchStart}
           onTouchEnd={handleMobileTouchEnd}
         >

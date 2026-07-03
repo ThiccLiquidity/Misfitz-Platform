@@ -325,7 +325,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             </div>
             <div className="text-subtle mt-0.5 text-xs">
               {view.totalSupply.toLocaleString()} items
-              {fullLoaded && capped && <span style={{ color: statLight ? "#7c3aed" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
+              {fullLoaded && capped && <span style={{ color: statLight ? "#059669" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
             </div>
           </div>
         </div>
