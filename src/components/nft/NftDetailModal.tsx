@@ -373,10 +373,9 @@ export function NftDetailModal({
               </div>
               {showValueInfo && (
                 <p className="mb-2 rounded-lg px-3 py-2 text-[11px] leading-snug" style={{ color: subColor, background: isLight ? "rgba(10,30,80,0.05)" : "rgba(255,255,255,0.04)", border: `1px solid ${divider}` }}>
-                  <span className="font-bold" style={{ color: lblColor }}>About this estimate — </span>
-                  A guide based on the collection floor, this item&rsquo;s rarity, and recent comparable sales,
-                  with minor adjustments for in-demand traits and notable mint numbers. Not a guaranteed
-                  price; check the live market before trading.
+                  Every Traitfolio estimate comes from a structured valuation model. Real sales and floor
+                  prices feed a pricing curve, adjusted for rarity and genuine trait demand, with built-in
+                  safeguards against market manipulation. In the end, art is worth what it&rsquo;s worth to you.
                 </p>
               )}
 
