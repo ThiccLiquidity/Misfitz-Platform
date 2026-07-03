@@ -69,6 +69,12 @@ export function NftDetailModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, onClose]);
+  // Lock the page behind the modal so scrolling stays inside the card details (not the page).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
   // Market-curve breakdown pieces (multiplicative: estimate = curve × traitMult × collectorMult).
   const curveBase = nft.valueCurve ?? 0;
   const traitMult = typeof nft.valueTraitMult === "number" ? nft.valueTraitMult : 1;
@@ -108,7 +114,7 @@ export function NftDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 py-10"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/75 py-10"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

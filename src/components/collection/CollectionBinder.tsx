@@ -301,6 +301,8 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   };
 
   const moreCount = Math.min(PAGE, filtered.length - displayed.length);
+  // Remounts the binder (resets its grid page) when the FILTER changes, not on enrichment polls / Show more.
+  const filterKey = `${tier}|${sort}|${JSON.stringify(traitFilters)}|${forSaleOnly}|${priceMin}|${priceMax}|${collectorOnly}|${collectorTier}|${catFilter}|${search}`;
 
   return (
     <div className="py-2">
@@ -323,7 +325,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             </div>
             <div className="text-subtle mt-0.5 text-xs">
               {view.totalSupply.toLocaleString()} items
-              {fullLoaded && capped && <span style={{ color: statLight ? "#9a6800" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
+              {fullLoaded && capped && <span style={{ color: statLight ? "#7c3aed" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
             </div>
           </div>
         </div>
@@ -359,9 +361,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1320 }}>
         <FilterSidebar {...sidebarProps} />
         <div className="min-w-0 flex-1" style={{ maxWidth: 960 }}>
-          <BinderView collection={SHELL} nfts={displayed} hideFullPageLink />
+          <BinderView key={filterKey} collection={SHELL} nfts={displayed} hideFullPageLink onNeedMore={() => setVisible((v) => v + PAGE)} hasMore={visible < filtered.length} />
           {displayed.length < filtered.length && (
-            <div className="mt-5 flex justify-center">
+            <div className="mt-5 hidden justify-center xl:flex">
               <button type="button" onClick={() => setVisible((v) => v + PAGE)}
                 className="text-title rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold transition hover:bg-white/[0.08]">
                 Show {moreCount} more · {displayed.length.toLocaleString()} of {filtered.length.toLocaleString()}
@@ -376,9 +378,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         <div className="mb-2 flex justify-end px-1">
           <MobileFilterButton onClick={() => setFilterSheetOpen(true)} activeCount={activeFilterCount} />
         </div>
-        <BinderView collection={SHELL} nfts={displayed} hideFullPageLink />
+        <BinderView key={filterKey} collection={SHELL} nfts={displayed} hideFullPageLink onNeedMore={() => setVisible((v) => v + PAGE)} hasMore={visible < filtered.length} />
         {displayed.length < filtered.length && (
-          <div className="mt-4 flex justify-center">
+          <div className="mt-4 hidden">
             <button type="button" onClick={() => setVisible((v) => v + PAGE)}
               className="text-title rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold">
               Show more

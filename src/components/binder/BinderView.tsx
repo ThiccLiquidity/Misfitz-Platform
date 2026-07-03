@@ -18,6 +18,9 @@ interface BinderViewProps {
   // Live NFTs (wallet / live collection) have no on-platform detail page yet, so hide the modal's
   // "View Full Page" link (it would 404 against the DB-only /collections/[slug]/nfts route).
   hideFullPageLink?: boolean;
+  // Grid path (phones/tablets): reveal more cards when paging past the last loaded page.
+  onNeedMore?: () => void;
+  hasMore?: boolean;
 }
 
 // Two-page spread binder with a CSS 3D page-flip mechanic (approved prototype §11).
@@ -39,7 +42,7 @@ interface BinderViewProps {
 //
 // z-index: spine(3) > right-area(2) > flipper(1) > underlay(0)
 // During animation: right-area raised to z-100 so flipper passes OVER spine rings.
-export function BinderView({ collection, nfts, hideFullPageLink = false }: BinderViewProps) {
+export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedMore, hasMore = false }: BinderViewProps) {
   const { mode } = useThemeMode();
   const tokens = getThemeTokens(mode, collection.theme);
   const cssVars = themeTokensToCssVars(tokens);
@@ -73,16 +76,22 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
   const flipperRef   = useRef<HTMLDivElement | null>(null);
   const rightAreaRef = useRef<HTMLDivElement | null>(null);
   const touchStartXRef = useRef<number | null>(null);
-  // Mobile shows ONE page at a time. The desktop two-page spread hides the LEFT page on phones, which
-  // made mobile open on page 2 (the right page, index 1) and skip every odd page. Independent index.
-  const [mobilePage, setMobilePage] = useState(0);
+  // Grid path (phones/tablets): page through a fixed number of cards instead of endless scroll.
+  const GRID_SIZE = 12;
+  const [gridPage, setGridPage] = useState(0);
+  const gridTotal = Math.max(1, Math.ceil(nfts.length / GRID_SIZE));
+  const gp = Math.min(gridPage, gridTotal - 1);
+  const gridSlice = nfts.slice(gp * GRID_SIZE, gp * GRID_SIZE + GRID_SIZE);
+  const gridFlip = (dir: 1 | -1) => {
+    if (dir > 0) { if (gp < gridTotal - 1) setGridPage(gp + 1); else if (hasMore) { onNeedMore?.(); setGridPage(gp + 1); } }
+    else setGridPage(Math.max(0, gp - 1));
+  };
   const touchStartXMobileRef = useRef<number | null>(null);
-  const mobileFlip = (dir: 1 | -1) => setMobilePage((prev) => Math.max(0, Math.min(pages.length - 1, prev + dir)));
   function handleMobileTouchStart(e: TouchEvent) { touchStartXMobileRef.current = e.touches[0].clientX; }
   function handleMobileTouchEnd(e: TouchEvent) {
     if (touchStartXMobileRef.current === null) return;
     const dx = e.changedTouches[0].clientX - touchStartXMobileRef.current;
-    if (Math.abs(dx) > 40) mobileFlip(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) > 40) gridFlip(dx < 0 ? 1 : -1);
     touchStartXMobileRef.current = null;
   }
 
@@ -340,7 +349,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
           onTouchStart={handleMobileTouchStart}
           onTouchEnd={handleMobileTouchEnd}
         >
-          {nfts.map((n) => (
+          {gridSlice.map((n) => (
             <div key={n.launcherId} className="tcg-sleeve">
               <NftRarityCard
                 nft={n}
@@ -377,14 +386,17 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
         disabled={animating}
       />
     </div>
-    <div className="hidden">
-      <BinderPageControls
-        pageIndex={mobilePage}
-        pageCount={pages.length}
-        onPrev={() => mobileFlip(-1)}
-        onNext={() => mobileFlip(1)}
-        disabled={false}
-      />
+    {/* Grid controls — phones + tablets page through the readable grid (12 per page). */}
+    <div className="xl:hidden">
+      {(gridTotal > 1 || hasMore) && (
+        <BinderPageControls
+          pageIndex={gp}
+          pageCount={hasMore ? gridTotal + 1 : gridTotal}
+          onPrev={() => setGridPage(Math.max(0, gp - 1))}
+          onNext={() => gridFlip(1)}
+          disabled={false}
+        />
+      )}
     </div>
     </div>
   );
