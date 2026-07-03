@@ -207,12 +207,17 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
       card.listingUnverified = false;
       card.dealScore = null;
     } else if (card.listing) {
-      // MintGarden shows a price but Dexie has no offer we can read → unverified. Show price, no deal score.
-      card.listingAssets = null;
-      card.listingRequested = null;
+      // Listed on MintGarden's marketplace (not on Dexie). MintGarden marketplace listings are XCH-priced,
+      // so we treat the shown price as an XCH-only ask and DO score it. We keep a soft "confirm on
+      // MintGarden" note (listingUnverified) since we didn't read the raw offer terms, but no longer hide
+      // the deal score — that made overpriced MintGarden listings render as a neutral/green "no score".
+      card.listingAssets = ["XCH"];
+      card.listingRequested = [{ code: "XCH", amount: card.listing.priceXch }];
       card.dexieOfferId = null;
       card.listingUnverified = true;
-      card.dealScore = null;
+      card.dealScore = card.fairValue && card.listing.priceXch > 0
+        ? computeDealScore(card.fairValue.totalEstimate, card.listing.priceXch)
+        : null;
     } else {
       card.listingAssets = null;
       card.listingRequested = null;
@@ -294,7 +299,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     const total = Math.round(Math.max(floorXch ?? 0, cv.value * collectorMult) * 1000) / 1000;
     const fairValue = { ...card.fairValue, totalEstimate: total, totalEstimateUsd: Math.round(total * xchUsdRate * 100) / 100 };
     const xchOnly = !!card.listingRequested && card.listingRequested.length === 1 && card.listingRequested[0].code === "XCH";
-    const dealScore = card.listing && card.dexieOfferId && xchOnly && card.listing.priceXch > 0
+    const dealScore = card.listing && xchOnly && card.listing.priceXch > 0
       ? computeDealScore(total, card.listing.priceXch)
       : card.dealScore;
     return {

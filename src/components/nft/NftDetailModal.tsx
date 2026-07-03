@@ -284,15 +284,15 @@ export function NftDetailModal({
             </div>
           )}
 
-          {/* Unverified MintGarden listing — price shown, but we couldn't read the full offer terms. */}
+          {/* MintGarden marketplace listing — priced in XCH, so we score it, with a soft verify note. */}
           {nft.listing && nft.listingUnverified && (
             <div
-              className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px] leading-snug text-amber-300"
-              style={{ border: "1px solid rgba(217,160,60,0.4)", background: isLight ? "rgba(180,120,20,0.06)" : "rgba(217,160,60,0.08)" }}
+              className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px] leading-snug"
+              style={{ border: `1px solid ${divider}`, background: isLight ? "rgba(10,30,80,0.04)" : "rgba(255,255,255,0.03)", color: subColor }}
             >
-              ⚠ This {formatXch(nft.listing.priceXch)} XCH price is from MintGarden&apos;s listing, but we couldn&apos;t
-              read the full offer terms to confirm it&apos;s XCH-only. It may also require a CAT token, so no deal score is
-              shown. Confirm the real terms on MintGarden before buying.
+              This {formatXch(nft.listing.priceXch)} XCH price is a MintGarden marketplace listing (not a Dexie offer).
+              Marketplace listings are priced in XCH, so we&apos;ve scored it as an XCH sale — but confirm the exact
+              offer terms on MintGarden before buying.
             </div>
           )}
 
@@ -316,7 +316,7 @@ export function NftDetailModal({
           {nft.launcherId.startsWith("nft1") && (
             <div className={`px-4 pb-1 ${nft.listing && nft.dexieOfferId ? "pt-2" : "pt-3"}`} style={nft.listing && nft.dexieOfferId ? {} : { borderTop: `1px solid ${divider}` }}>
               <a
-                href={`https://mintgarden.io/nfts/${nft.launcherId}`}
+                href={`https://mintgarden.io/nfts/${encodeURIComponent(nft.launcherId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
