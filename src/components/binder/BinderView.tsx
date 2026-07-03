@@ -192,7 +192,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="flex items-stretch" style={{ height: "clamp(480px, 72vh, 860px)" }}>
+          <div className="mx-auto flex w-full items-stretch" style={{ height: "clamp(480px, 72vh, 860px)", maxWidth: "calc(clamp(480px, 72vh, 860px) * 1.43 + 48px)" }}>
 
             {/* LEFT PAGE — static, not part of the 3D rig; hidden on mobile */}
             <div className="hidden md:flex flex-1 min-w-0 relative z-[1]">
@@ -333,7 +333,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
 
         {/* MOBILE — one page at a time, starts at page 1, swipe or use controls to advance */}
         <div className="md:hidden" onTouchStart={handleMobileTouchStart} onTouchEnd={handleMobileTouchEnd}>
-          <div style={{ height: "clamp(480px, 72vh, 860px)" }}>
+          <div className="mx-auto" style={{ aspectRatio: "5 / 7", maxHeight: "66vh", maxWidth: "100%" }}>
             <BinderPage
               nfts={pages[mobilePage] ?? []}
               collectionName={collection.name}

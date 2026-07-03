@@ -182,8 +182,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       )}
 
       {/* Full-width value header */}
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] px-6 py-6">
-        <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+      <div className="mb-4 flex flex-col items-center gap-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] px-6 py-6 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+        <div className="flex flex-wrap items-end justify-center gap-x-10 gap-y-4 sm:justify-start">
           {/* Floor value — what it'd fetch at each collection's floor */}
           <div>
             <div className="text-subtle text-xs uppercase tracking-widest">Floor value</div>
@@ -198,7 +198,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             <div className="text-subtle mt-0.5 text-[10px]">Estimate — not a guaranteed price</div>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-center sm:text-right">
           <div className="text-title text-2xl font-bold">{filtered.length}</div>
           <div className="text-subtle text-xs uppercase tracking-widest">NFTs</div>
           <div className="text-subtle mt-1 text-xs">

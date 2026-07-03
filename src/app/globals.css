@@ -749,7 +749,7 @@ body {
 
 /* Tier banner — bold and readable at binder scale; never wraps. */
 .tcg-binder-page .tcg-tier-banner {
-  font-size: 8px !important;
+  font-size: 9px !important;
   font-weight: 900 !important;
   padding: 3px 5px !important;
   margin: 2px 3px 3px !important;
@@ -764,21 +764,21 @@ body {
   padding: 4px 6px !important;
 }
 .tcg-binder-page .tcg-cname {
-  font-size: 7px !important;
+  font-size: 8px !important;
   font-weight: 900 !important;
 }
 .tcg-binder-page .tcg-rank-tag {
   padding: 2px 4px !important;
 }
 .tcg-binder-page .tcg-rank-lbl {
-  font-size: 5px !important;
+  font-size: 6px !important;
 }
 .tcg-binder-page .tcg-rank-num {
-  font-size: 9px !important;
+  font-size: 11px !important;
   font-weight: 900 !important;
 }
 .tcg-binder-page .tcg-rank-pct {
-  font-size: 5px !important;
+  font-size: 6px !important;
 }
 
 /* ── CARD BODY BACKGROUNDS — dark tier-tinted material visible in header/corners ── */
