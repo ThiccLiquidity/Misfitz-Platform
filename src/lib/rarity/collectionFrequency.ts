@@ -18,11 +18,12 @@ export interface CollectionFrequency {
   freq: Record<string, Record<string, number>>;
   total: number;
   rankById: Record<string, number>; // hex NFT id -> our estimated OpenRarity rank (1 = rarest)
+  complete?: boolean; // true only when the WHOLE collection was scanned (all pages + ~all details)
 }
 
 const TTL = 45 * 60_000;
 const COLD_TTL = 5 * 60_000;
-const MAX_NFTS = 2000; // cap the scan; beyond this we skip (too costly to self-rank live)
+const MAX_NFTS = 20000; // safety valve only — artists need the WHOLE collection ranked, so cover full sets
 const PAGE = 100;
 const CONC = 8;
 
@@ -40,14 +41,14 @@ const DISK_TTL = 30 * 24 * 60 * 60_000;
 // Bump when the ranking ALGORITHM changes so old cache files are ignored + rebuilt. v1 used a
 // percentile estimate that tied many NFTs at the same rank (dozens all "rank #1"); v2 sorts every
 // NFT by score for unique 1..N ranks. Without this bump the stale v1 file keeps serving bad ranks.
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 async function readDisk(colId: string): Promise<CollectionFrequency | null> {
   try {
     const raw = await fs.readFile(path.join(CACHE_DIR, `${colId}.json`), "utf8");
     const j = JSON.parse(raw) as { freq?: CollectionFrequency["freq"]; total?: number; rankById?: Record<string, number>; builtAt?: number; version?: number };
     if (j?.version === CACHE_VERSION && j?.freq && typeof j.total === "number" && typeof j.builtAt === "number" && Date.now() - j.builtAt < DISK_TTL) {
-      return { freq: j.freq, total: j.total, rankById: j.rankById ?? {} };
+      return { freq: j.freq, total: j.total, rankById: j.rankById ?? {}, complete: true };
     }
   } catch { /* no cached file yet */ }
   return null;
@@ -60,27 +61,43 @@ async function writeDisk(colId: string, v: CollectionFrequency): Promise<void> {
 }
 
 async function build(colId: string): Promise<CollectionFrequency | null> {
-  // 1) Persistent disk cache first — a restart shouldn't re-scan the whole collection.
+  // 1) Persistent disk cache first — a COMPLETE scan is written once and reused for 30 days.
   const cached = await readDisk(colId);
   if (cached) return cached;
+
+  // 2) Page the FULL id list. Retry a transiently-failed page so one hiccup can't truncate the collection
+  //    (which would leave every NFT past the failure point permanently unranked).
   const ids: string[] = [];
   let cursor: string | null | undefined = undefined;
+  let listComplete = true;
   do {
-    const page: MgPage<MgListItem> = await listCollectionNfts(colId, cursor, PAGE, true).catch(() => ({ items: [], next: null, previous: null }));
+    let page: MgPage<MgListItem> | null = null;
+    for (let attempt = 0; attempt < 3 && !page; attempt++) {
+      page = await listCollectionNfts(colId, cursor, PAGE, true).catch(() => null);
+      if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+    if (!page) { listComplete = false; break; }
     for (const it of page.items ?? []) { if (ids.length >= MAX_NFTS) break; if (it.id) ids.push(it.id); }
     cursor = page.next;
   } while (cursor && ids.length < MAX_NFTS);
   if (ids.length === 0) return null;
 
+  // 3) Fetch EVERY NFT's traits, retrying transient 429s so NFTs aren't silently skipped (unranked).
+  //    getNftDetail is itself cached, so a follow-up scan only re-fetches the ones that failed.
   const freq: Record<string, Record<string, number>> = {};
   const perNft: { id: string; traits: Trait[] }[] = [];
   let idx = 0;
+  let detailFails = 0;
   async function worker() {
     while (idx < ids.length) {
       const i = idx++;
       const id = ids[i];
-      const d = await getNftDetail(id, true).catch(() => null);
-      if (!d) continue;
+      let d = await getNftDetail(id, true).catch(() => null);
+      for (let attempt = 1; !d && attempt < 3; attempt++) {
+        await new Promise((r) => setTimeout(r, 400 * attempt));
+        d = await getNftDetail(id, true).catch(() => null);
+      }
+      if (!d) { detailFails++; continue; }
       const traits = mapTraits(d);
       if (traits.length === 0) continue;
       perNft.push({ id, traits });
@@ -95,11 +112,7 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
   await Promise.all(Array.from({ length: Math.min(CONC, ids.length) }, worker));
   if (perNft.length === 0) return null; // no traits anywhere -> nothing to rank by
 
-  // Now that we have the whole-collection frequency table, score + rank every NFT ourselves.
-  // IMPORTANT: rank by SORTING all NFTs by rarity score (rarest first) and assigning sequential 1..N
-  // ranks. The estimator's percentile-based rankOf() ties many NFTs at the same rank (they share trait
-  // combos), which made the tier COUNTS nonsensical (rare/uncommon bigger than common, too many mythic).
-  // A proper sort gives a clean 1..N spread, so each tier band gets its correct share.
+  // 4) Score + rank every NFT by SORTING on rarity score (rarest first) -> unique 1..N ranks.
   const estimator = buildRankEstimator(freq, perNft.length);
   const rankById: Record<string, number> = {};
   if (estimator) {
@@ -108,8 +121,13 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
     scored.forEach((entry, i) => { rankById[entry.id] = i + 1; });
   }
 
-  const result: CollectionFrequency = { freq, total: ids.length, rankById };
-  await writeDisk(colId, result); // persist so the slow scan happens exactly once, ever
+  // Persist to the 30-day cache ONLY when the scan is complete: the whole list paged AND ~all details
+  // fetched. A truncated/partial scan is used for THIS render but not frozen for 30 days — the next scan
+  // (cheap, since successful details are cached) fills in the rest and then persists.
+  const coverage = ids.length > 0 ? (ids.length - detailFails) / ids.length : 0;
+  const complete = listComplete && coverage >= 0.97;
+  const result: CollectionFrequency = { freq, total: ids.length, rankById, complete };
+  if (complete) await writeDisk(colId, result);
   return result;
 }
 
@@ -120,7 +138,7 @@ export async function getCollectionFrequency(colId: string, opts: { wait?: boole
   if (hit?.building) return opts.wait ? hit.building : (hit.value ?? null);
 
   const building = build(colId)
-    .then((v) => { _cache.set(colId, { value: v, expiresAt: Date.now() + (v ? TTL : COLD_TTL) }); return v; })
+    .then((v) => { _cache.set(colId, { value: v, expiresAt: Date.now() + (v ? (v.complete ? TTL : 4 * 60_000) : COLD_TTL) }); return v; })
     .catch(() => { _cache.set(colId, { value: null, expiresAt: Date.now() + COLD_TTL }); return null; });
   _cache.set(colId, { value: hit?.value ?? null, expiresAt: hit?.expiresAt ?? 0, building });
   return opts.wait ? building : (hit?.value ?? null);
