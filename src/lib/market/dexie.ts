@@ -352,58 +352,82 @@ interface DexieOfferRaw {
 
 export async function fetchCollectionActiveOffers(colId: string, maxPages = 40): Promise<Map<string, CollectionOffer>> {
   if (!colId.startsWith("col1")) return new Map();
-  return withCache(`coloffers_${colId}`, 5 * 60_000, async () => {
-    const map = new Map<string, CollectionOffer>();
-    const fetchPage = async (page: number): Promise<{ offers: DexieOfferRaw[]; count: number }> => {
-      const url = new URL(`${DEXIE_BASE}/offers`);
-      url.searchParams.set("status", "0"); // active
-      url.searchParams.set("offered", colId);
-      url.searchParams.set("requested", "xch"); // REQUIRED — without it Dexie ignores the price sort
-      url.searchParams.set("sort", "price_asc"); // cheapest first — so the page cap keeps the deal-relevant offers
-      url.searchParams.set("page", String(page));
-      url.searchParams.set("page_size", "100");
-      const res = await tfetch(url.toString());
-      if (!res.ok) return { offers: [], count: 0 };
-      const json = (await res.json()) as { offers?: DexieOfferRaw[]; count?: number };
-      return { offers: json?.offers ?? [], count: json?.count ?? 0 };
-    };
-    // NOTE: requested=xch returns any offer that wants XCH, INCLUDING multi-asset (XCH+CAT) offers.
-    // xchOnly below (requested.length===1) is what distinguishes a clean XCH buy from a hidden-CAT trap.
-    const ingest = (offers: DexieOfferRaw[]) => {
-      for (const o of offers) {
-        const nfts = (o.offered ?? []).filter((x) => x.is_nft && x.id);
-        if (nfts.length === 0) continue;
-        const requested = (o.requested ?? [])
-          .map((r) => ({ code: (r.code ?? r.id ?? "").toUpperCase(), amount: typeof r.amount === "number" ? r.amount : 0 }))
-          .filter((r) => r.code);
-        const xchOnly = requested.length === 1 && requested[0].code === "XCH";
-        const offer: CollectionOffer = {
-          offerId: o.id ?? "",
-          priceXch: typeof o.price === "number" ? o.price : 0,
-          requested,
-          xchOnly,
-          multiNft: nfts.length > 1,
-        };
-        for (const nft of nfts) if (nft.id && !map.has(nft.id)) map.set(nft.id, offer); // cheapest wins
-      }
-    };
+  const key = `coloffers_${colId}`;
+  const hit = _cache.get(key);
+  if (hit && Date.now() < hit.expiresAt) return hit.value as Map<string, CollectionOffer>;
+  const pending = _inflight.get(key);
+  if (pending) return pending as Promise<Map<string, CollectionOffer>>;
+
+  const run = (async () => {
     try {
+      const map = new Map<string, CollectionOffer>();
+      let complete = true; // false if any offer page ultimately fails — cache only briefly so it self-heals
+      // One price-sorted page, RETRYING transient failures (429 / timeout). A silently-dropped page hides a
+      // whole contiguous price band of for-sale NFTs (the "same NFTs missing, again" bug), so retry hard.
+      const fetchPage = async (page: number): Promise<{ offers: DexieOfferRaw[]; count: number } | null> => {
+        const url = new URL(`${DEXIE_BASE}/offers`);
+        url.searchParams.set("status", "0"); // active
+        url.searchParams.set("offered", colId);
+        url.searchParams.set("requested", "xch"); // REQUIRED — without it Dexie ignores the price sort
+        url.searchParams.set("sort", "price_asc"); // cheapest first
+        url.searchParams.set("page", String(page));
+        url.searchParams.set("page_size", "100");
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const res = await tfetch(url.toString(), undefined, 15000);
+            if (res.ok) {
+              const json = (await res.json()) as { offers?: DexieOfferRaw[]; count?: number };
+              return { offers: json?.offers ?? [], count: json?.count ?? 0 };
+            }
+          } catch { /* retry */ }
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        }
+        return null; // failed after retries
+      };
+      // NOTE: requested=xch returns any offer that wants XCH, INCLUDING multi-asset (XCH+CAT) offers.
+      // xchOnly below (requested.length===1) is what distinguishes a clean XCH buy from a hidden-CAT trap.
+      const ingest = (offers: DexieOfferRaw[]) => {
+        for (const o of offers) {
+          const nfts = (o.offered ?? []).filter((x) => x.is_nft && x.id);
+          if (nfts.length === 0) continue;
+          const requested = (o.requested ?? [])
+            .map((r) => ({ code: (r.code ?? r.id ?? "").toUpperCase(), amount: typeof r.amount === "number" ? r.amount : 0 }))
+            .filter((r) => r.code);
+          const xchOnly = requested.length === 1 && requested[0].code === "XCH";
+          const offer: CollectionOffer = {
+            offerId: o.id ?? "",
+            priceXch: typeof o.price === "number" ? o.price : 0,
+            requested,
+            xchOnly,
+            multiNft: nfts.length > 1,
+          };
+          for (const nft of nfts) if (nft.id && !map.has(nft.id)) map.set(nft.id, offer); // cheapest wins
+        }
+      };
       const first = await fetchPage(1);
-      ingest(first.offers);
-      const totalPages = Math.min(maxPages, Math.ceil(first.count / 100));
-      // Remaining pages in parallel (page-number pagination), bounded concurrency.
-      const rest: number[] = [];
-      for (let p = 2; p <= totalPages; p++) rest.push(p);
-      const LIMIT = 6;
-      for (let i = 0; i < rest.length; i += LIMIT) {
-        const batch = await Promise.all(rest.slice(i, i + LIMIT).map((p) => fetchPage(p).catch(() => ({ offers: [], count: 0 }))));
-        for (const b of batch) ingest(b.offers);
+      if (!first) {
+        complete = false;
+      } else {
+        ingest(first.offers);
+        const totalPages = Math.min(maxPages, Math.ceil(first.count / 100));
+        const rest: number[] = [];
+        for (let p = 2; p <= totalPages; p++) rest.push(p);
+        const LIMIT = 6;
+        for (let i = 0; i < rest.length; i += LIMIT) {
+          const batch = await Promise.all(rest.slice(i, i + LIMIT).map((p) => fetchPage(p)));
+          for (const b of batch) { if (b) ingest(b.offers); else complete = false; }
+        }
       }
-    } catch {
-      /* partial map is fine */
+      // Complete scan → cache 5 min. Partial (a page failed after retries) → 20s so missing listings recover
+      // on the next request instead of being stuck for 5 min. Never cache an empty map for long.
+      _cache.set(key, { value: map, expiresAt: Date.now() + (complete && map.size > 0 ? 5 * 60_000 : 20_000) });
+      return map;
+    } finally {
+      _inflight.delete(key);
     }
-    return map;
-  });
+  })();
+  _inflight.set(key, run);
+  return run;
 }
 
 // ── Completed clean-XCH sales (comparable-sales valuation) ──────────────────────────────────────
