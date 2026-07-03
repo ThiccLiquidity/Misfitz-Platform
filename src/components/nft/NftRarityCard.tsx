@@ -180,8 +180,8 @@ function NftRarityCardImpl({
                   position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5,
                   whiteSpace: "nowrap",
                   background: accent, color: "#fff",
-                  fontSize: 10, fontWeight: 800, letterSpacing: "0.02em", lineHeight: 1.5,
-                  padding: "1px 9px", borderRadius: 999,
+                  fontSize: "clamp(7px, 6.5cqi, 11px)", fontWeight: 800, letterSpacing: "0.02em", lineHeight: 1.4,
+                  padding: "1px clamp(4px, 5cqi, 9px)", borderRadius: 999,
                   border: "1px solid rgba(255,255,255,0.35)", boxShadow: "0 1px 5px rgba(0,0,0,0.5)",
                 }}
               >

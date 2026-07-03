@@ -204,6 +204,7 @@ body {
 ════════════════════════════════════════════════════════════ */
 .tcg-art-zone {
   position: relative;
+  container-type: inline-size;  /* lets card chrome (e.g. the sale tag) scale with card width via cqi */
   height: 148px;  /* grid default */
   overflow: hidden;
 }
@@ -677,6 +678,13 @@ body {
     inset 0 -2px 6px rgba(0,0,0,0.6),
     0 0 0 1px rgba(255,255,255,0.04);
 }
+
+/* Small/medium-screen binder grid (phones + tablets): aspect-locked cards; static borders for perf. */
+.tcg-binder-grid .tcg-sleeve { height: auto !important; aspect-ratio: 5 / 7; }
+.tcg-binder-grid .tcg-outer-mythic,
+.tcg-binder-grid .tcg-outer-legendary,
+.tcg-binder-grid .tcg-outer-epic,
+.tcg-binder-grid .tcg-outer-rare { animation: none; }
 
 /* Respect prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {

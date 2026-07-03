@@ -5,6 +5,7 @@ import type { CollectionData, NftData } from "@/types";
 import { BinderPage } from "./BinderPage";
 import { BinderPageControls } from "./BinderPageControls";
 import { NftDetailModal } from "@/components/nft/NftDetailModal";
+import { NftRarityCard } from "@/components/nft/NftRarityCard";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 import { getThemeTokens, themeTokensToCssVars } from "@/lib/theme/themes";
 
@@ -187,7 +188,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
 
         {/* ── SPREAD ──────────────────────────────────────────────────────────── */}
         <div
-          className="relative hidden w-full md:block"
+          className="relative hidden w-full lg:block"
           style={{ perspective: "1100px" }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
@@ -332,17 +333,24 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
         </div>
 
         {/* MOBILE — one page at a time, starts at page 1, swipe or use controls to advance */}
-        <div className="md:hidden" onTouchStart={handleMobileTouchStart} onTouchEnd={handleMobileTouchEnd}>
-          <div className="mx-auto" style={{ aspectRatio: "5 / 7", maxHeight: "66vh", maxWidth: "100%" }}>
-            <BinderPage
-              nfts={pages[mobilePage] ?? []}
-              collectionName={collection.name}
-              onOpen={setOpenLauncherId}
-              totalSupply={collection.totalSupply}
-              rarityTiers={collection.rarityTiers}
-              side="right"
-            />
-          </div>
+        {/* Phones + tablets: a readable, aspect-locked grid. Cards keep a 5:7 shape at any width;
+            the 3-D flip spread is reserved for large desktops (lg+) where it renders cleanly. */}
+        <div
+          className="tcg-binder-page tcg-binder-grid grid grid-cols-2 gap-2 rounded-xl p-2 sm:grid-cols-3 lg:hidden"
+          onTouchStart={handleMobileTouchStart}
+          onTouchEnd={handleMobileTouchEnd}
+        >
+          {nfts.map((n) => (
+            <div key={n.launcherId} className="tcg-sleeve">
+              <NftRarityCard
+                nft={n}
+                collectionName={collection.name}
+                onOpen={setOpenLauncherId}
+                totalSupply={collection.totalSupply}
+                rarityTiers={collection.rarityTiers}
+              />
+            </div>
+          ))}
         </div>
 
       </div>
@@ -360,7 +368,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
     </div>
 
     {/* Controls float freely below the binder shell — spread paging on desktop, single-page on mobile */}
-    <div className="hidden md:block">
+    <div className="hidden lg:block">
       <BinderPageControls
         pageIndex={displaySpread}
         pageCount={spreadCount}
@@ -369,7 +377,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false }: Binde
         disabled={animating}
       />
     </div>
-    <div className="md:hidden">
+    <div className="hidden">
       <BinderPageControls
         pageIndex={mobilePage}
         pageCount={pages.length}
