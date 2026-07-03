@@ -36,7 +36,6 @@ test("legendary / rare tiers", () => {
 });
 
 test("fun finds (tier 4) and non-special", () => {
-  assert.equal(collectibleNumber(50)!.tier, 4); // early mint
   assert.equal(collectibleNumber(200)!.tier, 4); // round hundred
   assert.equal(collectibleNumber(64)!.tier, 4); // power of two
   assert.equal(collectibleNumber(173), null); // not special
@@ -44,10 +43,22 @@ test("fun finds (tier 4) and non-special", () => {
   assert.equal(collectibleNumber(null), null);
 });
 
+test("plain 2-digit mint numbers are NOT special (no blanket 'early mint')", () => {
+  // Being #10–99 is mint-timing, not a special number — these must not carry a premium.
+  assert.equal(collectibleNumber(57), null);
+  assert.equal(collectibleNumber(50), null);
+  assert.equal(collectibleNumber(73), null);
+  assert.equal(collectibleNumber(12), null);
+  // ...but genuinely special 2-digit numbers still match.
+  assert.equal(collectibleNumber(69)!.tier, 1);  // Nice
+  assert.equal(collectibleNumber(77)!.tier, 3);  // Lucky 7s (double)
+  assert.equal(collectibleNumber(7)!.tier, 2);   // single digit / Lucky 7
+});
+
 test("custom collection number is a grail; weights match tier", () => {
   const c = collectibleNumber(88, 1000, 88);
   assert.equal(c!.tier, 1);
   assert.equal(c!.label, "Collector's Number");
   assert.equal(collectibleNumber(1)!.weight, 0.4);
-  assert.equal(collectibleNumber(50)!.weight, 0.02); // tier 4 = small 'fun' premium
+  assert.equal(collectibleNumber(200)!.weight, 0.02); // tier 4 = small 'fun' premium
 });

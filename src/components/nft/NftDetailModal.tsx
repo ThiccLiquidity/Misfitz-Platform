@@ -397,9 +397,9 @@ export function NftDetailModal({
                       <span className="shrink-0 text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
                     </div>
                   )}
-                  {numberPremium > 0.005 && (
+                  {nft.collectible && numberPremium > 0.005 && (
                     <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
-                      <span className="text-xs" style={{ color: subColor }}>Collector number</span>
+                      <span className="text-xs" style={{ color: subColor }}>Collector number{nft.collectible.label ? ` · ${nft.collectible.label}` : ""}</span>
                       <span className="text-xs font-semibold" style={{ color: "#5fce7a" }}>+{numberPremium.toFixed(2)} XCH</span>
                     </div>
                   )}

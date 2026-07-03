@@ -82,7 +82,9 @@ function candidates(n: number, size: number, custom?: number | null): Match[] {
   if (isPowerOfTwo(n) && n >= 16) out.push(n >= 256 ? { tier: 3, label: "Power of Two" } : { tier: 4, label: "Power of Two" });
 
   if (JERSEYS.has(n)) out.push({ tier: 4, label: "Jersey" });
-  if (n >= 10 && n <= 99) out.push({ tier: 4, label: "Early Mint" });
+  // NOTE: no blanket "early mint" rule — being #10–99 is a mint-TIMING property, not a special NUMBER,
+  // and it lit up ~90 ordinary numbers (e.g. #57) with a premium. If we want an early-mint desirability
+  // signal, it belongs in its own layer, not the collectible-number ruleset.
 
   return out;
 }
