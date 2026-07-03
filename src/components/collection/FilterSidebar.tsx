@@ -5,7 +5,7 @@ import { TIER_ORDER, getTierVisual, type TierId } from "@/lib/rarity/tiers";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 export type TierFilter = "all" | TierId;
-export type SortKey = "rank-asc" | "rank-desc" | "deal-desc" | "price-asc" | "price-desc" | "token-asc" | "token-desc";
+export type SortKey = "rank-asc" | "rank-desc" | "deal-desc" | "price-asc" | "price-desc" | "token-asc" | "token-desc" | "value-desc";
 export type TraitFilters = Record<string, string>;
 /** Marketplace CAT-offer visibility: show everything, hide CAT-inclusive offers, or show only those. */
 export type CatFilter = "all" | "hide" | "only";
@@ -15,6 +15,8 @@ interface FilterSidebarProps {
   onTierFilter: (t: TierFilter) => void;
   sort: SortKey;
   onSort: (s: SortKey) => void;
+  /** Override which sort options appear (e.g. the portfolio hides marketplace-only sorts). */
+  sortOptions?: { value: SortKey; label: string }[];
   traitFilters: TraitFilters;
   onTraitFilter: (traitType: string, value: string) => void;
   traitOptions: Record<string, string[]>;
@@ -193,7 +195,7 @@ function Collapsible({
 
 export function FilterSidebar({
   tierFilter, onTierFilter,
-  sort, onSort,
+  sort, onSort, sortOptions,
   traitFilters, onTraitFilter,
   traitOptions,
   hotTraitKeys,
@@ -281,7 +283,7 @@ export function FilterSidebar({
             border: isLight ? "1.5px solid rgba(60,120,220,0.65)" : "1.5px solid rgba(140,160,255,0.5)",
           }}
         >
-          {SORT_OPTIONS.map((o) => (
+          {(sortOptions ?? SORT_OPTIONS).map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>

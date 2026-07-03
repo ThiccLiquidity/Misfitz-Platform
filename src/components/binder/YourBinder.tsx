@@ -26,10 +26,20 @@ function tokenNum(n: NftData): number {
   return m ? parseInt(m[1], 10) : 0;
 }
 
+// Portfolio-appropriate sorts only — the holdings aren't for sale, so marketplace sorts
+// (best deals, price) don't apply.
+const BINDER_SORTS: { value: SortKey; label: string }[] = [
+  { value: "value-desc", label: "Top value" },
+  { value: "rank-asc",   label: "Rarest first" },
+  { value: "rank-desc",  label: "Most common first" },
+  { value: "token-asc",  label: "Token # up" },
+  { value: "token-desc", label: "Token # down" },
+];
+
 export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [collectionId, setCollectionId] = useState<string>("all");
   const [tier, setTier] = useState<TierFilter>("all");
-  const [sort, setSort] = useState<SortKey>("rank-asc");
+  const [sort, setSort] = useState<SortKey>("value-desc");
   const [traitFilters, setTraitFilters] = useState<TraitFilters>({});
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const { hidden, toggle: toggleHidden, clear: clearHidden } = useHiddenCollections();
@@ -129,6 +139,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     }
     const s = [...r];
     switch (sort) {
+      case "value-desc": s.sort((a, b) => (b.fairValue?.totalEstimate ?? 0) - (a.fairValue?.totalEstimate ?? 0)); break;
       case "rank-asc":   s.sort((a, b) => pct(a) - pct(b)); break;
       case "rank-desc":  s.sort((a, b) => pct(b) - pct(a)); break;
       case "deal-desc":  s.sort((a, b) => (b.dealScore?.score ?? -1) - (a.dealScore?.score ?? -1)); break;
@@ -151,6 +162,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const sidebarProps = {
     tierFilter: tier, onTierFilter: setTier,
     sort, onSort: setSort,
+    sortOptions: BINDER_SORTS,
     traitFilters, onTraitFilter: (t: string, v: string) => setTraitFilters((p) => ({ ...p, [t]: v })),
     traitOptions,
     resultCount: filtered.length, totalCount: scoped.length,
