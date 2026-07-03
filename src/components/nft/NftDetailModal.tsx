@@ -275,9 +275,9 @@ export function NftDetailModal({
                   style={{ border: "1.5px solid rgba(240,140,40,0.7)", background: "rgba(240,140,40,0.12)", color: "#f4a940" }}
                 >
                   <div className="mb-1 text-[13px] font-black uppercase tracking-wide">⚠ This offer includes CAT tokens</div>
-                  The <span className="font-bold">{formatXch(nft.listing.priceXch)} XCH</span> above is ONLY the XCH part —
-                  this trade also requires the CAT token(s) listed. We don&apos;t price CATs yet, so <span className="font-bold">no
-                  deal score is shown</span> and the total real cost is higher than the XCH figure.
+                  This offer costs <span className="font-bold">at least {formatXch(nft.listing.priceXch)} XCH</span> —
+                  <span className="font-bold"> plus</span> the CAT token(s) above, which we don&apos;t price. That XCH figure is a
+                  floor, not the real cost: the true total is higher, so we show <span className="font-bold">no deal score</span>.
                   <div className="mt-1.5 font-bold">Always open the offer on Dexie and verify EXACTLY what leaves and enters your wallet before accepting.</div>
                 </div>
               )}
@@ -309,6 +309,11 @@ export function NftDetailModal({
               >
                 View &amp; take offer on Dexie ↗
               </a>
+              {(nft.listingAssets ?? []).some((a) => a !== "XCH") && (
+                <div className="mt-1.5 text-center text-[10.5px] font-semibold leading-snug" style={{ color: subColor }}>
+                  Verify the exact assets and amounts leaving and entering your wallet before accepting.
+                </div>
+              )}
             </div>
           )}
 
