@@ -336,7 +336,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             { label: "Market cap", xch: marketCap != null ? formatXchShort(marketCap) : "—",
               usd: marketCap != null ? formatUsdShort(marketCap * view.xchUsdRate) : null, accent: undefined },
             { label: "Traitfolio cap", xch: traitfolioCap != null ? formatXchShort(traitfolioCap) : "—",
-              usd: traitfolioCap != null ? formatUsdShort(traitfolioCap * view.xchUsdRate) : null, accent: "#ffe06a" },
+              usd: traitfolioCap != null ? formatUsdShort(traitfolioCap * view.xchUsdRate) : null, accent: "var(--gold)" },
             { label: "Volume", xch: view.volumeXch != null ? formatXchShort(view.volumeXch) : "—",
               usd: view.volumeXch != null ? formatUsdShort(view.volumeXch * view.xchUsdRate) : null, accent: undefined },
           ] as const).map((st) => (

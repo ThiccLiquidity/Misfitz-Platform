@@ -11,6 +11,7 @@
   --card-glow: 0 0 8px rgba(201, 162, 39, 0.35);
   --art-bg: #3a2a18;
   --title: #e8c878;
+  --gold: #ffe06a;
   --subtle: #b89968;
   --good: #8fce6b;
   --fair: #d9b35c;
@@ -21,6 +22,7 @@
 }
 
 [data-theme="light"] {
+  --gold: #9a6800;
   --rc-ink: #0a1e38;
   --rc-divider: rgba(10,40,90,0.18);
 }

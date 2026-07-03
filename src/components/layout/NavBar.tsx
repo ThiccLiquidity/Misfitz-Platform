@@ -24,19 +24,19 @@ export function NavBar() {
 
   return (
     <header
-      className="flex items-center justify-between px-4 py-3 md:px-8"
+      className="flex items-center justify-between gap-2 px-3 py-2.5 md:px-8 md:py-3"
       style={{
         background: isLight ? "#ffffff" : "rgba(10, 6, 2, 0.85)",
         borderBottom: isLight ? "1px solid rgba(41, 128, 200, 0.18)" : "1px solid rgba(184, 146, 63, 0.35)",
         boxShadow: isLight ? "0 1px 12px rgba(0, 80, 160, 0.08)" : "0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
-      <Link href="/" className="flex items-center gap-2 transition hover:opacity-80" aria-label="Traitfolio home">
-        <Image src="/brand/logo-mark.png" alt="" width={425} height={478} className="h-7 w-auto" priority />
-        <Wordmark className="text-lg" />
+      <Link href="/" className="flex min-w-0 items-center gap-2 transition hover:opacity-80" aria-label="Traitfolio home">
+        <Image src="/brand/logo-mark.png" alt="" width={425} height={478} className="h-6 w-auto md:h-7" priority />
+        <Wordmark className="text-base md:text-lg" />
       </Link>
 
-      <nav className="flex items-center gap-4">
+      <nav className="flex shrink-0 items-center gap-3 md:gap-4">
         {LINKS.map((l) => {
           const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
           return (

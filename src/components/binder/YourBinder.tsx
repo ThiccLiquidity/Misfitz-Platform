@@ -192,8 +192,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           </div>
           {/* Traitfolio value — our trait-aware estimate (the headline number) */}
           <div>
-            <div className="text-xs font-bold uppercase tracking-widest" style={{ color: "#f0c000" }}>Traitfolio value</div>
-            <div className="mt-1 text-4xl font-black" style={{ color: "#ffe06a" }}>{formatXch(shownValue)}</div>
+            <div className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--gold)" }}>Traitfolio value</div>
+            <div className="mt-1 text-4xl font-black" style={{ color: "var(--gold)" }}>{formatXch(shownValue)}</div>
             <div className="text-subtle text-sm">≈ {formatUsd(Math.round(shownValue * holdings.xchUsdRate * 100) / 100)}</div>
             <div className="text-subtle mt-0.5 text-[10px]">Estimate — not a guaranteed price</div>
           </div>

@@ -142,18 +142,18 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
           if (isLight) {
             const lv = TIER_LIGHT[id];
             return (
-              <div key={id} className="min-w-0 flex-1 relative flex flex-col items-center justify-center py-4 md:py-5 gap-1"
+              <div key={id} className="min-w-0 flex-1 relative flex flex-col items-center justify-center py-2.5 md:py-5 gap-0.5 md:gap-1"
                 style={{ background: lv.bg, borderRight: divider }}>
                 {/* Top accent bar */}
                 <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background: lv.topBorder, borderRadius:"2px 2px 0 0" }} />
                 {/* Emoji */}
-                <span style={{ fontSize:22, lineHeight:1, marginBottom:2 }}>{v.emoji}</span>
+                <span style={{ fontSize:"clamp(16px,4.6vw,22px)", lineHeight:1, marginBottom:2 }}>{v.emoji}</span>
                 {/* Label — solid color in light mode (gradient bars at 11px bold) */}
                 <span style={{ color: lv.countColor, fontWeight:900, fontSize:11, letterSpacing:"0.14em", textTransform:"uppercase", lineHeight:1, opacity:0.85 }}>
                   {v.label}
                 </span>
                 {/* Count — solid bold color + glow shadow */}
-                <span style={{ color: lv.countColor, fontWeight:900, fontSize:36, lineHeight:1, letterSpacing:"-0.02em", textShadow: lv.countShadow, marginTop:2, marginBottom:2 }}>
+                <span style={{ color: lv.countColor, fontWeight:900, fontSize:"clamp(23px,7.4vw,36px)", lineHeight:1, letterSpacing:"-0.02em", textShadow: lv.countShadow, marginTop:2, marginBottom:2 }}>
                   {count.toLocaleString()}
                 </span>
                 {/* Band pct */}
@@ -168,12 +168,12 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
           const dv = TIER_DARK[id];
           const gradStyle = { background: dv.textGradient, WebkitBackgroundClip:"text" as const, backgroundClip:"text" as const, WebkitTextFillColor:"transparent", color:"transparent" };
           return (
-            <div key={id} className="min-w-0 flex-1 relative flex flex-col items-center justify-center py-4 md:py-5 gap-1"
+            <div key={id} className="min-w-0 flex-1 relative flex flex-col items-center justify-center py-2.5 md:py-5 gap-0.5 md:gap-1"
               style={{ background: dv.bg, borderRight: divider, boxShadow: `inset 0 0 40px ${dv.glow}22` }}>
               <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background: dv.topBorder, borderRadius:"2px 2px 0 0" }} />
-              <span style={{ fontSize:22, lineHeight:1, marginBottom:2 }}>{v.emoji}</span>
+              <span style={{ fontSize:"clamp(16px,4.6vw,22px)", lineHeight:1, marginBottom:2 }}>{v.emoji}</span>
               <span style={{ ...gradStyle, fontWeight:900, fontSize:11, letterSpacing:"0.14em", textTransform:"uppercase" as const, lineHeight:1 }}>{v.label}</span>
-              <span style={{ ...gradStyle, fontWeight:900, fontSize:36, lineHeight:1, letterSpacing:"-0.02em", marginTop:2, marginBottom:2 }}>{count.toLocaleString()}</span>
+              <span style={{ ...gradStyle, fontWeight:900, fontSize:"clamp(23px,7.4vw,36px)", lineHeight:1, letterSpacing:"-0.02em", marginTop:2, marginBottom:2 }}>{count.toLocaleString()}</span>
               <span style={{ ...gradStyle, fontWeight:700, fontSize:11, opacity:0.65, lineHeight:1 }}>{tierPct}%</span>
             </div>
           );

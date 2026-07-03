@@ -57,7 +57,7 @@ export function Landing() {
             <Link
               href="/browse"
               className="group inline-flex items-center gap-2 rounded-full px-8 py-4 text-lg font-bold text-[var(--vault-bg)] shadow-[0_8px_30px_rgba(201,162,39,0.25)] transition hover:opacity-90"
-              style={{ background: "linear-gradient(90deg, #f0c000 0%, #ffe577 50%, #c89000 100%)" }}
+              style={{ background: "linear-gradient(90deg, #f0c000 0%, #ffe577 50%, #c89000 100%)", border: "1px solid rgba(150,110,0,0.5)" }}
             >
               <span aria-hidden>🔍</span> Browse &amp; Shop Collections
               <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
