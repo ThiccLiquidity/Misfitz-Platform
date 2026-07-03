@@ -64,7 +64,7 @@ const DEAL_LEGEND: { mark: string; color: string; label: string }[] = [
   { mark: "↓", color: "#22c55e",              label: "Deal — under our estimate" },
   { mark: "≈", color: "#3b82f6",              label: "Fair — around our estimate" },
   { mark: "↑", color: "#e8a13a",              label: "Above our estimate" },
-  { mark: "•", color: "rgba(71,85,105,0.95)", label: "CAT / not scored" },
+  { mark: "•", color: "rgba(71,85,105,0.95)", label: "CAT — price is a floor (+)" },
 ];
 
 // Visual config per tier — dark bg for dark mode, frosted tint for light mode
@@ -355,14 +355,13 @@ export function FilterSidebar({
                   );
                 })}
               </div>
-              <span className="text-subtle text-[10px]">Their XCH price is a floor (tag shows &ldquo;+&rdquo;).</span>
             </div>
           )}
 
           <div className="mt-2 flex flex-col gap-1.5 rounded-lg px-2.5 py-2"
             style={{ border: isLight ? "1px solid rgba(60,120,220,0.2)" : "1px solid rgba(255,255,255,0.08)", background: isLight ? "rgba(10,30,80,0.03)" : "rgba(255,255,255,0.02)" }}>
             <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}>
-              What the tags mean
+              Sale tag legend
             </span>
             {DEAL_LEGEND.map((d) => (
               <div key={d.label} className="flex items-center gap-2">
