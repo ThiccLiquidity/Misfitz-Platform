@@ -101,6 +101,10 @@ export function NftDetailModal({
   const mgBuyLabel = mgIsBuy
     ? `Buy \u00b7 ${formatXch(nft.listing!.priceXch)} XCH on MintGarden \u2197`
     : "View NFT on MintGarden \u2197";
+  // MintGarden's canonical NFT URL is /nfts/{name-slug}-{nft1id}. The bare /nfts/{id} form 500s for
+  // some NFTs, so build the slugged form (MintGarden resolves by the trailing id; the slug is cosmetic).
+  const mgSlug = (nft.name ?? "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const mgNftUrl = `https://mintgarden.io/nfts/${mgSlug ? `${mgSlug}-` : ""}${nft.launcherId}`;
 
   return (
     <div
@@ -321,7 +325,7 @@ export function NftDetailModal({
           {nft.launcherId.startsWith("nft1") && (
             <div className={`px-4 pb-1 ${nft.listing && nft.dexieOfferId ? "pt-2" : "pt-3"}`} style={nft.listing && nft.dexieOfferId ? {} : { borderTop: `1px solid ${divider}` }}>
               <a
-                href={`https://mintgarden.io/nfts/${encodeURIComponent(nft.launcherId)}`}
+                href={mgNftUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}

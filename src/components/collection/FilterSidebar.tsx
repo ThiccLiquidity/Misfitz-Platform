@@ -355,7 +355,7 @@ export function FilterSidebar({
                   );
                 })}
               </div>
-              <span className="text-subtle text-[10px]">CAT offers show a lower-bound XCH price (tag ends in &ldquo;+&rdquo;).</span>
+              <span className="text-subtle text-[10px]">Their XCH price is a floor (tag shows &ldquo;+&rdquo;).</span>
             </div>
           )}
 
