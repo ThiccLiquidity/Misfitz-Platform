@@ -33,10 +33,11 @@ export function WorkingIndicator({
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[70] flex items-center gap-2.5 rounded-full py-2 pl-2.5 pr-4 text-sm font-semibold shadow-lg"
+      className="fixed bottom-4 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2.5 rounded-full py-2.5 pl-3 pr-5 text-sm font-semibold shadow-2xl sm:left-auto sm:right-4 sm:translate-x-0"
       style={{
-        background: isLight ? "rgba(255,255,255,0.96)" : "rgba(20,16,10,0.94)",
-        border: isLight ? "1px solid rgba(41,128,200,0.35)" : "1px solid rgba(240,192,64,0.35)",
+        marginBottom: "env(safe-area-inset-bottom)",
+        background: isLight ? "rgba(255,255,255,0.97)" : "rgba(20,16,10,0.96)",
+        border: isLight ? "1.5px solid rgba(41,128,200,0.5)" : "1.5px solid rgba(240,192,64,0.5)",
         color: isLight ? "#0a1e38" : "#f0d9a0",
         backdropFilter: "blur(8px)",
       }}

@@ -349,7 +349,12 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
           onTouchStart={handleMobileTouchStart}
           onTouchEnd={handleMobileTouchEnd}
         >
-          {gridSlice.map((n) => (
+          {gridSlice.length === 0 ? (
+            <div className="col-span-full flex flex-col items-center justify-center gap-3 py-16">
+              <span className="h-8 w-8 animate-spin rounded-full" style={{ border: "3px solid var(--card-border)", borderTopColor: "transparent" }} />
+              <span className="text-subtle text-sm">Loading cards…</span>
+            </div>
+          ) : gridSlice.map((n) => (
             <div key={n.launcherId} className="tcg-sleeve">
               <NftRarityCard
                 nft={n}
