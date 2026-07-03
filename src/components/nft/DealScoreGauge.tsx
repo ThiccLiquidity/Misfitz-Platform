@@ -15,7 +15,7 @@ export function colorForLabel(label?: string): string {
     case "GREAT DEAL": return "#22c55e";
     case "GOOD DEAL":  return "#10b981";
     case "FAIR DEAL":  return "#3b82f6";
-    case "OVERPRICED": return "#ef4444";
+    case "OVERPRICED": return "#e8a13a";
     default:           return "#9a9aa2";
   }
 }
@@ -26,19 +26,19 @@ export function funLabel(label?: string): string {
     case "GREAT DEAL":  return "Send it 🚀";
     case "GOOD DEAL":   return "Cop it 🤝";
     case "FAIR DEAL":   return "Fair play ⚖️";
-    case "OVERPRICED":  return "Champagne taste 🥂";
+    case "OVERPRICED":  return "Raise the floor 📈";
     default:            return label ?? "";
   }
 }
 
-// Smoothly interpolate the deal spectrum: 0 = red, 50 = blue, 100 = green.
+// Smoothly interpolate the deal spectrum: 0 = amber (premium ask), 50 = blue (fair), 100 = green (great deal).
 const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 const toHex = (r: number, g: number, b: number) =>
   "#" + [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("");
 export function scoreColor(score: number): string {
-  const RED = [239, 68, 68], BLUE = [59, 130, 246], GREEN = [34, 197, 94];
+  const AMBER = [232, 161, 58], BLUE = [59, 130, 246], GREEN = [34, 197, 94];
   const t = Math.max(0, Math.min(100, score)) / 100;
-  const [a, b, k] = t <= 0.5 ? [RED, BLUE, t / 0.5] : [BLUE, GREEN, (t - 0.5) / 0.5];
+  const [a, b, k] = t <= 0.5 ? [AMBER, BLUE, t / 0.5] : [BLUE, GREEN, (t - 0.5) / 0.5];
   return toHex(lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k));
 }
 
