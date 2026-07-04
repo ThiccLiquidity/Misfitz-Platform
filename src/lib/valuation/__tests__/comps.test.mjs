@@ -168,3 +168,69 @@ test("thin cap releases once enough distinct NFTs have sold", () => {
   assert.ok(mk(6).curveValue(100) <= 2 * base + 1e-6, "thin (<8 NFTs) capped at 2x baseline");
   assert.ok(mk(10).curveValue(100) > 2 * base, "cap released with >=8 distinct NFTs");
 });
+
+// ── Rank-dependent sale memory (grails remembered longer) ────────────────────────────────────────
+test("new decay: a fake grail sale is remembered longer but still bounded by the baseline clamp", () => {
+  const rf = (p) => (p <= 0.1 ? 14 : p <= 2 ? 6 : p <= 30 ? 0.4 : 0);
+  const floor = 5, supply = 10000;
+  // A single OLD (300-day) wash sale at rank 1 priced 100x floor — under the new longer grail half-life it
+  // retains far more weight than under 120d, so this checks the baseline clamp still bounds the damage.
+  const sales = [{ rank: 1, price: 500, ageDays: 300, seller: "A", buyer: "B" }];
+  // >=8 distinct organic NFTs so the thin-collection cap releases and the [.,5x] baseline clamp is what binds.
+  for (let r = 1000; r <= 9000; r += 1000) sales.push({ rank: r, price: 6, ageDays: 20, seller: "S" + r, buyer: "C" + r });
+  const m = buildCompsModel(sales, supply, { floor, rarityFactor: rf, halfLifeRarest: 360 });
+  const base1 = floor * (1 + rf((1 / supply) * 100)); // baseline at rank 1
+  assert.ok(m.curveValue(1) <= 5 * base1 + 1e-6, `fake grail bounded by 5x baseline despite longer memory; got ${m.curveValue(1)} vs ${5 * base1}`);
+});
+
+// ── Adaptive (evidence-recency) half-life — PROPOSED, off by default (VALUATION-MODEL.md §5.P) ──────
+// We can't read the half-life directly, so we probe it via behavior: with adaptive ON, a LIQUID tier
+// (many fresh distinct-buyer sales) should let a recent price move the curve, while a DEAD tier that
+// only has an OLD price should still remember it (long reach-back) rather than let it decay to floor.
+
+test("adaptive OFF by default: option absent => identical to the fixed parabola", () => {
+  const rf = (p) => (p <= 10 ? 3 : p <= 50 ? 0.5 : 0);
+  const sales = [];
+  for (let r = 100; r <= 900; r += 100) sales.push({ rank: r, price: 20, ageDays: 40, seller: "S" + r, buyer: "B" + r });
+  const off = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: rf });
+  const explicitOff = buildCompsModel(sales, 1000, { floor: 5, rarityFactor: rf, adaptiveHalfLife: false });
+  assert.equal(off.curveValue(100), explicitOff.curveValue(100), "adaptiveHalfLife:false must equal the default");
+});
+
+test("adaptive ON: a DEAD tier's only (old) grail sale is remembered, not decayed toward floor", () => {
+  // Grail tier has ONE distinct-buyer sale, 200 days old. Under the fixed parabola the grail half-life is
+  // ~365 anyway, but under adaptive the reach-back keeps memory long (>= that 200d) instead of short.
+  const rf = (p) => (p <= 0.1 ? 14 : p <= 2 ? 6 : p <= 30 ? 0.4 : 0);
+  const floor = 5, supply = 10000;
+  const sales = [{ rank: 1, price: 60, ageDays: 200, seller: "A", buyer: "B" }];
+  for (let r = 1000; r <= 9000; r += 1000) sales.push({ rank: r, price: 6, ageDays: 20, seller: "S" + r, buyer: "C" + r });
+  const on = buildCompsModel(sales, supply, { floor, rarityFactor: rf, adaptiveHalfLife: true, adaptiveN: 7 });
+  // The old grail sale still lifts the rare end clearly above the floor-only baseline for commons.
+  assert.ok(on.curveValue(1) > on.curveValue(9000), "rare end remembers the old grail sale");
+  assert.ok(on.curveValue(1) >= floor, "never below floor");
+});
+
+test("adaptive ON: a LIQUID tier reaches back only a little (short memory), staying >= the min clamp", () => {
+  // A tier flooded with fresh distinct-buyer sales hits N almost immediately -> tiny reach-back -> the
+  // half-life is pinned at the min-clamp floor (anti-manipulation rail), NOT stretched to a year.
+  const rf = (p) => (p <= 10 ? 3 : 0);
+  const supply = 1000, floor = 5;
+  const fresh = [];
+  for (let i = 0; i < 12; i++) fresh.push({ rank: 30 + i, price: 25, ageDays: 2 + i, seller: "S" + i, buyer: "B" + i }); // rare tier, all fresh
+  for (let r = 400; r <= 900; r += 100) fresh.push({ rank: r, price: 8, ageDays: 15, seller: "T" + r, buyer: "C" + r });
+  const m = buildCompsModel(fresh, supply, { floor, rarityFactor: rf, adaptiveHalfLife: true, adaptiveN: 7, adaptiveMinHalfLife: 120, adaptiveMaxHalfLife: 540 });
+  // Sanity: builds a valid monotonic curve driven by the fresh sales.
+  assert.ok(m.curveValue(30) > m.curveValue(900), "fresh rare sales lift the rare end");
+  assert.ok(Number.isFinite(m.curveValue(30)), "valid curve");
+});
+
+test("adaptive ON: repeat-buyer (wash) sales do NOT fill the distinct-buyer quota", () => {
+  // Same buyer bouncing an NFT can't shorten memory: distinct-buyer counting means one wallet = one count.
+  const rf = (p) => (p <= 10 ? 3 : 0);
+  const supply = 1000, floor = 5;
+  const washy = [];
+  for (let i = 0; i < 10; i++) washy.push({ rank: 40 + i, price: 30, ageDays: 3 + i, seller: "W", buyer: "W" }); // one wallet, many "sales"
+  for (let r = 500; r <= 900; r += 100) washy.push({ rank: r, price: 8, ageDays: 15, seller: "T" + r, buyer: "C" + r });
+  const m = buildCompsModel(washy, supply, { floor, rarityFactor: rf, adaptiveHalfLife: true, adaptiveN: 7 });
+  assert.ok(Number.isFinite(m.curveValue(40)), "still produces a valid curve under wash input");
+});

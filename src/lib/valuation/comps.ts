@@ -37,7 +37,19 @@ export interface CompsModel {
 }
 
 export interface CompsOptions {
-  halfLifeDays?: number;       // recency half-life for the price curve (default 120)
+  halfLifeDays?: number;       // recency half-life at the MOST COMMON end of the price curve (default 180)
+  halfLifeRarest?: number;     // recency half-life at rank 1 — grail sales are sparse, so remember them longer (default 365)
+  halfLifeGamma?: number;      // how sharply half-life ramps with rarity; >1 concentrates the extension at the top (default 2)
+  // ── Adaptive (evidence-recency) half-life — LOCKED live model, enabled via compsConfig (VALUATION-MODEL.md §5.P) ──
+  // When on, a tier's half-life is set by how far back you must reach through its DISTINCT-BUYER sales to
+  // collect `adaptiveN` of them (liquid tier → short memory; dead tier → long). The rarity parabola above
+  // is used only as the fallback for a tier with ZERO sales. Changes ONLY the recency weighting, never the
+  // value parabola. No shrink term (reach-back is self-regularizing).
+  adaptiveHalfLife?: boolean;      // master switch (pure-fn default false; the APP enables it in compsConfig)
+  adaptiveN?: number;              // distinct-buyer sales that count as "enough evidence" per tier (default 7)
+  adaptiveMinHalfLife?: number;    // floor on adaptive half-life — the anti-manipulation rail (default 120)
+  adaptiveMaxHalfLife?: number;    // ceiling on adaptive half-life — how stale we tolerate (default 540)
+  tierCutsPct?: number[];          // cumulative percentile tier cuts (default [0.1,0.5,2.5,10,30,100])
   demandHalfLifeDays?: number; // shorter half-life for trait "recent volume" (default 21)
   bandwidth?: number;          // Gaussian rank-distance scale (default max(supply×0.01, 100))
   pullK?: number;              // saturation: how much sales override baseline (default 0.6)
@@ -89,8 +101,15 @@ function solve3(A: number[][], g: number[]): [number, number, number] | null {
 }
 
 export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsOptions = {}): CompsModel | null {
-  const halfLife = opts.halfLifeDays ?? 120;
+  const halfLife = opts.halfLifeDays ?? 180;
+  const halfLifeRarest = opts.halfLifeRarest ?? 365;
+  const halfLifeGamma = opts.halfLifeGamma ?? 2;
   const demandHalfLife = opts.demandHalfLifeDays ?? 21;
+  const adaptiveHalfLife = opts.adaptiveHalfLife ?? false;
+  const adaptiveN = Math.max(1, Math.floor(opts.adaptiveN ?? 7));
+  const adaptiveMinHL = opts.adaptiveMinHalfLife ?? 120;
+  const adaptiveMaxHL = opts.adaptiveMaxHalfLife ?? 540;
+  const tierCutsPct = opts.tierCutsPct ?? [0.1, 0.5, 2.5, 10, 30, 100];
   const supply = Math.max(1, Math.floor(totalSupply) || 0);
   const bandwidth = opts.bandwidth ?? Math.max(supply * 0.01, 100);
   const pullK = opts.pullK ?? 0.6;
@@ -114,10 +133,63 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   if (usable.length === 0) return null;
 
   const wRec = (ageDays: number, hl: number) => Math.pow(0.5, Math.max(0, ageDays) / hl);
+  // Rank-dependent recency (the fixed parabola): commons keep the base half-life; rarer NFTs decay slower
+  // (their sales are the only evidence the top tier produces). p in [0,1] with 1 = rarest; ^gamma
+  // concentrates the extension at the grail end. This is the DEFAULT and the fallback for empty tiers.
+  const parabolaHL = (rank: number) => {
+    const p = clamp(1 - rank / supply, 0, 1);
+    return halfLife + (halfLifeRarest - halfLife) * Math.pow(p, halfLifeGamma);
+  };
+
+  // Tier index for a rank by cumulative percentile cut (0 = rarest tier ... last = common).
+  const tierIndexOf = (rank: number) => {
+    const pct = clamp((rank / supply) * 100, 0, 100);
+    for (let i = 0; i < tierCutsPct.length; i++) if (pct <= tierCutsPct[i]) return i;
+    return tierCutsPct.length - 1;
+  };
+
+  // ── Adaptive half-life (evidence-recency), OFF by default ─────────────────────────────────────────
+  // Per tier: walk that tier's sales newest→oldest, counting DISTINCT buyers (so wash volume can't fill
+  // the quota). The age at which we reach `adaptiveN` distinct buyers — or the oldest available sale if we
+  // never reach N — IS the tier's half-life, clamped [min,max]. Liquid tier → tiny reach → short memory;
+  // dead tier → we reach far back → long memory. A tier with NO sales falls back to the rarity parabola.
+  // Reach-back is self-regularizing, so there is deliberately no shrink-toward-prior term.
+  let adaptiveTierHL: number[] | null = null;
+  if (adaptiveHalfLife) {
+    adaptiveTierHL = tierCutsPct.map((cut, i) => {
+      const loCut = i === 0 ? 0 : tierCutsPct[i - 1];
+      const inTier = usable.filter((s) => {
+        const pct = clamp((s.rank / supply) * 100, 0, 100);
+        return pct > loCut && pct <= cut;
+      });
+      // Empty tier: no evidence to measure → fall back to the rarity-parabola prior at the band midpoint.
+      if (inTier.length === 0) {
+        const repPct = (loCut + cut) / 2;
+        const repRank = Math.max(1, Math.min(supply, Math.round((repPct / 100) * supply)));
+        return parabolaHL(repRank);
+      }
+      const byAge = [...inTier].sort((a, b) => a.ageDays - b.ageDays); // newest (smallest age) first
+      const seenBuyers = new Set<string>();
+      let counted = 0;
+      let reach = byAge[byAge.length - 1].ageDays; // default: oldest available (fewer than N distinct buyers)
+      for (const s of byAge) {
+        if (s.buyer) { if (seenBuyers.has(s.buyer)) continue; seenBuyers.add(s.buyer); }
+        counted++;
+        reach = s.ageDays;
+        if (counted >= adaptiveN) break;
+      }
+      return clamp(reach, adaptiveMinHL, adaptiveMaxHL);
+    });
+  }
+
+  // Per-sale half-life: adaptive tier lookup when enabled, else the fixed rarity parabola.
+  const halfLifeFor = (rank: number) =>
+    adaptiveTierHL ? adaptiveTierHL[tierIndexOf(rank)] : parabolaHL(rank);
+
   const points = usable.map((s) => ({
     rank: s.rank, price: s.price,
-    w: wRec(s.ageDays, halfLife),         // price-curve recency
-    wd: wRec(s.ageDays, demandHalfLife),  // trait-volume recency
+    w: wRec(s.ageDays, halfLifeFor(s.rank)), // price-curve recency — longer memory for rarer NFTs
+    wd: wRec(s.ageDays, demandHalfLife),     // trait-volume recency (stays short — demand = current heat)
     traits: s.traits ?? [],
     seller: s.seller, buyer: s.buyer,
   }));
@@ -247,7 +319,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
     for (const t of traits ?? []) {
       const rec = traitRecent.get(`${norm(t.k)}=${norm(t.v)}`);
       if (!rec || rec.n < minTraitN) continue;
-      // When we know the buyers, a trait must be bought by ≥ minDistinctBuyers distinct wallets to count —
+      // When we know the buyers, a trait must be bought by >= minDistinctBuyers distinct wallets to count â
       // defeats one wallet wash-buying many NFTs of a trait. If buyers are unknown, fall back to n only.
       if (rec.buyers.size > 0 && rec.buyers.size < minDistinctBuyers) continue;
       const freq = freqOf(t.k, t.v);
@@ -257,7 +329,7 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
       const ratio = observedShare / expectedShare;    // > 1 => selling hotter than its prevalence
       if (ratio <= 1) continue;                       // demand only ADDS (premium-only by design)
       // Cap the ratio so a very rare trait (tiny expectedShare) can't earn a runaway premium from a
-      // couple of sales — that re-rewards rarity the rank already priced (double-count) and is the
+      // couple of sales â that re-rewards rarity the rank already priced (double-count) and is the
       // cheapest wash-trade lever. Bounded signal, not removed.
       const capped = Math.min(ratio, maxTraitRatio);
       const reliability = rec.n / (rec.n + 8);
