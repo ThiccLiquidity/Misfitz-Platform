@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Righteous, Inter } from "next/font/google";
 import "./globals.css";
-import { SessionProviderWrapper } from "@/components/auth/SessionProviderWrapper";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { AppShell } from "@/components/layout/AppShell";
 
@@ -76,11 +75,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         `}} />
       </head>
       <body className={inter.className}>
-        <SessionProviderWrapper>
-          <ThemeProvider>
-            <AppShell>{children}</AppShell>
-          </ThemeProvider>
-        </SessionProviderWrapper>
+        <ThemeProvider>
+          <AppShell>{children}</AppShell>
+        </ThemeProvider>
       </body>
     </html>
   );
