@@ -60,9 +60,13 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
   ]);
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
 
+  // Under load MintGarden can return a partial/odd holding (e.g. a detail with no collection). Drop those
+  // so one bad entry can never crash the whole portfolio view — we value what we can and skip the rest.
+  const usable = details.filter((d) => d && d.collection && typeof d.collection.id === "string" && d.collection.id.length > 0);
+
   // Resolve one floor per collection: live Dexie ask first, MintGarden floor_price as fallback.
   const mgFloorByCol = new Map<string, number | null>();
-  for (const d of details) {
+  for (const d of usable) {
     if (!mgFloorByCol.has(d.collection.id)) {
       mgFloorByCol.set(
         d.collection.id,
@@ -82,7 +86,7 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
   // but it keeps every card in a collection on one consistent base instead of pricing each off its own
   // sale. Superseded by a real collection floor as soon as one exists (job #39).
   const anchorsByCol = new Map<string, number[]>();
-  for (const d of details) {
+  for (const d of usable) {
     const a = nftMarketAnchorXch(d);
     if (a !== null) {
       const arr = anchorsByCol.get(d.collection.id) ?? [];
@@ -109,7 +113,7 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
   });
 
   const byCol = new Map<string, PortfolioGroup>();
-  for (const d of details) {
+  for (const d of usable) {
     const resolved = floorByCol.get(d.collection.id) ?? { floor: null, source: "none" as const };
     const m = mapDetailToNftData(d, xchUsdRate, resolved.floor);
     let group = byCol.get(m.collectionId);
