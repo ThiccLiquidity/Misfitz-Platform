@@ -37,7 +37,9 @@ export interface CompsModel {
 }
 
 export interface CompsOptions {
-  halfLifeDays?: number;       // recency half-life for the price curve (default 120)
+  halfLifeDays?: number;       // recency half-life at the MOST COMMON end of the price curve (default 120)
+  halfLifeRarest?: number;     // recency half-life at rank 1 — grail sales are sparse, so remember them longer (default 360)
+  halfLifeGamma?: number;      // how sharply half-life ramps with rarity; >1 concentrates the extension at the top (default 2)
   demandHalfLifeDays?: number; // shorter half-life for trait "recent volume" (default 21)
   bandwidth?: number;          // Gaussian rank-distance scale (default max(supply×0.01, 100))
   pullK?: number;              // saturation: how much sales override baseline (default 0.6)
@@ -90,6 +92,8 @@ function solve3(A: number[][], g: number[]): [number, number, number] | null {
 
 export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsOptions = {}): CompsModel | null {
   const halfLife = opts.halfLifeDays ?? 120;
+  const halfLifeRarest = opts.halfLifeRarest ?? 360;
+  const halfLifeGamma = opts.halfLifeGamma ?? 2;
   const demandHalfLife = opts.demandHalfLifeDays ?? 21;
   const supply = Math.max(1, Math.floor(totalSupply) || 0);
   const bandwidth = opts.bandwidth ?? Math.max(supply * 0.01, 100);
@@ -114,10 +118,16 @@ export function buildCompsModel(sales: Sale[], totalSupply: number, opts: CompsO
   if (usable.length === 0) return null;
 
   const wRec = (ageDays: number, hl: number) => Math.pow(0.5, Math.max(0, ageDays) / hl);
+  // Rank-dependent recency: commons keep the base half-life; rarer NFTs decay slower (their sales are the
+  // only evidence the top tier produces). p in [0,1] with 1 = rarest; ^gamma concentrates it at the grail end.
+  const halfLifeFor = (rank: number) => {
+    const p = clamp(1 - rank / supply, 0, 1);
+    return halfLife + (halfLifeRarest - halfLife) * Math.pow(p, halfLifeGamma);
+  };
   const points = usable.map((s) => ({
     rank: s.rank, price: s.price,
-    w: wRec(s.ageDays, halfLife),         // price-curve recency
-    wd: wRec(s.ageDays, demandHalfLife),  // trait-volume recency
+    w: wRec(s.ageDays, halfLifeFor(s.rank)), // price-curve recency — longer memory for rarer NFTs
+    wd: wRec(s.ageDays, demandHalfLife),     // trait-volume recency (stays short — demand = current heat)
     traits: s.traits ?? [],
     seller: s.seller, buyer: s.buyer,
   }));
