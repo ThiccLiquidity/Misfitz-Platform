@@ -32,8 +32,20 @@ const COLLECTION_TTL_MS = 24 * 60 * 60_000;  //  1 day
 // Reads env at module load. Works with Vercel KV's env vars (KV_REST_API_*) OR a direct Upstash
 // integration (UPSTASH_REDIS_REST_*). @upstash/redis is HTTP-based (no socket pooling) -- ideal for
 // serverless. Dynamic-imported + guarded so a missing package or missing env is a silent no-op.
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
+// Prefix-agnostic: Vercel/Upstash may inject the keys unprefixed (KV_REST_API_URL) or with a custom
+// prefix (e.g. STORAGE_KV_REST_API_URL). Match by suffix so ANY prefix works — and prefer the exact
+// write token over the READ_ONLY one (which ends differently, so it won't match KV_REST_API_TOKEN).
+function envBySuffix(suffixes: string[]): string {
+  for (const s of suffixes) {
+    if (process.env[s]) return process.env[s] as string; // exact, unprefixed match first
+  }
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v && suffixes.some((s) => k.endsWith("_" + s))) return v; // any prefix, e.g. STORAGE_<suffix>
+  }
+  return "";
+}
+const REDIS_URL = envBySuffix(["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL"]);
+const REDIS_TOKEN = envBySuffix(["KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN"]);
 const REDIS_GC_TTL_S = 30 * 24 * 60 * 60; // 30d hard expiry so orphaned keys eventually clear; freshness checked on read
 type RedisLike = { get(key: string): Promise<unknown>; set(key: string, value: unknown, opts?: { ex?: number }): Promise<unknown> };
 let _redisPromise: Promise<RedisLike | null> | undefined;
