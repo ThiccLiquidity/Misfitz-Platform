@@ -1,12 +1,17 @@
-// ── Phase 1: persistent write-through cache ───────────────────────────────────────────────────────
-// Once we've fetched an NFT detail or collection from MintGarden, we store it in OUR database so we
-// never have to ask MintGarden for it again (across restarts, across users). This removes MintGarden
-// from the hot path for anything we've seen before — the core of the indexer plan.
+// ── Persistent write-through cache (Phase 1 local SQLite + Phase 2 shared Redis) ───────────────────
+// Once we've fetched an NFT detail / collection / sales list from MintGarden or Dexie, we store it so we
+// never have to ask again — across restarts, across users, and (Phase 2) across server instances.
 //
-// Backed by Node's BUILT-IN SQLite (node:sqlite): no native dependency to install, and it runs
-// identically on any OS (dev + server). Isolated from the Prisma app DB. Every operation is guarded so
-// that if SQLite is somehow unavailable the whole layer degrades to a NO-OP and the app simply falls
-// back to the live network — it can never break the site.
+// Two backends, layered, both optional and fully guarded (any failure degrades to a no-op -> the app
+// just falls back to the live network; it can NEVER break the site):
+//   * SHARED (Phase 2): Upstash / Vercel-KV Redis over HTTP, when KV_REST_API_URL/TOKEN (or
+//     UPSTASH_REDIS_REST_URL/TOKEN) are set. The cache ALL serverless instances share, so a hot
+//     collection is fetched from MintGarden ONCE and served to everyone from Redis. This removes the
+//     API pressure on Vercel (where each instance's local disk is ephemeral).
+//   * LOCAL (Phase 1): Node's built-in SQLite (node:sqlite) on local disk. Great for local dev and any
+//     host with a persistent disk. On Vercel it doesn't persist between requests -- hence the Redis layer.
+//
+// Read order: Redis (shared) -> SQLite (local) -> miss (caller hits the network, then writes both).
 
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -20,12 +25,45 @@ interface CacheDb {
   putKv(key: string, json: string): void;
 }
 
-// NFT details are near-immutable for our uses (traits/rank/collection/name/image never change; the
-// owner does, but we never rely on the cached owner). Collections change a bit more (floor/volume), and
-// those live fields are refreshed from Dexie anyway — so a modest TTL is plenty.
 const DETAIL_TTL_MS = 14 * 24 * 60 * 60_000; // 14 days
 const COLLECTION_TTL_MS = 24 * 60 * 60_000;  //  1 day
 
+// -- Shared Redis layer (Phase 2) --------------------------------------------------------------------
+// Reads env at module load. Works with Vercel KV's env vars (KV_REST_API_*) OR a direct Upstash
+// integration (UPSTASH_REDIS_REST_*). @upstash/redis is HTTP-based (no socket pooling) -- ideal for
+// serverless. Dynamic-imported + guarded so a missing package or missing env is a silent no-op.
+const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
+const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
+const REDIS_GC_TTL_S = 30 * 24 * 60 * 60; // 30d hard expiry so orphaned keys eventually clear; freshness checked on read
+type RedisLike = { get(key: string): Promise<unknown>; set(key: string, value: unknown, opts?: { ex?: number }): Promise<unknown> };
+let _redisPromise: Promise<RedisLike | null> | undefined;
+function redis(): Promise<RedisLike | null> {
+  if (!REDIS_URL || !REDIS_TOKEN) return Promise.resolve(null);
+  if (!_redisPromise) {
+    const mod = "@upstash/redis"; // computed specifier: keeps this optional dep out of the type graph
+    _redisPromise = import(mod)
+      .then((m) => new m.Redis({ url: REDIS_URL, token: REDIS_TOKEN }) as unknown as RedisLike)
+      .catch(() => null); // package not installed / init failed -> no-op
+  }
+  return _redisPromise;
+}
+
+// Redis stores an envelope { v: <json string>, t: <fetchedAt ms> } so freshness is checked on read with
+// the caller's TTL (same semantics as SQLite). @upstash/redis serializes/parses JSON transparently.
+async function redisGet(key: string, ttlMs: number): Promise<string | null> {
+  try {
+    const r = await redis();
+    if (!r) return null;
+    const o = (await r.get(key)) as { v?: string; t?: number } | null;
+    if (o && typeof o.v === "string" && typeof o.t === "number" && Date.now() - o.t < ttlMs) return o.v;
+    return null;
+  } catch { return null; }
+}
+function redisPut(key: string, json: string): void {
+  void redis().then((r) => r?.set(key, { v: json, t: Date.now() }, { ex: REDIS_GC_TTL_S })).catch(() => { /* ignore */ });
+}
+
+// -- Local SQLite layer (Phase 1) --------------------------------------------------------------------
 let _dbPromise: Promise<CacheDb | null> | undefined;
 
 async function open(): Promise<CacheDb | null> {
@@ -74,24 +112,28 @@ function cache(): Promise<CacheDb | null> {
   return _dbPromise;
 }
 
+// -- Public API: Redis (shared) first, then SQLite (local), then miss --------------------------------
 export async function cachedDetailJson(id: string): Promise<string | null> {
-  return (await cache())?.getDetail(id) ?? null;
+  return (await redisGet(`tf:d:${id}`, DETAIL_TTL_MS)) ?? (await cache())?.getDetail(id) ?? null;
 }
 export function storeDetailJson(id: string, json: string): void {
+  redisPut(`tf:d:${id}`, json);
   void cache().then((c) => c?.putDetail(id, json)); // fire-and-forget; never blocks the request
 }
 export async function cachedCollectionJson(id: string): Promise<string | null> {
-  return (await cache())?.getCollection(id) ?? null;
+  return (await redisGet(`tf:c:${id}`, COLLECTION_TTL_MS)) ?? (await cache())?.getCollection(id) ?? null;
 }
 export function storeCollectionJson(id: string, json: string): void {
+  redisPut(`tf:c:${id}`, json);
   void cache().then((c) => c?.putCollection(id, json));
 }
 
-// Generic key/value entries (sales lists, the XCH rate, collection slim lists, …). The caller supplies
+// Generic key/value entries (sales lists, the XCH rate, collection slim lists, ...). The caller supplies
 // the freshness TTL because each kind of data ages differently.
 export async function cacheGet(key: string, ttlMs: number): Promise<string | null> {
-  return (await cache())?.getKv(key, ttlMs) ?? null;
+  return (await redisGet(`tf:kv:${key}`, ttlMs)) ?? (await cache())?.getKv(key, ttlMs) ?? null;
 }
 export function cachePut(key: string, json: string): void {
+  redisPut(`tf:kv:${key}`, json);
   void cache().then((c) => c?.putKv(key, json));
 }
