@@ -4,6 +4,7 @@ import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchC
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
+import { adaptiveTtl } from "@/lib/market/activity";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
@@ -247,7 +248,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
 
   cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last
   const base: BaseCollection = { cards, floorXch, xchUsdRate, capped };
-  _fullCache.set(id, { value: base, expiresAt: Date.now() + 10 * 60_000 });
+  _fullCache.set(id, { value: base, expiresAt: Date.now() + adaptiveTtl(id, 10 * 60_000) });
   return base;
 }
 

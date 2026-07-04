@@ -1,5 +1,6 @@
 // Dexie.space v1 API client — live market data for any Chia NFT collection.
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { adaptiveTtl, recordSalesActivity } from "@/lib/market/activity";
 //
 // All functions:
 //   • Cache aggressively server-side (module-level TTL map)
@@ -141,7 +142,7 @@ export async function fetchCollectionFloor(
   // Guard: only query real on-chain collection IDs
   if (!dexieCollectionId.startsWith("col1")) return null;
 
-  return withCache(`floor_${dexieCollectionId}`, 5 * 60_000, async () => {
+  return withCache(`floor_${dexieCollectionId}`, adaptiveTtl(dexieCollectionId, 5 * 60_000), async () => {
     try {
       const url = new URL(`${DEXIE_BASE}/offers`);
       url.searchParams.set("status", "0");              // 0 = active on Dexie (1 is "pending")
@@ -231,7 +232,7 @@ export function fetchCollectionSaleFloorWarm(dexieCollectionId: string): number 
 export async function fetchCollectionListingCount(dexieCollectionId: string): Promise<number> {
   if (!dexieCollectionId.startsWith("col1")) return 0;
 
-  return withCache(`listings_${dexieCollectionId}`, 5 * 60_000, async () => {
+  return withCache(`listings_${dexieCollectionId}`, adaptiveTtl(dexieCollectionId, 5 * 60_000), async () => {
     try {
       const url = new URL(`${DEXIE_BASE}/offers`);
       url.searchParams.set("status", "0");               // 0 = active on Dexie
@@ -420,7 +421,7 @@ export async function fetchCollectionActiveOffers(colId: string, maxPages = 40):
       }
       // Complete scan → cache 5 min. Partial (a page failed after retries) → 20s so missing listings recover
       // on the next request instead of being stuck for 5 min. Never cache an empty map for long.
-      _cache.set(key, { value: map, expiresAt: Date.now() + (complete && map.size > 0 ? 5 * 60_000 : 20_000) });
+      _cache.set(key, { value: map, expiresAt: Date.now() + (complete && map.size > 0 ? adaptiveTtl(colId, 5 * 60_000) : 20_000) });
       return map;
     } finally {
       _inflight.delete(key);
@@ -443,9 +444,9 @@ export interface CompletedSale {
 
 export async function fetchCollectionCompletedSales(colId: string, maxPages = 30): Promise<CompletedSale[]> {
   if (!colId.startsWith("col1")) return [];
-  return withCache(`colsales_${colId}`, 30 * 60_000, async () => {
+  return withCache(`colsales_${colId}`, adaptiveTtl(colId, 30 * 60_000), async () => {
     const dbHit = await cacheGet(`sales:${colId}`, 30 * 60_000);
-    if (dbHit) { try { return JSON.parse(dbHit) as CompletedSale[]; } catch { /* refetch */ } }
+    if (dbHit) { try { const r = JSON.parse(dbHit) as CompletedSale[]; recordSalesActivity(colId, r); return r; } catch { /* refetch */ } }
     const byNft = new Map<string, CompletedSale>(); // most-recent sale per NFT (date-desc, first wins)
     const fetchPage = async (page: number): Promise<{ offers: DexieOfferRaw[]; count: number }> => {
       const url = new URL(`${DEXIE_BASE}/offers`);
@@ -485,6 +486,7 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
       /* partial is fine */
     }
     const result = [...byNft.values()];
+    recordSalesActivity(colId, result); // free busyness signal — tunes market-data freshness, no extra calls
     cachePut(`sales:${colId}`, JSON.stringify(result)); // persist so a restart doesn't re-page Dexie
     return result;
   });
