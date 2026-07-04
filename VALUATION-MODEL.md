@@ -111,16 +111,7 @@ Because rf is itself a curved function of rank, this is a smooth parabola in ran
 (a, b, c) are **fit to recent sales** by recency-weighted least squares with a **ridge prior** pulling toward
 the floor-anchored baseline (a≈floor, b≈floor, c≈0):
 
-- Recency weight per sale: w = 0.5^(ageDays / halfLife). The **live** half-life is set per tier by the
-  adaptive evidence-recency model (§5.P — LOCKED). The **fallback** (used for tiers with no sales, and the
-  shape the adaptive result is anchored to) is a **rank-dependent parabola**:
-  `halfLife(rank) = 180 + (365 − 180)·p²`, where `p = 1 − rank/supply` (1 = rarest). Commons sit at ~180d;
-  the rarest end stretches to ~365d (≈1 year) because grail sales are the only evidence the top tier
-  produces in a year. Approx per tier: common ~185d, uncommon ~235d, rare ~315d, epic ~345d,
-  legendary ~360d, mythic ~365d. Only the DECAY RATE scales with rarity — a sale's weight still starts at ≤1, so grails get longer
-  **memory, not extra weight** (no upweighting in the fit loss). `halfLifeRarest`/`halfLifeGamma` are
-  options; the 180→365 / p² parabola is the LOCKED fallback shape (empty tiers). Damage from a long-remembered wash grail stays
-  bounded by the per-sale baseline clamp [0.2×, 5×] (guard test in comps.test.mjs).
+- Recency weight per sale: w = 0.5^(ageDays / halfLife), **halfLife = 120 days**.
 - Ridge strength **λ = 0.7** toward prior [floor, floor, 0] (≈ that many "virtual" baseline sales).
 - Solve the 3×3 normal equations (Gaussian elimination). **b, c are clamped ≥ 0** so the curve is monotonic
   (rarer ≥ less-rare); an off-curve cheap sale becomes a *deal*, never a dent in the curve.
@@ -129,96 +120,6 @@ the floor-anchored baseline (a≈floor, b≈floor, c≈0):
 
 For unranked collections, the comps model uses **our own ranks** (Section 2b, scaled to supply) in place of
 MintGarden's, and our own trait table — so unranked collections get the full curve too.
-
-### 5.P — Evidence-recency-adaptive half-life (LOCKED — the live half-life model, 2026-07-04)
-
-> Status: LOCKED — this is the model. ON by default; the constants (N=7, min=120d, max=540d) are the
-> accepted defaults, validated by eyeball against live Chia Friends rare-sale history (owner sign-off
-> 2026-07-04) rather than a formal backtest. Kill switch retained: `TRAITFOLIO_ADAPTIVE_HALFLIFE=0`
-> (server-side; restart) returns the model byte-identically to the fixed §5 parabola (guard test:
-> "adaptiveHalfLife:false must equal the default"). A backtest may later REFINE the constants, but adaptive
-> reach-back is the locked mechanism.
-
-**The idea in one line.** Rarity was only ever a *proxy* for the thing that actually decides how far back a
-sale is still worth trusting: how often that slice of the collection trades. This proposal measures that
-directly, per tier, and lets it set the half-life — defaulting to the §5 rarity parabola when trades are scarce.
-
-**What does NOT change.** The value parabola `curveValue(rank) = a + b·rf + c·rf²`, its coefficients, the
-ridge prior, the `b,c ≥ 0` monotonicity clamp, the per-sale baseline clamp [0.2×, 5×], winsorization, the
-distinct-buyer gate, and the trait-demand layer (§5a, still a fixed 21-day window) are all untouched. This
-change touches **only the recency weight** `w = 0.5^(ageDays / halfLife)` — specifically, where `halfLife`
-comes from. The value curve never knows the difference; it just receives better time-weighted sales.
-
-**Mental model — a second curve feeding the main one.** There are two curves in different units, and
-information flows one way:
-- The **value parabola** (§5): input = rarity, output = XCH. Unchanged.
-- The **half-life curve** (this section): input = rarity tier, output = *days of memory*. Its output sets
-  the weights the value parabola fits against. Its DEFAULT shape is the §5 parabola (`180 → 365`, p²); it
-  flexes away from that shape only where real trading cadence gives us reason to.
-
-So the half-life curve is "a parabola-anchored curve that deforms with evidence," not a fixed second parabola.
-In a thin collection it stays the parabola; in a liquid one it bends.
-
-**Mechanism — adaptive bandwidth by reach-back (per tier).** For each tier, walk that tier's
-**distinct-buyer** completed sales newest→oldest (the same wash-gated sales the fit already uses), counting
-one per distinct buyer, until N are collected. The age at which the Nth distinct buyer is reached — or the
-age of the OLDEST available sale if the tier never reaches N — IS that tier's half-life, clamped
-`[minHL, maxHL]`. A tier with **zero** sales has nothing to measure and falls back to the §5 rarity parabola
-at its band midpoint:
-
-    reachHL(tier) = clamp( ageOfNthDistinctBuyer(tier, N)  OR  ageOfOldestSale(tier) if < N distinct buyers,
-                           minHL, maxHL )
-    halfLife(tier) = (tier has >= 1 sale) ? reachHL(tier)
-                                          : priorHL(tier)      // §5 parabola at band midpoint (180 → 365, p²)
-
-No shrink term: reach-back is **self-regularizing** — "how far back to find N sales" already IS the evidence
-measure, and clamping the oldest-available age handles the few-but-fresh case (fresh cluster → small reach →
-pinned to minHL) and the few-and-old case (dead tier → large reach → long memory) correctly on its own.
-Dropping shrink also removes a magic constant and avoids fighting the intent for dead COMMON tiers (a shrink
-toward the short common prior would wrongly re-shorten a dead common's memory instead of reaching back).
-
-Why reach-back and not a raw trades-per-week rate: a rate throws away *when* the trades happened. A tier
-that traded 5× last month then went quiet, and a tier that traded once 8 months ago, can look identically
-"low volume" over a long window — but the first has fresh evidence and should keep a short memory. Reach-back
-distinguishes them for free: the fresh-cluster tier hits N in a month (short HL); the ancient-single-sale
-tier must reach 8 months back (long HL). Same answer as a volume rate in the fast case, correct answer in
-the slow case.
-
-**Behavior in the three regimes:**
-- *Liquid / "trading like a meme coin":* the tier hits N almost immediately, so reachHL is small and pulls
-  the half-life DOWN (toward minHL). We stop anchoring on prices the market has left behind. Old prints fade.
-- *Normal / quiet:* few sales → shrink keeps us near the rarity prior → essentially today's behavior.
-- *Dead (no recent sales):* we reach all the way back for the last real prints → half-life rises toward
-  maxHL → "last known value," which beats inventing a number.
-
-**Confidence coupling (designed; NOT yet wired in this first cut — follow-up).** The half-life the model had to choose is
-itself a confidence signal. When a tier's half-life is stretched toward maxHL because it's dead, that
-estimate is leaning on stale prints and must be reported as **lower confidence / wider range** via the
-existing confidence system (§ range/confidence). Reaching back is the honest *fallback*, not a precise
-appraisal, and the UI should say so rather than dress an 8-month-old sale up as fresh.
-
-**Guardrails / interactions:**
-- `minHL` is an **anti-manipulation rail**, not just a tuning value: without a floor, a hot tier could
-  collapse to a tiny window where two high prints yank the whole curve. High volume brings more distinct
-  buyers (lower risk), but we still clamp.
-- Cadence is measured from **distinct-buyer** counts so wash volume cannot shorten memory *and* pull the
-  curve toward fake recent prices simultaneously.
-- Pipeline is **two-stage and non-circular**: (1) count sales per tier → set half-life; (2) apply weights →
-  fit value parabola. Cadence is read from raw counts, never from the fit, so no iteration is needed.
-- Scope: **price-curve memory only.** The trait-demand half-life (§5a, 21 days) stays fixed.
-
-**Open constants (backtest sets these — DO NOT lock without it):**
-- `N` — distinct-buyer sales that count as "enough evidence" per tier. In code default **7**
-  (`adaptiveN`, env `TRAITFOLIO_ADAPTIVE_N`).
-- `[minHL, maxHL]` — memory clamp. In code defaults **[120d, 540d]** (`adaptiveMinHalfLife`/
-  `adaptiveMaxHalfLife`, env `TRAITFOLIO_ADAPTIVE_MIN`/`_MAX`). Floor is the manipulation rail; ceiling is
-  how stale we tolerate before it's confidence-flagged.
-
-**Rollout:** LOCKED — ON by default; kill switch `TRAITFOLIO_ADAPTIVE_HALFLIFE=0`. The §5 fixed parabola
-remains the fallback for empty tiers. FUTURE (optional refinements, NOT blockers): a backtest
-(`scripts/backtest-valuation.ts`, signed-bias-by-band) could fine-tune N/clamp, and the confidence coupling
-(a stretched-back tier reporting lower confidence) is still to be wired.
-
 
 ### 5a. Trait-demand multiplier (applied on top, multiplicatively)
 Traits selling **more often recently than their prevalence** run hot:
@@ -350,4 +251,10 @@ coin tracing. This is the next rung above the sybil-soft identity layer.
    the curvature term c now gets a 6× heavier ridge, and sale prices are winsorized to [p5,p95] before the
    fit. We kept λ self-scaling via the recency-weight sum rather than forcing λ(n), which would gut thin data.)
 4. **Monotonic clamp (b,c ≥ 0)**: we forbid the curve from ever valuing a rarer NFT below a less-rare one.
-   Correct, or are there collections wher
+   Correct, or are there collections where that's genuinely wrong?
+5. **Trait demand** uses recent sale *volume* vs prevalence, capped at 1.6×. (Hardened: each trait's
+   observed/expected ratio is now capped at 6× and requires ≥4 distinct-NFT sales, limiting rare-trait
+   double-count and wash-trade leverage.) Open: should price, not just volume, inform demand?
+6. **Floor precedence** and the "cheapest signal among holdings" fallback — sound, or does it bias small wallets?
+7. **Cold-start**: collections with few sales lean on the baseline. Is the baseline a good prior, or should
+   thin-data collections show wider ranges / lower confidence more aggressively?

@@ -18,7 +18,6 @@ import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/v
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
-import { adaptiveHalfLifeOptions } from "@/lib/valuation/compsConfig";
 
 interface CacheEntry { model: CompsModel | null; expiresAt: number; building?: Promise<CompsModel | null> }
 const _cache = new Map<string, CacheEntry>();
@@ -61,7 +60,6 @@ function modelFromPersisted(p: PersistedComps): CompsModel | null {
     floor: p.floor,
     rarityFactor: rarityFactorForPercentile,
     traitFreq: p.traitFreq,
-    ...adaptiveHalfLifeOptions(),
   });
 }
 
@@ -140,7 +138,7 @@ async function build(colId: string): Promise<CompsModel | null> {
   };
   try { cachePut(`comps:${colId}`, JSON.stringify(persisted)); } catch { /* cache optional */ }
 
-  return buildCompsModel(usable, supply, { floor, rarityFactor: rarityFactorForPercentile, traitFreq, ...adaptiveHalfLifeOptions() });
+  return buildCompsModel(usable, supply, { floor, rarityFactor: rarityFactorForPercentile, traitFreq });
 }
 
 // Kick a network (re)build in the background, keeping the stale model live until it lands.
