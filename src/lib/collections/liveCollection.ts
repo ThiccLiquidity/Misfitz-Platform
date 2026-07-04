@@ -145,12 +145,20 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   // it so a restart doesn't re-page the whole collection; refresh window is modest (new mints appear then).
   let items: MgListItem[] = [];
   let capped = false;
+  // A scan is only trustworthy if it returned ~all of the collection's CURRENT declared size (or hit the
+  // hard page cap). This stops a scan that ran while MintGarden was still indexing from freezing a partial
+  // list — and makes a stale short cache self-heal (it's discarded once nft_count grows past it).
+  const declaredCount = typeof col.nft_count === "number" ? col.nft_count : 0;
+  const listLooksFull = (list: MgListItem[], wasCapped: boolean) =>
+    wasCapped || declaredCount <= 0 || list.length >= Math.floor(declaredCount * 0.98);
   const slimHit = await cacheGet(`slimlist2:${id}`, 30 * 60_000);
   if (slimHit) {
     try {
       const parsed = JSON.parse(slimHit) as { items: MgListItem[]; capped: boolean };
-      items = parsed.items ?? [];
-      capped = Boolean(parsed.capped);
+      if (listLooksFull(parsed.items ?? [], Boolean(parsed.capped))) {
+        items = parsed.items ?? [];
+        capped = Boolean(parsed.capped);
+      }
     } catch { /* re-page */ }
   }
   if (items.length === 0) {
@@ -173,7 +181,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
     } while (cursor);
     // Only persist a COMPLETE scan (natural end or a clean MAX_PAGES cap). A truncated scan is still used
     // for THIS render, but not cached — so the next request retries and fills the full collection + listings.
-    if (complete && items.length > 0) cachePut(`slimlist2:${id}`, JSON.stringify({ items, capped }));
+    if (complete && items.length > 0 && listLooksFull(items, capped)) cachePut(`slimlist2:${id}`, JSON.stringify({ items, capped }));
   }
 
   const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
