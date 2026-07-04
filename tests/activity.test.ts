@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { recordSalesActivity, activityLevel, adaptiveTtl } from "../src/lib/market/activity.ts";
+import { recordSalesActivity, activityLevel, adaptiveTtl } from "../src/lib/market/activity";
 
 const iso = (minsAgo: number) => new Date(Date.now() - minsAgo * 60_000).toISOString();
 const base = 5 * 60_000;
