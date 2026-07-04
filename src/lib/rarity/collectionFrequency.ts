@@ -41,7 +41,7 @@ const DISK_TTL = 30 * 24 * 60 * 60_000;
 // Bump when the ranking ALGORITHM changes so old cache files are ignored + rebuilt. v1 used a
 // percentile estimate that tied many NFTs at the same rank (dozens all "rank #1"); v2 sorts every
 // NFT by score for unique 1..N ranks. Without this bump the stale v1 file keeps serving bad ranks.
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 async function readDisk(colId: string): Promise<CollectionFrequency | null> {
   try {
@@ -119,6 +119,14 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
     const scored = perNft.map((nft) => ({ id: nft.id, score: estimator.scoreOf(nft.traits) }));
     scored.sort((a, b) => b.score - a.score); // highest score = rarest = rank 1
     scored.forEach((entry, i) => { rankById[entry.id] = i + 1; });
+  }
+
+  // Rank the WHOLE collection: NFTs with no scoreable traits (empty attributes) — or the rare piece whose
+  // detail never fetched — can't be scored by rarity, so they land at the COMMON end (after the scored set)
+  // instead of being left unranked. Deterministic (list order) so ranks are stable across rebuilds.
+  let nextRank = Object.keys(rankById).length + 1;
+  for (const id of ids) {
+    if (rankById[id] == null) rankById[id] = nextRank++;
   }
 
   // Persist to the 30-day cache ONLY when the scan is complete: the whole list paged AND ~all details
