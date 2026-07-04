@@ -390,6 +390,9 @@ function TraitRow({
             </span>
           )}
         </div>
+        <div className={`tcg-trait-val tcg-lbl-${tierId} truncate ${lblClass}`}>
+          {String(trait.value)}
+        </div>
       </div>
     </div>
   );
