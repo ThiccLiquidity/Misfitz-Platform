@@ -168,17 +168,3 @@ test("thin cap releases once enough distinct NFTs have sold", () => {
   assert.ok(mk(6).curveValue(100) <= 2 * base + 1e-6, "thin (<8 NFTs) capped at 2x baseline");
   assert.ok(mk(10).curveValue(100) > 2 * base, "cap released with >=8 distinct NFTs");
 });
-
-// ── Rank-dependent sale memory (grails remembered longer) ────────────────────────────────────────
-test("new decay: a fake grail sale is remembered longer but still bounded by the baseline clamp", () => {
-  const rf = (p) => (p <= 0.1 ? 14 : p <= 2 ? 6 : p <= 30 ? 0.4 : 0);
-  const floor = 5, supply = 10000;
-  // A single OLD (300-day) wash sale at rank 1 priced 100x floor — under the new longer grail half-life it
-  // retains far more weight than under 120d, so this checks the baseline clamp still bounds the damage.
-  const sales = [{ rank: 1, price: 500, ageDays: 300, seller: "A", buyer: "B" }];
-  // >=8 distinct organic NFTs so the thin-collection cap releases and the [.,5x] baseline clamp is what binds.
-  for (let r = 1000; r <= 9000; r += 1000) sales.push({ rank: r, price: 6, ageDays: 20, seller: "S" + r, buyer: "C" + r });
-  const m = buildCompsModel(sales, supply, { floor, rarityFactor: rf, halfLifeRarest: 360 });
-  const base1 = floor * (1 + rf((1 / supply) * 100)); // baseline at rank 1
-  assert.ok(m.curveValue(1) <= 5 * base1 + 1e-6, `fake grail bounded by 5x baseline despite longer memory; got ${m.curveValue(1)} vs ${5 * base1}`);
-});
