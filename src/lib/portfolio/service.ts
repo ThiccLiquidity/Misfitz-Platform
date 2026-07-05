@@ -7,6 +7,7 @@ import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fet
 import { valueRange, type Confidence } from "@/lib/valuation/range";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { isCompsEnabled } from "@/lib/config";
+import { cacheGet, cachePut } from "@/lib/db/nftCache";
 
 // The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / VALUATION.md).
 // Pulls an address's live holdings from MintGarden, values each NFT, groups by collection, and
@@ -53,7 +54,13 @@ export interface Portfolio {
 
 const CONF_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 
+// Cache the ASSEMBLED portfolio per address (short TTL): a reload, a saved-wallet re-open, or two people
+// viewing the same wallet all share one build instead of re-fetching 120 NFT details every time.
+const PORTFOLIO_TTL_MS = 5 * 60_000;
+
 export async function getAddressPortfolio(address: string): Promise<Portfolio> {
+  const cacheKey = `portfolio2:${address.trim().toLowerCase()}`;
+  try { const hit = await cacheGet(cacheKey, PORTFOLIO_TTL_MS); if (hit) return JSON.parse(hit) as Portfolio; } catch { /* miss -> build */ }
   const [{ details, truncated }, rate] = await Promise.all([
     fetchOwnerNftDetails(address),
     fetchXchUsdRate(),
@@ -161,18 +168,20 @@ export async function getAddressPortfolio(address: string): Promise<Portfolio> {
   const totalHighXch = round(groups.reduce((s, g) => s + g.high, 0));
   const totalCount = groups.reduce((s, g) => s + g.items.length, 0);
 
-  return {
+  const result: Portfolio = {
     address,
     xchUsdRate,
     groups,
     totalCount,
-    totalEstimateXch,
     totalEstimateUsd: round(totalEstimateXch * xchUsdRate),
+    totalEstimateXch,
     totalLowXch,
     totalHighXch,
     confidence,
     truncated,
   };
+  try { if (result.totalCount > 0) cachePut(cacheKey, JSON.stringify(result)); } catch { /* cache optional */ }
+  return result;
 }
 
 // Enrich a specific set of NFTs (by launcher id) for the progressive binder's BATCHED loading: fetch
