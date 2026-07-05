@@ -73,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';
           } catch(e) {}
         `}} />
+        <script defer src="/_vercel/insights/script.js" />
       </head>
       <body className={inter.className}>
         <ThemeProvider>

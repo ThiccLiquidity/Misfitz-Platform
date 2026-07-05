@@ -183,7 +183,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
       {/* Full-width value header */}
       <div className="mb-4 flex flex-col items-center gap-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] px-6 py-6 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
-        <div className="flex flex-wrap items-end justify-center gap-x-10 gap-y-4 sm:justify-start">
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-start sm:gap-x-10 sm:gap-y-4">
           {/* Floor value — what it'd fetch at each collection's floor */}
           <div>
             <div className="text-subtle text-xs uppercase tracking-widest">Floor value</div>

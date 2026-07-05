@@ -4,6 +4,7 @@ import { listCollectionNfts, getNftDetail } from "@/lib/data-sources/mintgarden/
 import type { MgPage, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 import { buildRankEstimator } from "@/lib/rarity/estimateRank";
+import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +
@@ -43,21 +44,28 @@ const DISK_TTL = 30 * 24 * 60 * 60_000;
 // NFT by score for unique 1..N ranks. Without this bump the stale v1 file keeps serving bad ranks.
 const CACHE_VERSION = 4;
 
+type DiskShape = { freq?: CollectionFrequency["freq"]; total?: number; rankById?: Record<string, number>; builtAt?: number; version?: number };
+function parseDisk(raw: string): CollectionFrequency | null {
+  const j = JSON.parse(raw) as DiskShape;
+  if (j?.version === CACHE_VERSION && j?.freq && typeof j.total === "number" && typeof j.builtAt === "number" && Date.now() - j.builtAt < DISK_TTL) {
+    return { freq: j.freq, total: j.total, rankById: j.rankById ?? {}, complete: true };
+  }
+  return null;
+}
 async function readDisk(colId: string): Promise<CollectionFrequency | null> {
-  try {
-    const raw = await fs.readFile(path.join(CACHE_DIR, `${colId}.json`), "utf8");
-    const j = JSON.parse(raw) as { freq?: CollectionFrequency["freq"]; total?: number; rankById?: Record<string, number>; builtAt?: number; version?: number };
-    if (j?.version === CACHE_VERSION && j?.freq && typeof j.total === "number" && typeof j.builtAt === "number" && Date.now() - j.builtAt < DISK_TTL) {
-      return { freq: j.freq, total: j.total, rankById: j.rankById ?? {}, complete: true };
-    }
-  } catch { /* no cached file yet */ }
+  // Shared cache first (Redis on Vercel) so the expensive whole-collection rank scan is reused across
+  // ALL server instances — this is the big speedup for MintGarden-unranked collections. Then local disk.
+  try { const rj = await cacheGet(`rarityfreq:${colId}`, DISK_TTL); if (rj) { const v = parseDisk(rj); if (v) return v; } } catch { /* shared cache miss */ }
+  try { const raw = await fs.readFile(path.join(CACHE_DIR, `${colId}.json`), "utf8"); const v = parseDisk(raw); if (v) return v; } catch { /* no cached file yet */ }
   return null;
 }
 async function writeDisk(colId: string, v: CollectionFrequency): Promise<void> {
+  const payload = JSON.stringify({ ...v, builtAt: Date.now(), version: CACHE_VERSION });
+  try { cachePut(`rarityfreq:${colId}`, payload); } catch { /* shared cache optional */ } // Redis + local kv
   try {
     await fs.mkdir(CACHE_DIR, { recursive: true });
-    await fs.writeFile(path.join(CACHE_DIR, `${colId}.json`), JSON.stringify({ ...v, builtAt: Date.now(), version: CACHE_VERSION }));
-  } catch { /* disk unavailable (e.g. read-only FS) — fall back to in-memory only */ }
+    await fs.writeFile(path.join(CACHE_DIR, `${colId}.json`), payload);
+  } catch { /* disk unavailable (e.g. read-only FS) — shared cache still covers it */ }
 }
 
 async function build(colId: string): Promise<CollectionFrequency | null> {
