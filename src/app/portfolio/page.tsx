@@ -1,10 +1,11 @@
-import { isValidChiaAddress } from "@/lib/wallet/message";
-import { getAddressPortfolio, type Portfolio } from "@/lib/portfolio/service";
+import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
+import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
 import { AddressForm } from "@/components/portfolio/AddressForm";
-import { PortfolioResults } from "@/components/portfolio/PortfolioResults";
+import { YourBinder } from "@/components/binder/YourBinder";
 
-// No-login value view. Paste an XCH address -> see live holdings valued with our model. Pure read;
-// no account, no wallet connection, no DB writes (ARCHITECTURE.md Product Vision / Two entry paths).
+// No-login value view. Paste an xch1 address / did:chia id -> holdings valued, rendered PROGRESSIVELY:
+// the fast slim-list grid paints in ~1s (art + floor-anchored value), then traits, our estimated ranks,
+// and refined values stream in — the same fast path as Your Binder. No account, no wallet connection.
 export const dynamic = "force-dynamic";
 
 export default async function PortfolioPage({
@@ -12,28 +13,18 @@ export default async function PortfolioPage({
 }: {
   searchParams: { address?: string };
 }) {
-  const raw = searchParams.address?.trim() ?? "";
-  const valid = raw.length > 0 && isValidChiaAddress(raw);
-
-  let portfolio: Portfolio | null = null;
-  let error: string | null = null;
-
-  if (raw.length > 0 && !valid) {
-    error = "That doesn't look like a Chia address. It should start with xch1…";
-  } else if (valid) {
-    try {
-      portfolio = await getAddressPortfolio(raw.toLowerCase());
-    } catch {
-      error = "Couldn't reach MintGarden just now. Please try again in a moment.";
-    }
-  }
+  const raw = (searchParams.address ?? "").trim().toLowerCase();
+  const valid = raw.length > 0 && isValidChiaOwnerId(raw);
+  const invalid = raw.length > 0 && !valid;
+  const holdings = valid ? await getMyHoldingsFast([raw]) : null;
+  const noResults = valid && (!holdings || holdings.nfts.length === 0);
 
   return (
     <div className="mx-auto max-w-6xl">
       <header className="mt-2">
         <h1 className="text-title text-2xl font-bold">What are your Chia NFTs worth?</h1>
         <p className="text-subtle mt-2 max-w-2xl text-sm">
-          Paste any Chia address to see the NFTs it holds, each collection&rsquo;s floor, and our
+          Paste any Chia address or DID to see the NFTs it holds, each collection&rsquo;s floor, and our
           estimated value per NFT. No account, no wallet connection — just a read.
         </p>
       </header>
@@ -42,14 +33,27 @@ export default async function PortfolioPage({
         <AddressForm initial={raw} />
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+      {invalid && (
+        <p className="mt-4 text-sm text-red-400">
+          That doesn&rsquo;t look like a Chia id. Paste an <span className="font-mono">xch1…</span> address
+          or a <span className="font-mono">did:chia…</span> profile id.
+        </p>
+      )}
 
-      {portfolio && <PortfolioResults portfolio={portfolio} />}
+      {noResults && (
+        <p className="text-subtle mt-6 text-sm">No NFTs found for this address.</p>
+      )}
 
-      {!raw && !portfolio && (
+      {holdings && holdings.nfts.length > 0 && (
+        <div className="mt-6">
+          <YourBinder key={raw} holdings={holdings} />
+        </div>
+      )}
+
+      {!raw && (
         <p className="text-subtle mt-10 text-sm">
-          Tip: your address is the one starting with <span className="font-mono">xch1</span> in Sage
-          or Goby. Pasting it here never moves anything — it only reads public on-chain data.
+          Tip: your address is the one starting with <span className="font-mono">xch1</span> in Sage or
+          Goby. Pasting it here never moves anything — it only reads public on-chain data.
         </p>
       )}
     </div>

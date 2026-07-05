@@ -8,7 +8,7 @@ import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 // concurrency (the chosen "traits everywhere" behaviour). Caps keep a whale wallet from firing
 // thousands of requests; the caller is told when results were truncated.
 
-export const MAX_HOLDINGS = 120;
+export const MAX_HOLDINGS = 2000; // slim-list ceiling — big wallets render fast (list is light) then enrich in chunks
 const PAGE_SIZE = 50; // MintGarden address endpoint rejects larger sizes (returns nothing); keep at 50
 const DETAIL_CONCURRENCY = 12;
 
@@ -73,7 +73,7 @@ export interface OwnerListings {
 // Holdings change only when the collector buys/sells, so a short DB cache makes re-opening the same
 // wallet (or a saved multi-wallet profile) near-instant without going stale for long. Keyed by the
 // normalized owner id. This is the per-user hot path the indexer plan (Phase 1) set out to cover.
-const HOLDINGS_TTL = 10 * 60_000;
+const HOLDINGS_TTL = 30 * 60_000;
 interface CachedListings { items: MgListItem[]; collections: [string, MgCollection][]; truncated: boolean }
 
 export async function fetchOwnerListings(address: string): Promise<OwnerListings> {
