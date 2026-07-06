@@ -26,7 +26,7 @@ const dir = args[0];
 const colId = args[1];
 const flag = (k: string) => { const a = args.find((x) => x.startsWith(`--${k}=`)); return a ? a.split("=").slice(1).join("=") : ""; };
 const cid = flag("cid");                              // real IPFS CID for the images
-const gateway = (flag("gateway") || "https://tanggang.mypinata.cloud").replace(/\/$/, "");
+const gateway = (flag("gateway") || "https://ipfs.io").replace(/\/$/, ""); // neutral public gateway by default; override with --gateway=<your own>
 const imgdir = flag("imgdir") || "images";            // subfolder under the CID
 const pad = Number(flag("pad") || "4");               // filename zero-padding (0001.png)
 const ext = flag("ext") || ".png";
