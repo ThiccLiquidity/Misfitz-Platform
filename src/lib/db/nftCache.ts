@@ -71,8 +71,22 @@ async function redisGet(key: string, ttlMs: number): Promise<string | null> {
     return null;
   } catch { return null; }
 }
+// On serverless (Vercel) a fire-and-forget write can be cut off when the function FREEZES right after the
+// response — so the cache never fills and every cold request re-fetches from MintGarden. waitUntil keeps the
+// write alive until it finishes. Guarded: on a normal server (or if the package is absent) it degrades to
+// plain fire-and-forget (which works fine there). Loaded once at module init via a computed specifier.
+let _waitUntil: ((p: Promise<unknown>) => void) | null = null;
+void (async () => {
+  try { const m = "@vercel/functions"; const mod = await import(m); _waitUntil = (mod as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil ?? null; }
+  catch { _waitUntil = null; }
+})();
+function keepAlive(p: Promise<unknown>): void {
+  const safe = p.catch(() => { /* ignore */ });
+  if (_waitUntil) { try { _waitUntil(safe); return; } catch { /* fall through to fire-and-forget */ } }
+  void safe;
+}
 function redisPut(key: string, json: string): void {
-  void redis().then((r) => r?.set(key, { v: json, t: Date.now() }, { ex: REDIS_GC_TTL_S })).catch(() => { /* ignore */ });
+  keepAlive(redis().then((r) => r?.set(key, { v: json, t: Date.now() }, { ex: REDIS_GC_TTL_S })));
 }
 
 // -- Local SQLite layer (Phase 1) --------------------------------------------------------------------
