@@ -52,8 +52,10 @@ let _redisPromise: Promise<RedisLike | null> | undefined;
 function redis(): Promise<RedisLike | null> {
   if (!REDIS_URL || !REDIS_TOKEN) return Promise.resolve(null);
   if (!_redisPromise) {
-    const mod = "@upstash/redis"; // computed specifier: keeps this optional dep out of the type graph
-    _redisPromise = import(mod)
+    // Literal specifier so Next/webpack traces + bundles this into the serverless function. (A computed
+    // specifier is invisible to the bundler, so the module is missing at runtime on Vercel -> pkgLoaded
+    // false.) Still a dynamic import, so it stays lazy + guarded (missing pkg/init -> null no-op).
+    _redisPromise = import("@upstash/redis")
       .then((m) => new m.Redis({ url: REDIS_URL, token: REDIS_TOKEN }) as unknown as RedisLike)
       .catch(() => null); // package not installed / init failed -> no-op
   }
@@ -77,7 +79,7 @@ async function redisGet(key: string, ttlMs: number): Promise<string | null> {
 // plain fire-and-forget (which works fine there). Loaded once at module init via a computed specifier.
 let _waitUntil: ((p: Promise<unknown>) => void) | null = null;
 void (async () => {
-  try { const m = "@vercel/functions"; const mod = await import(m); _waitUntil = (mod as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil ?? null; }
+  try { const mod = await import("@vercel/functions"); _waitUntil = (mod as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil ?? null; }
   catch { _waitUntil = null; }
 })();
 function keepAlive(p: Promise<unknown>): void {
