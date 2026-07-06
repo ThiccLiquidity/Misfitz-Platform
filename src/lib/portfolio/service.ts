@@ -5,6 +5,7 @@ import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
+import { estimateFairValue } from "@/lib/valuation/estimate";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { isCompsEnabled } from "@/lib/config";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
@@ -254,6 +255,13 @@ export async function enrichNftsByIds(
         card.rankEstimated = false;
         card.totalSupply = seed.supply;
         card.traits = e.traits.map(([trait_type, value]) => ({ trait_type, value, rarityPercent: pct(trait_type, value) }));
+        // Recompute the baseline value with the SEED rank (MintGarden gave this NFT no rank, so its
+        // fairValue was null/wrong). Without this the comps blend below is skipped (guarded on fairValue)
+        // and the wallet shows a bad/absent value. Mirrors buildBaseCollection + the fast-path overlay.
+        const seedFloor = floorByCollection[colId];
+        if (typeof seedFloor === "number") {
+          card.fairValue = estimateFairValue({ floorXch: seedFloor, rarityRank: e.rank, totalSupply: seed.supply, xchUsdRate }) ?? card.fairValue;
+        }
       }
     }
     out.push(card);

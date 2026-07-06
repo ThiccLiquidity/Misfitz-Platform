@@ -55,8 +55,14 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     if (holdings.demo || holdings.addresses.length === 0) return;
     let cancelled = false;
     const all = holdings.nfts;
-    const total = all.length;
-    if (total === 0) { setEnriching(false); return; }
+
+    // Seeded/authoritative cards already carry a real rank (rankEstimated === false) AND their traits from
+    // the bundled seed — MintGarden has nothing to add for them, so enriching them just fires slow detail
+    // fetches (and wakes the heavy comps build) for no gain. Skip them: a Misfitz-only wallet needs ZERO
+    // enrichment and never shows the spinner. Only cards still missing real traits/ranks get enriched.
+    const pending = all.filter((n) => !(n.rankEstimated === false && (n.traits?.length ?? 0) > 0));
+    const total = pending.length;
+    if (total === 0) { setEnriching(false); setProgress(1); return; }
 
     // Reuse the floor the fast pass already resolved per collection so values stay stable while
     // traits + estimated ranks fill in (only the rarity premium refines).
@@ -67,7 +73,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
     const CHUNK = 24;
     const chunks: string[][] = [];
-    for (let i = 0; i < all.length; i += CHUNK) chunks.push(all.slice(i, i + CHUNK).map((n) => n.launcherId));
+    for (let i = 0; i < pending.length; i += CHUNK) chunks.push(pending.slice(i, i + CHUNK).map((n) => n.launcherId));
 
     setEnriching(true);
     setProgress(0);

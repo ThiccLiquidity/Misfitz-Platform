@@ -141,12 +141,15 @@ function cache(): Promise<CacheDb | null> {
 }
 
 // -- Public API: Redis (shared) first, then SQLite (local), then miss --------------------------------
+// Per-NFT details are LOCAL-ONLY (SQLite), NOT shared Redis. They are by far the highest-VOLUME thing we
+// cache (every NFT of every scanned collection) and would fill the shared store, evicting the small,
+// high-value aggregates (rosters, comps models, rarity tables) that actually make pages fast. Details are
+// cheap to re-fetch on a cold instance; the expensive aggregates stay in Redis and persist.
 export async function cachedDetailJson(id: string): Promise<string | null> {
-  return (await redisGet(`tf:d:${id}`, DETAIL_TTL_MS)) ?? (await cache())?.getDetail(id) ?? null;
+  return (await cache())?.getDetail(id) ?? null;
 }
 export function storeDetailJson(id: string, json: string): void {
-  redisPut(`tf:d:${id}`, json);
-  void cache().then((c) => c?.putDetail(id, json)); // fire-and-forget; never blocks the request
+  void cache().then((c) => c?.putDetail(id, json)); // local SQLite only — keep the shared Redis store lean
 }
 export async function cachedCollectionJson(id: string): Promise<string | null> {
   return (await redisGet(`tf:c:${id}`, COLLECTION_TTL_MS)) ?? (await cache())?.getCollection(id) ?? null;
