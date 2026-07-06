@@ -5,7 +5,7 @@ import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { adaptiveTtl } from "@/lib/market/activity";
-import { getSeed, numberFromName, seedTraitsToTraits } from "@/lib/data-sources/seed/registry";
+import { getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
@@ -252,14 +252,22 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   // unblocks the valuation model. No-op unless the collection is seeded (TRAITFOLIO_SEED=1).
   const seed = await getSeed(id);
   if (seed) {
+    // Per-trait rarity % from the seed's OWN frequency (count of that value / supply), so each trait shows
+    // its rarity like other collections. Built once (cheap; buildBaseCollection is cached).
+    const tf = new Map<string, number>();
+    for (const key in seed.byNumber) for (const [t, v] of seed.byNumber[key].traits) {
+      const kk = `${t}|${v}`; tf.set(kk, (tf.get(kk) ?? 0) + 1);
+    }
+    const pct = (t: string, v: string) => Math.round(((tf.get(`${t}|${v}`) ?? 0) / seed.supply) * 10000) / 100;
     for (const c of cards) {
       const num = numberFromName(c.name);
       const e = num != null ? seed.byNumber[String(num)] : undefined;
       if (!e) continue;
       c.rarityRank = e.rank;
       c.rankEstimated = false;
-      if (!c.traits || c.traits.length === 0) c.traits = seedTraitsToTraits(e);
-      if (floorXch != null) c.fairValue = estimateFairValue({ floorXch, rarityRank: e.rank, totalSupply: c.totalSupply ?? seed.supply, xchUsdRate });
+      c.totalSupply = seed.supply; // true mint supply so "#N of 10000" and tiers are exact
+      c.traits = e.traits.map(([trait_type, value]) => ({ trait_type, value, rarityPercent: pct(trait_type, value) }));
+      if (floorXch != null) c.fairValue = estimateFairValue({ floorXch, rarityRank: e.rank, totalSupply: seed.supply, xchUsdRate });
     }
   }
 
