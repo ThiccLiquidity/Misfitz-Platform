@@ -4,9 +4,8 @@ import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchC
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
-import { adaptiveTtl } from "@/lib/market/activity";
 import { getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
-import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, cacheGetLarge, cachePutLarge } from "@/lib/db/nftCache";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
@@ -159,7 +158,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   const declaredCount = typeof col.nft_count === "number" ? col.nft_count : 0;
   const listLooksFull = (list: MgListItem[], wasCapped: boolean) =>
     wasCapped || declaredCount <= 0 || list.length >= Math.floor(declaredCount * 0.98);
-  const slimHit = await cacheGet(`slimlist2:${id}`, SLIMLIST_TTL_MS);
+  const slimHit = await cacheGetLarge(`slimlist2:${id}`, SLIMLIST_TTL_MS); // gzip+sharded so a 10k roster actually persists (plain SET is >1MB and silently rejected)
   if (slimHit) {
     try {
       const parsed = JSON.parse(slimHit) as { items: MgListItem[]; capped: boolean };
@@ -189,7 +188,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
     } while (cursor);
     // Only persist a COMPLETE scan (natural end or a clean MAX_PAGES cap). A truncated scan is still used
     // for THIS render, but not cached — so the next request retries and fills the full collection + listings.
-    if (complete && items.length > 0 && listLooksFull(items, capped)) cachePut(`slimlist2:${id}`, JSON.stringify({ items, capped }));
+    if (complete && items.length > 0 && listLooksFull(items, capped)) cachePutLarge(`slimlist2:${id}`, JSON.stringify({ items, capped }));
   }
 
   const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
@@ -279,7 +278,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
 
   cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last
   const base: BaseCollection = { cards, floorXch, xchUsdRate, capped };
-  _fullCache.set(id, { value: base, expiresAt: Date.now() + adaptiveTtl(id, 10 * 60_000) });
+  _fullCache.set(id, { value: base, expiresAt: Date.now() + 10 * 60_000 }); // fixed 10m; shrinking this only multiplied cold re-assembly
   return base;
 }
 

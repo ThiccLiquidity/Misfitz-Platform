@@ -130,7 +130,7 @@ async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Prom
 const NFT_DETAIL_TTL = 10 * 60_000;
 const COLLECTION_TTL = 10 * 60_000;
 
-export function getNftDetail(nftId: string, background = false): Promise<MgNftDetail> {
+export function getNftDetail(nftId: string, background = false, bulk = false): Promise<MgNftDetail> {
   return cached(`nft_${nftId}`, NFT_DETAIL_TTL, async () => {
     // L2: our persistent DB cache — once fetched, served from here forever (no MintGarden call).
     const hit = await cachedDetailJson(nftId);
@@ -139,7 +139,7 @@ export function getNftDetail(nftId: string, background = false): Promise<MgNftDe
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const d = await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`, DEFAULT_TIMEOUT_MS, background);
-        storeDetailJson(nftId, JSON.stringify(d)); // write-through
+        storeDetailJson(nftId, JSON.stringify(d), bulk); // write-through (bulk whole-collection scans skip shared Redis)
         return d;
       } catch (e) {
         lastErr = e;

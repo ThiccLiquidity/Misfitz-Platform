@@ -10,8 +10,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
   try {
     const r = await getAllCollectionCards(params.id);
-    // User-agnostic + ~10 min server cache: allow brief browser/CDN reuse, stale-while-revalidate.
-    return NextResponse.json(r, { headers: { "Cache-Control": "public, max-age=120, stale-while-revalidate=600" } });
+    // User-agnostic, so let Vercel's EDGE cache serve repeat opens (~100ms, zero function) via s-maxage.
+    // Don't pin a still-"warming" payload at the edge — serve those no-store so the warmed data appears next.
+    const cache = r.warming
+      ? "no-store"
+      : "public, max-age=60, s-maxage=120, stale-while-revalidate=600";
+    return NextResponse.json(r, { headers: { "Cache-Control": cache } });
   } catch {
     return NextResponse.json({ error: "upstream unavailable" }, { status: 502 });
   }

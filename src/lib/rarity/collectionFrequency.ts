@@ -4,7 +4,7 @@ import { listCollectionNfts, getNftDetail } from "@/lib/data-sources/mintgarden/
 import type { MgPage, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 import { buildRankEstimator } from "@/lib/rarity/estimateRank";
-import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, keepAlive } from "@/lib/db/nftCache";
 import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +
@@ -100,10 +100,10 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
     while (idx < ids.length) {
       const i = idx++;
       const id = ids[i];
-      let d = await getNftDetail(id, true).catch(() => null);
+      let d = await getNftDetail(id, true, true).catch(() => null);
       for (let attempt = 1; !d && attempt < 3; attempt++) {
         await new Promise((r) => setTimeout(r, 400 * attempt));
-        d = await getNftDetail(id, true).catch(() => null);
+        d = await getNftDetail(id, true, true).catch(() => null);
       }
       if (!d) { detailFails++; continue; }
       const traits = mapTraits(d);
@@ -157,5 +157,6 @@ export async function getCollectionFrequency(colId: string, opts: { wait?: boole
     .then((v) => { _cache.set(colId, { value: v, expiresAt: Date.now() + (v ? (v.complete ? TTL : 4 * 60_000) : COLD_TTL) }); return v; })
     .catch(() => { _cache.set(colId, { value: null, expiresAt: Date.now() + COLD_TTL }); return null; });
   _cache.set(colId, { value: hit?.value ?? null, expiresAt: hit?.expiresAt ?? 0, building });
+  keepAlive(building); // survive serverless function freeze so the scan actually finishes on the first visit
   return opts.wait ? building : (hit?.value ?? null);
 }

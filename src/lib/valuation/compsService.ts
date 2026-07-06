@@ -15,7 +15,7 @@ import { fetchCollectionCompletedSales, fetchCollectionFloor } from "@/lib/marke
 import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
-import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, keepAlive } from "@/lib/db/nftCache";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 import { isSeeded, getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
@@ -169,6 +169,7 @@ function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean): Pro
       return stale;
     });
   _cache.set(colId, { model: stale, expiresAt: stale ? Date.now() + TTL : 0, building });
+  keepAlive(building); // survive serverless function freeze so the comps build actually lands + persists
   return wait ? building : Promise.resolve(stale);
 }
 

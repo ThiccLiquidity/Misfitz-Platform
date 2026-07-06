@@ -15,6 +15,7 @@
 
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
 
 interface CacheDb {
   getDetail(id: string): string | null;
@@ -82,13 +83,13 @@ void (async () => {
   try { const mod = await import("@vercel/functions"); _waitUntil = (mod as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil ?? null; }
   catch { _waitUntil = null; }
 })();
-function keepAlive(p: Promise<unknown>): void {
+export function keepAlive(p: Promise<unknown>): void {
   const safe = p.catch(() => { /* ignore */ });
   if (_waitUntil) { try { _waitUntil(safe); return; } catch { /* fall through to fire-and-forget */ } }
   void safe;
 }
-function redisPut(key: string, json: string): void {
-  keepAlive(redis().then((r) => r?.set(key, { v: json, t: Date.now() }, { ex: REDIS_GC_TTL_S })));
+function redisPut(key: string, json: string, exSeconds: number = REDIS_GC_TTL_S): void {
+  keepAlive(redis().then((r) => r?.set(key, { v: json, t: Date.now() }, { ex: exSeconds })));
 }
 
 // -- Local SQLite layer (Phase 1) --------------------------------------------------------------------
@@ -141,15 +142,18 @@ function cache(): Promise<CacheDb | null> {
 }
 
 // -- Public API: Redis (shared) first, then SQLite (local), then miss --------------------------------
-// Per-NFT details are LOCAL-ONLY (SQLite), NOT shared Redis. They are by far the highest-VOLUME thing we
-// cache (every NFT of every scanned collection) and would fill the shared store, evicting the small,
-// high-value aggregates (rosters, comps models, rarity tables) that actually make pages fast. Details are
-// cheap to re-fetch on a cold instance; the expensive aggregates stay in Redis and persist.
+// Per-NFT details: interactive + comps fetches write to shared Redis with a SHORT 48h auto-expiry (bounded
+// and self-clearing) so wallet enrichment and comps rebuilds are cheap across serverless instances. BULK
+// whole-collection rarity scans pass bulk=true and stay OUT of Redis — they are the high-volume thing that
+// filled the store to 256MB. (Local SQLite is also written; it's a no-op on read-only serverless FS but
+// real on a persistent host.)
+const DETAIL_REDIS_TTL_MS = 48 * 60 * 60_000; // 48h
 export async function cachedDetailJson(id: string): Promise<string | null> {
-  return (await cache())?.getDetail(id) ?? null;
+  return (await redisGet(`tf:d:${id}`, DETAIL_REDIS_TTL_MS)) ?? (await cache())?.getDetail(id) ?? null;
 }
-export function storeDetailJson(id: string, json: string): void {
-  void cache().then((c) => c?.putDetail(id, json)); // local SQLite only — keep the shared Redis store lean
+export function storeDetailJson(id: string, json: string, bulk = false): void {
+  if (!bulk) redisPut(`tf:d:${id}`, json, 48 * 60 * 60); // interactive/comps -> Redis, 48h ex; bulk scans skip Redis
+  void cache().then((c) => c?.putDetail(id, json));
 }
 export async function cachedCollectionJson(id: string): Promise<string | null> {
   return (await redisGet(`tf:c:${id}`, COLLECTION_TTL_MS)) ?? (await cache())?.getCollection(id) ?? null;
@@ -167,6 +171,40 @@ export async function cacheGet(key: string, ttlMs: number): Promise<string | nul
 export function cachePut(key: string, json: string): void {
   redisPut(`tf:kv:${key}`, json);
   void cache().then((c) => c?.putKv(key, json));
+}
+
+// Large values (a 10k-NFT roster is ~5MB of JSON) exceed Upstash's ~1MB request cap, so a plain SET fails
+// silently and the roster never persists — every cold instance then re-runs the 30-70s scan. Store them
+// gzip+base64 and SHARDED under tf:kvz:{key}:{i} with a tiny manifest at tf:kvz:{key}, so any size fits;
+// read reassembles + gunzips (falls back to a local blob). Gzip typically takes 5MB -> ~500KB (one shard).
+const KVZ_SHARD_MAX = 800_000; // base64 chars per shard, safely under the ~1MB request limit
+export function cachePutLarge(key: string, json: string): void {
+  try {
+    const b64 = gzipSync(Buffer.from(json, "utf8")).toString("base64");
+    const shards = Math.max(1, Math.ceil(b64.length / KVZ_SHARD_MAX));
+    redisPut(`tf:kvz:${key}`, JSON.stringify({ shards, len: b64.length }));
+    for (let i = 0; i < shards; i++) redisPut(`tf:kvz:${key}:${i}`, b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX));
+    void cache().then((c) => c?.putKv(`z:${key}`, b64));
+  } catch { /* cache optional */ }
+}
+export async function cacheGetLarge(key: string, ttlMs: number): Promise<string | null> {
+  try {
+    const man = await redisGet(`tf:kvz:${key}`, ttlMs);
+    if (man) {
+      const { shards } = JSON.parse(man) as { shards: number };
+      const parts: string[] = [];
+      let ok = shards > 0;
+      for (let i = 0; i < shards; i++) {
+        const part = await redisGet(`tf:kvz:${key}:${i}`, ttlMs);
+        if (part == null) { ok = false; break; }
+        parts.push(part);
+      }
+      if (ok) return gunzipSync(Buffer.from(parts.join(""), "base64")).toString("utf8");
+    }
+    const localB64 = (await cache())?.getKv(`z:${key}`, ttlMs);
+    if (localB64) return gunzipSync(Buffer.from(localB64, "base64")).toString("utf8");
+    return null;
+  } catch { return null; }
 }
 
 // -- Diagnostic (safe to expose): reports whether the shared Redis layer is actually working in the
