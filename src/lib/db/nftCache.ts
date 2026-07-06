@@ -192,3 +192,46 @@ export async function redisHealth(): Promise<{
   } catch (e) { error = (e as Error)?.message ?? String(e); }
   return { configured, urlHost, hasToken: !!REDIS_TOKEN, pkgLoaded, roundTrip, waitUntil: !!_waitUntil, error };
 }
+
+// -- Ops/storage stats (safe to expose): total key count + a breakdown by kind, via a bounded SCAN. Lets
+// a /status endpoint show what is actually consuming the shared store so we know if/when to upgrade. No
+// secrets. Bounded to keep it cheap even on a busy DB.
+export async function redisStats(): Promise<{
+  configured: boolean; dbsize: number; scanned: number; complete: boolean;
+  byPrefix: Record<string, number>;
+}> {
+  const empty = { configured: false, dbsize: -1, scanned: 0, complete: true, byPrefix: {} as Record<string, number> };
+  try {
+    const r = await redis();
+    if (!r) return empty;
+    const c = r as unknown as {
+      dbsize?: () => Promise<number>;
+      scan?: (cursor: string | number, opts?: { match?: string; count?: number }) => Promise<[string, string[]]>;
+    };
+    let dbsize = -1;
+    try { dbsize = (await c.dbsize?.()) ?? -1; } catch { /* ignore */ }
+    const byPrefix: Record<string, number> = {};
+    let cursor: string | number = 0, scanned = 0, iters = 0, complete = true;
+    if (c.scan) {
+      do {
+        const res = (await c.scan(cursor, { count: 1000 })) as [string, string[]];
+        const next: string = res[0]; const keys: string[] = res[1] ?? [];
+        for (const k of keys) {
+          const kind =
+            k.startsWith("tf:d:") ? "detail" :
+            k.startsWith("tf:c:") ? "collectionMeta" :
+            k.startsWith("tf:kv:slimlist2:") ? "roster" :
+            k.startsWith("tf:kv:comps:") ? "comps" :
+            k.startsWith("tf:kv:rarityfreq:") ? "rarity" :
+            k.startsWith("tf:kv:portfolio2:") ? "portfolio" :
+            k.startsWith("tf:kv:holdings2:") ? "holdings" :
+            k.startsWith("tf:kv:sales:") ? "sales" : "other";
+          byPrefix[kind] = (byPrefix[kind] ?? 0) + 1;
+        }
+        scanned += keys.length; cursor = next ?? "0"; iters++;
+        if (iters >= 60) { complete = String(cursor) === "0"; break; }
+      } while (String(cursor) !== "0");
+    }
+    return { configured: true, dbsize, scanned, complete, byPrefix };
+  } catch { return { ...empty, configured: true }; }
+}
