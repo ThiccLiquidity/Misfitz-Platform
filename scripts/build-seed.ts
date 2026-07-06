@@ -1,98 +1,92 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { buildRankEstimator, type FrequencyCounts } from "../src/lib/rarity/estimateRank";
 
-// Build a SEED file for a collection from its CHIP-0007 metadata (the files you minted from), so the site
-// can show the WHOLE collection + OUR OpenRarity ranks instantly, without depending on MintGarden's index.
-//
-//   npx tsx scripts/build-seed.ts <dir-of-json> <col1id> [--cid=<realIpfsCID>] [--name=Misfitz]
-//
-// Reads every *.json in <dir> (CHIP-0007: series_number, name, attributes, data.image.uri). Computes our
-// own OpenRarity ranks from the traits (sorted -> unique 1..N). Writes src/lib/data-sources/seed/<col1id>.json.
-// The image uri's placeholder CID is replaced with --cid when given (else left as-is for later).
+// Build a SEED file for a collection from its CHIP-0007 metadata so the site can show the WHOLE
+// collection + OUR OpenRarity ranks instantly, independent of MintGarden's index.
+//   node --experimental-strip-types scripts/build-seed.ts <file-or-dir> <col1id> [--cid=CID] [--gateway=URL] [--name=Misfitz]
+// Computes ranks by OpenRarity information content (IC = -log2(count/N)) summed across all trait
+// categories, sorted rarest-first -> unique 1..N. Writes src/lib/data-sources/seed/<col1id>.json.
 
-interface Chip7 {
-  name?: string;
-  series_number?: number;
-  series_total?: number;
-  attributes?: { trait_type?: string; value?: string | number }[];
-  data?: { image?: { uri?: string } };
-}
+interface Attr { trait_type?: string; value?: string | number }
+interface Chip7 { name?: string; series_number?: number; attributes?: Attr[] }
 type SeedEntry = { n: number; name: string; image: string; rank: number; traits: [string, string][] };
 interface Seed { colId: string; name: string; supply: number; builtAt: number; byNumber: Record<string, SeedEntry> }
 
 const args = process.argv.slice(2);
-const dir = args[0];
+const input = args[0];
 const colId = args[1];
 const flag = (k: string) => { const a = args.find((x) => x.startsWith(`--${k}=`)); return a ? a.split("=").slice(1).join("=") : ""; };
-const cid = flag("cid");                              // real IPFS CID for the images
-const gateway = (flag("gateway") || "https://ipfs.io").replace(/\/$/, ""); // neutral public gateway by default; override with --gateway=<your own>
-const imgdir = flag("imgdir") || "images";            // subfolder under the CID
-const pad = Number(flag("pad") || "4");               // filename zero-padding (0001.png)
+const cid = flag("cid");
+const gateway = (flag("gateway") || "https://ipfs.io").replace(/\/$/, "");
+const imgdir = flag("imgdir") || "images";
+const pad = Number(flag("pad") || "4");
 const ext = flag("ext") || ".png";
 const collName = flag("name") || "Collection";
+if (!input || !colId || !colId.startsWith("col1")) { console.error("usage: node --experimental-strip-types scripts/build-seed.ts <file-or-dir> <col1id> [--cid=CID] [--gateway=URL] [--name=]"); process.exit(1); }
 const imageFor = (n: number) => (cid ? `${gateway}/ipfs/${cid}/${imgdir}/${String(n).padStart(pad, "0")}${ext}` : "");
-if (!dir || !colId || !colId.startsWith("col1")) {
-  console.error("usage: tsx scripts/build-seed.ts <dir-of-json> <col1id> [--cid=CID] [--name=Misfitz]");
-  process.exit(1);
-}
-
-function numFromName(name: string): number | null {
-  const m = name.match(/#?\s*0*(\d+)\s*$/);
-  return m ? Number(m[1]) : null;
-}
+const numFromName = (s: string): number | null => { const m = s.match(/#?\s*0*(\d+)\s*$/); return m ? Number(m[1]) : null; };
 
 async function main() {
-  const files = (await fs.readdir(dir)).filter((f) => f.toLowerCase().endsWith(".json"));
-  console.error(`reading ${files.length} json files from ${dir} ...`);
+  const stat = await fs.stat(input);
+  const entries: Chip7[] = [];
+  if (stat.isFile()) {
+    const j = JSON.parse(await fs.readFile(input, "utf8")) as unknown;
+    for (const e of (Array.isArray(j) ? j : Object.values(j as Record<string, unknown>))) entries.push(e as Chip7);
+  } else {
+    const files = (await fs.readdir(input)).filter((f) => f.toLowerCase().endsWith(".json"));
+    for (const f of files) { try { entries.push(JSON.parse(await fs.readFile(path.join(input, f), "utf8")) as Chip7); } catch { /* skip */ } }
+  }
+  console.error(`loaded ${entries.length} entries`);
 
-  const parsed: { n: number; name: string; image: string; traits: { trait_type: string; value: string }[] }[] = [];
-  for (const f of files) {
-    let d: Chip7;
-    try { d = JSON.parse(await fs.readFile(path.join(dir, f), "utf8")) as Chip7; } catch { continue; }
+  const parsed: { n: number; name: string; traits: Map<string, string> }[] = [];
+  for (const d of entries) {
     const name = String(d.name ?? "").trim();
-    const n = typeof d.series_number === "number" ? d.series_number : numFromName(name) ?? numFromName(f);
+    const n = typeof d.series_number === "number" ? d.series_number : numFromName(name);
     if (n == null || !Number.isFinite(n)) continue;
-    const traits = (d.attributes ?? [])
-      .map((a) => ({ trait_type: String(a.trait_type ?? "").trim(), value: String(a.value ?? "").trim() }))
-      .filter((t) => t.trait_type && t.value && t.trait_type.toLowerCase() !== "description");
-    parsed.push({ n, name: name || `#${n}`, image: imageFor(n), traits });
+    const traits = new Map<string, string>();
+    for (const a of d.attributes ?? []) {
+      const t = String(a.trait_type ?? "").trim();
+      const v = String(a.value ?? "").trim();
+      if (t && v && t.toLowerCase() !== "description") traits.set(t, v);
+    }
+    parsed.push({ n, name: name || `#${n}`, traits });
   }
-  if (parsed.length === 0) { console.error("no parseable NFTs found"); process.exit(1); }
+  const N = parsed.length;
+  if (N === 0) { console.error("no parseable NFTs"); process.exit(1); }
 
-  // Frequency table over all NFTs, then OUR OpenRarity ranks: score each, sort rarest-first, 1..N.
-  const freq: FrequencyCounts = {};
-  for (const p of parsed) for (const t of p.traits) {
-    const cat = (freq[t.trait_type.toLowerCase()] ??= {});
-    const v = String(t.value).toLowerCase();
-    cat[v] = (cat[v] ?? 0) + 1;
+  // OpenRarity information content. Count each category's values; NFTs missing a category count as "(none)".
+  const categories = new Set<string>();
+  for (const p of parsed) for (const c of p.traits.keys()) categories.add(c);
+  const counts = new Map<string, Map<string, number>>();
+  for (const c of categories) counts.set(c, new Map());
+  for (const p of parsed) for (const c of categories) {
+    const v = p.traits.get(c) ?? "(none)";
+    const m = counts.get(c)!;
+    m.set(v, (m.get(v) ?? 0) + 1);
   }
-  const est = buildRankEstimator(freq, parsed.length);
-  if (!est) { console.error("could not build rank estimator"); process.exit(1); }
-  const scored = parsed.map((p) => ({ p, score: est.scoreOf(p.traits) }));
-  scored.sort((a, b) => b.score - a.score); // rarest first
+  const icOf = (c: string, v: string) => -Math.log2((counts.get(c)!.get(v) ?? 1) / N);
+  const scoreOf = (p: { traits: Map<string, string> }) => {
+    let s = 0;
+    for (const c of categories) s += icOf(c, p.traits.get(c) ?? "(none)");
+    return s;
+  };
+
+  const scored = parsed.map((p) => ({ p, score: scoreOf(p) })).sort((a, b) => b.score - a.score);
   const rankByNum = new Map<number, number>();
   scored.forEach((s, i) => rankByNum.set(s.p.n, i + 1));
 
   const byNumber: Record<string, SeedEntry> = {};
   for (const p of parsed) {
-    byNumber[String(p.n)] = {
-      n: p.n,
-      name: p.name,
-      image: p.image,
-      rank: rankByNum.get(p.n) ?? 0,
-      traits: p.traits.map((t) => [t.trait_type, String(t.value)] as [string, string]),
-    };
+    byNumber[String(p.n)] = { n: p.n, name: p.name, image: imageFor(p.n), rank: rankByNum.get(p.n) ?? 0, traits: [...p.traits.entries()] };
   }
-
-  const seed: Seed = { colId, name: collName, supply: parsed.length, builtAt: Date.now(), byNumber };
+  const seed: Seed = { colId, name: collName, supply: N, builtAt: Date.now(), byNumber };
   const outDir = path.join("src", "lib", "data-sources", "seed");
   await fs.mkdir(outDir, { recursive: true });
   const outPath = path.join(outDir, `${colId}.json`);
   await fs.writeFile(outPath, JSON.stringify(seed));
-  console.error(`\\nwrote ${outPath}`);
-  console.error(`  ${parsed.length} NFTs, ranks 1..${parsed.length}`);
-  console.error(`  image sample: ${byNumber[String(parsed[0].n)].image || "(no --cid given — pass --cid=<CID> to build image URLs)"}`);
-  console.error(`  rarest (#rank 1): ${scored[0].p.name}`);
+  console.error(`wrote ${outPath}: ${N} NFTs, ranks 1..${N}`);
+  console.error(`  categories: ${[...categories].join(", ")}`);
+  console.error(`  rarest (rank 1): ${scored[0].p.name} (score ${scored[0].score.toFixed(2)})`);
+  console.error(`  image sample: ${byNumber[String(scored[0].p.n)].image || "(no --cid)"}`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
