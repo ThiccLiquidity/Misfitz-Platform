@@ -130,6 +130,59 @@ async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Prom
 const NFT_DETAIL_TTL = 10 * 60_000;
 const COLLECTION_TTL = 10 * 60_000;
 
+// Project a raw NFT detail down to ONLY the fields we consume (exactly the typed MgNftDetail shape) before
+// caching it. MintGarden returns a lot we never read — most importantly a full embedded owner PROFILE
+// (bio/avatar/discord, ~1.3KB) on every sale event — which bloated the shared cache. Readers only touch
+// typed fields, so this is transparent to them and cuts a stored detail from ~5.5-30KB to ~1-2KB.
+function slimNftDetail(d: MgNftDetail): MgNftDetail {
+  const c = d.collection;
+  return {
+    id: d.id,
+    encoded_id: d.encoded_id,
+    data: {
+      thumbnail_uri: d.data?.thumbnail_uri ?? null,
+      preview_uri: d.data?.preview_uri ?? null,
+      data_uris: d.data?.data_uris ?? null,
+      metadata_json: d.data?.metadata_json
+        ? {
+            name: d.data.metadata_json.name,
+            attributes: d.data.metadata_json.attributes,
+            series_total: d.data.metadata_json.series_total,
+            series_number: d.data.metadata_json.series_number,
+          }
+        : null,
+    },
+    xch_price: d.xch_price ?? null,
+    owner_address: d.owner_address ? { id: d.owner_address.id, encoded_id: d.owner_address.encoded_id } : null,
+    collection: {
+      id: c.id,
+      name: c.name,
+      description: c.description ?? null,
+      thumbnail_uri: c.thumbnail_uri ?? null,
+      banner_uri: c.banner_uri ?? null,
+      nft_count: c.nft_count ?? null,
+      floor_price: c.floor_price ?? null,
+      attributes_frequency_counts: c.attributes_frequency_counts ?? null,
+      volume: c.volume ?? null,
+      trade_count: c.trade_count ?? null,
+      creator: c.creator ?? null,
+      blocked_content: c.blocked_content ?? null,
+      sensitive_content: c.sensitive_content ?? null,
+    },
+    openrarity_rank: d.openrarity_rank ?? null,
+    events: (d.events ?? []).map((e) => ({
+      type: e?.type ?? null,
+      xch_price: e?.xch_price ?? null,
+      address: e?.address ? { encoded_id: e.address.encoded_id } : null,
+      previous_address: e?.previous_address ? { encoded_id: e.previous_address.encoded_id } : null,
+      payments: e?.payments ? e.payments.map((pm) => ({ asset_id: pm?.asset_id ?? null })) : null,
+    })),
+    is_blocked: d.is_blocked ?? null,
+    blocked_content: d.blocked_content ?? null,
+    sensitive_content: d.sensitive_content ?? null,
+  };
+}
+
 export function getNftDetail(nftId: string, background = false, bulk = false): Promise<MgNftDetail> {
   return cached(`nft_${nftId}`, NFT_DETAIL_TTL, async () => {
     // L2: our persistent DB cache — once fetched, served from here forever (no MintGarden call).
@@ -139,7 +192,7 @@ export function getNftDetail(nftId: string, background = false, bulk = false): P
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const d = await getJson<MgNftDetail>(`/nfts/${encodeURIComponent(nftId)}`, DEFAULT_TIMEOUT_MS, background);
-        storeDetailJson(nftId, JSON.stringify(d), bulk); // write-through (bulk whole-collection scans skip shared Redis)
+        storeDetailJson(nftId, JSON.stringify(slimNftDetail(d)), bulk); // store SLIMMED (only fields we read); return full to this caller
         return d;
       } catch (e) {
         lastErr = e;
@@ -185,9 +238,11 @@ export function listCollectionNfts(
   cursor?: string | null,
   size = 50,
   background = false,
+  includeMetadata = false,
 ): Promise<MgPage<MgListItem>> {
   const q = new URLSearchParams({ size: String(size) });
   if (cursor) q.set("page", cursor);
+  if (includeMetadata) q.set("include_metadata", "true"); // inline CHIP-0007 attributes per NFT
   return getJson<MgPage<MgListItem>>(`/collections/${encodeURIComponent(collectionId)}/nfts?${q}`, DEFAULT_TIMEOUT_MS, background);
 }
 

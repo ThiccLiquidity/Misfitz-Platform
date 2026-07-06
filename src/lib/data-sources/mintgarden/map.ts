@@ -99,6 +99,22 @@ export function mapTraits(detail: MgNftDetail): Trait[] {
     .filter((t): t is Trait => t !== null);
 }
 
+// Traits from a LIST item's inline metadata (present only with include_metadata=true). Same tolerant
+// key handling as mapTraits; rarityPercent is filled later by the freq table / seed overlay.
+export function mapListItemTraits(item: MgListItem): Trait[] {
+  const attrs = item.metadata?.attributes ?? [];
+  return attrs
+    .map((a): Trait | null => {
+      if (!a) return null;
+      const rawLabel = a.trait_type ?? a.type ?? a.name;
+      if (rawLabel === undefined || rawLabel === null || a.value === undefined || a.value === null) return null;
+      const label = String(rawLabel).trim();
+      if (!label || label.toLowerCase() === "description") return null;
+      return { trait_type: label, value: a.value as string | number };
+    })
+    .filter((t): t is Trait => t !== null);
+}
+
 export function mapCollection(c: MgCollection): CollectionData {
   return {
     slug: c.id, // col1... — stable identifier; live collections key off the chain id, not a name
@@ -262,7 +278,7 @@ export function mapListItemToCard(
     collectionSlug: item.collection_id,
     name: item.name,
     imageUrl: item.thumbnail_uri ?? "",
-    traits: [],
+    traits: mapListItemTraits(item),
     rarityRank,
     rankEstimated: false,
     currentOwnerAddress: item.owner_address_encoded_id ?? null,
@@ -294,7 +310,7 @@ export function mapListItemToNftData(item: MgListItem, xchUsdRate = XCH_USD_FALL
     collectionSlug: item.collection_id,
     name: item.name,
     imageUrl: item.thumbnail_uri ?? "",
-    traits: [],
+    traits: mapListItemTraits(item),
     rarityRank,
     currentOwnerAddress: item.owner_address_encoded_id ?? null,
     fairValue: null,

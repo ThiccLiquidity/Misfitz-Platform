@@ -1,10 +1,10 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { listCollectionNfts, getNftDetail } from "@/lib/data-sources/mintgarden/client";
+import { listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import type { MgPage, MgListItem } from "@/lib/data-sources/mintgarden/types";
-import { mapTraits } from "@/lib/data-sources/mintgarden/map";
+import { mapListItemTraits } from "@/lib/data-sources/mintgarden/map";
 import { buildRankEstimator } from "@/lib/rarity/estimateRank";
-import { cacheGet, cachePut, keepAlive } from "@/lib/db/nftCache";
+import { cacheGetLarge, cachePutLargeAsync, keepAlive, tryLock } from "@/lib/db/nftCache";
 import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +
@@ -26,7 +26,7 @@ const TTL = 45 * 60_000;
 const COLD_TTL = 5 * 60_000;
 const MAX_NFTS = 20000; // safety valve only — artists need the WHOLE collection ranked, so cover full sets
 const PAGE = 100;
-const CONC = 8;
+const SLIM_TTL = 30 * 24 * 60 * 60_000; // must match liveCollection SLIMLIST_TTL_MS (shared roster)
 
 interface Entry { value: CollectionFrequency | null; expiresAt: number; building?: Promise<CollectionFrequency | null> }
 const _cache = new Map<string, Entry>();
@@ -55,13 +55,13 @@ function parseDisk(raw: string): CollectionFrequency | null {
 async function readDisk(colId: string): Promise<CollectionFrequency | null> {
   // Shared cache first (Redis on Vercel) so the expensive whole-collection rank scan is reused across
   // ALL server instances — this is the big speedup for MintGarden-unranked collections. Then local disk.
-  try { const rj = await cacheGet(`rarityfreq:${colId}`, DISK_TTL); if (rj) { const v = parseDisk(rj); if (v) return v; } } catch { /* shared cache miss */ }
+  try { const rj = await cacheGetLarge(`rarityfreq:${colId}`, DISK_TTL); if (rj) { const v = parseDisk(rj); if (v) return v; } } catch { /* shared cache miss */ }
   try { const raw = await fs.readFile(path.join(CACHE_DIR, `${colId}.json`), "utf8"); const v = parseDisk(raw); if (v) return v; } catch { /* no cached file yet */ }
   return null;
 }
 async function writeDisk(colId: string, v: CollectionFrequency): Promise<void> {
   const payload = JSON.stringify({ ...v, builtAt: Date.now(), version: CACHE_VERSION });
-  try { cachePut(`rarityfreq:${colId}`, payload); } catch { /* shared cache optional */ } // Redis + local kv
+  try { await cachePutLargeAsync(`rarityfreq:${colId}`, payload); } catch { /* shared cache optional */ } // gzip+sharded (a 10k rankById is >1MB raw)
   try {
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${colId}.json`), payload);
@@ -69,82 +69,82 @@ async function writeDisk(colId: string, v: CollectionFrequency): Promise<void> {
 }
 
 async function build(colId: string): Promise<CollectionFrequency | null> {
-  // 1) Persistent disk cache first — a COMPLETE scan is written once and reused for 30 days.
+  // 1) Persistent cache first — a COMPLETE scan is written once and reused for 30 days.
   const cached = await readDisk(colId);
   if (cached) return cached;
 
-  // 2) Page the FULL id list. Retry a transiently-failed page so one hiccup can't truncate the collection
-  //    (which would leave every NFT past the failure point permanently unranked).
-  const ids: string[] = [];
-  let cursor: string | null | undefined = undefined;
+  // 2) Prefer the already-scanned collection ROSTER (cached with inline attributes via include_metadata),
+  //    so rarity is a ZERO-network by-product of the collection-page scan. Only if no roster exists do we
+  //    page the collection ourselves — WITH metadata, so traits arrive inline (~100 list calls, not 10k
+  //    detail fetches). A cross-instance lock stops N cold instances scanning the same collection at once.
+  let items: MgListItem[] | null = await loadRosterItems(colId);
   let listComplete = true;
-  do {
-    let page: MgPage<MgListItem> | null = null;
-    for (let attempt = 0; attempt < 3 && !page; attempt++) {
-      page = await listCollectionNfts(colId, cursor, PAGE, true).catch(() => null);
-      if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-    }
-    if (!page) { listComplete = false; break; }
-    for (const it of page.items ?? []) { if (ids.length >= MAX_NFTS) break; if (it.id) ids.push(it.id); }
-    cursor = page.next;
-  } while (cursor && ids.length < MAX_NFTS);
-  if (ids.length === 0) return null;
 
-  // 3) Fetch EVERY NFT's traits, retrying transient 429s so NFTs aren't silently skipped (unranked).
-  //    getNftDetail is itself cached, so a follow-up scan only re-fetches the ones that failed.
+  if (!items) {
+    if (!(await tryLock(`rarity:${colId}`, 90))) return null; // someone else is scanning -> warming
+    const scanned: MgListItem[] = [];
+    let cursor: string | null | undefined = undefined;
+    do {
+      let page: MgPage<MgListItem> | null = null;
+      for (let attempt = 0; attempt < 3 && !page; attempt++) {
+        page = await listCollectionNfts(colId, cursor, PAGE, true, true).catch(() => null); // background + include_metadata
+        if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      }
+      if (!page) { listComplete = false; break; }
+      for (const it of page.items ?? []) { if (scanned.length >= MAX_NFTS) break; if (it.id) scanned.push(it); }
+      cursor = page.next;
+    } while (cursor && scanned.length < MAX_NFTS);
+    items = scanned;
+  }
+  if (!items || items.length === 0) return null;
+
+  // 3) Tally trait frequency + per-NFT traits from the inline attributes — no per-NFT detail fetches.
   const freq: Record<string, Record<string, number>> = {};
   const perNft: { id: string; traits: Trait[] }[] = [];
-  let idx = 0;
-  let detailFails = 0;
-  async function worker() {
-    while (idx < ids.length) {
-      const i = idx++;
-      const id = ids[i];
-      let d = await getNftDetail(id, true, true).catch(() => null);
-      for (let attempt = 1; !d && attempt < 3; attempt++) {
-        await new Promise((r) => setTimeout(r, 400 * attempt));
-        d = await getNftDetail(id, true, true).catch(() => null);
-      }
-      if (!d) { detailFails++; continue; }
-      const traits = mapTraits(d);
-      if (traits.length === 0) continue;
-      perNft.push({ id, traits });
-      for (const t of traits) {
-        const type = t.trait_type.toLowerCase();
-        const val = String(t.value).toLowerCase();
-        const group = (freq[type] ??= {});
-        group[val] = (group[val] ?? 0) + 1;
-      }
+  for (const it of items) {
+    if (!it.id) continue;
+    const traits = mapListItemTraits(it);
+    if (traits.length === 0) continue;
+    perNft.push({ id: it.id, traits });
+    for (const t of traits) {
+      const type = t.trait_type.toLowerCase();
+      const val = String(t.value).toLowerCase();
+      const group = (freq[type] ??= {});
+      group[val] = (group[val] ?? 0) + 1;
     }
   }
-  await Promise.all(Array.from({ length: Math.min(CONC, ids.length) }, worker));
-  if (perNft.length === 0) return null; // no traits anywhere -> nothing to rank by
+  if (perNft.length === 0) return null; // collection carries no attributes -> nothing to rank by
 
-  // 4) Score + rank every NFT by SORTING on rarity score (rarest first) -> unique 1..N ranks.
+  // 4) Score + rank by SORTING on rarity score (rarest first) -> unique 1..N ranks. (Scoring unchanged.)
   const estimator = buildRankEstimator(freq, perNft.length);
   const rankById: Record<string, number> = {};
   if (estimator) {
     const scored = perNft.map((nft) => ({ id: nft.id, score: estimator.scoreOf(nft.traits) }));
-    scored.sort((a, b) => b.score - a.score); // highest score = rarest = rank 1
+    scored.sort((a, b) => b.score - a.score);
     scored.forEach((entry, i) => { rankById[entry.id] = i + 1; });
   }
-
-  // Rank the WHOLE collection: NFTs with no scoreable traits (empty attributes) — or the rare piece whose
-  // detail never fetched — can't be scored by rarity, so they land at the COMMON end (after the scored set)
-  // instead of being left unranked. Deterministic (list order) so ranks are stable across rebuilds.
+  // Whole-collection rank: traitless NFTs land at the COMMON end (deterministic list order), never unranked.
   let nextRank = Object.keys(rankById).length + 1;
-  for (const id of ids) {
-    if (rankById[id] == null) rankById[id] = nextRank++;
-  }
+  for (const it of items) { if (it.id && rankById[it.id] == null) rankById[it.id] = nextRank++; }
 
-  // Persist to the 30-day cache ONLY when the scan is complete: the whole list paged AND ~all details
-  // fetched. A truncated/partial scan is used for THIS render but not frozen for 30 days — the next scan
-  // (cheap, since successful details are cached) fills in the rest and then persists.
-  const coverage = ids.length > 0 ? (ids.length - detailFails) / ids.length : 0;
-  const complete = listComplete && coverage >= 0.97;
-  const result: CollectionFrequency = { freq, total: ids.length, rankById, complete };
+  const complete = listComplete;
+  const result: CollectionFrequency = { freq, total: items.length, rankById, complete };
   if (complete) await writeDisk(colId, result);
   return result;
+}
+
+// Read the cached collection roster (written by liveCollection.buildBaseCollection with include_metadata)
+// and return its items only if they carry inline attributes — else null so we fall back to our own scan.
+async function loadRosterItems(colId: string): Promise<MgListItem[] | null> {
+  try {
+    const raw = await cacheGetLarge(`slimlist2:${colId}`, SLIM_TTL);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { items?: MgListItem[] };
+    const items = parsed.items ?? [];
+    if (items.length === 0) return null;
+    const hasTraits = items.some((it) => (it.metadata?.attributes?.length ?? 0) > 0);
+    return hasTraits ? items : null;
+  } catch { return null; }
 }
 
 export async function getCollectionFrequency(colId: string, opts: { wait?: boolean } = {}): Promise<CollectionFrequency | null> {

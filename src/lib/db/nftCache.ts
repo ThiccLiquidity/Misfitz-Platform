@@ -48,7 +48,7 @@ function envBySuffix(suffixes: string[]): string {
 const REDIS_URL = envBySuffix(["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL"]);
 const REDIS_TOKEN = envBySuffix(["KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN"]);
 const REDIS_GC_TTL_S = 30 * 24 * 60 * 60; // 30d hard expiry so orphaned keys eventually clear; freshness checked on read
-type RedisLike = { get(key: string): Promise<unknown>; set(key: string, value: unknown, opts?: { ex?: number }): Promise<unknown> };
+type RedisLike = { get(key: string): Promise<unknown>; set(key: string, value: unknown, opts?: { ex?: number; nx?: boolean }): Promise<unknown> };
 let _redisPromise: Promise<RedisLike | null> | undefined;
 function redis(): Promise<RedisLike | null> {
   if (!REDIS_URL || !REDIS_TOKEN) return Promise.resolve(null);
@@ -159,7 +159,7 @@ export async function cachedCollectionJson(id: string): Promise<string | null> {
   return (await redisGet(`tf:c:${id}`, COLLECTION_TTL_MS)) ?? (await cache())?.getCollection(id) ?? null;
 }
 export function storeCollectionJson(id: string, json: string): void {
-  redisPut(`tf:c:${id}`, json);
+  redisPut(`tf:c:${id}`, json, 48 * 60 * 60); // collection meta readable 1d; 48h ex (was 30d)
   void cache().then((c) => c?.putCollection(id, json));
 }
 
@@ -168,8 +168,10 @@ export function storeCollectionJson(id: string, json: string): void {
 export async function cacheGet(key: string, ttlMs: number): Promise<string | null> {
   return (await redisGet(`tf:kv:${key}`, ttlMs)) ?? (await cache())?.getKv(key, ttlMs) ?? null;
 }
-export function cachePut(key: string, json: string): void {
-  redisPut(`tf:kv:${key}`, json);
+export function cachePut(key: string, json: string, exSeconds?: number): void {
+  // exSeconds bounds how long this key lingers in Redis. Default (30d GC) is wasteful for data that's only
+  // READABLE for minutes/hours (sales, comps, holdings) — pass a tight ex so short-lived data self-clears.
+  redisPut(`tf:kv:${key}`, json, exSeconds);
   void cache().then((c) => c?.putKv(key, json));
 }
 
@@ -178,33 +180,63 @@ export function cachePut(key: string, json: string): void {
 // gzip+base64 and SHARDED under tf:kvz:{key}:{i} with a tiny manifest at tf:kvz:{key}, so any size fits;
 // read reassembles + gunzips (falls back to a local blob). Gzip typically takes 5MB -> ~500KB (one shard).
 const KVZ_SHARD_MAX = 800_000; // base64 chars per shard, safely under the ~1MB request limit
+
+// Write shards FIRST, manifest LAST (the manifest is the commit point) with a GENERATION stamp `g` in the
+// shard keys so a torn re-write can never mix an old shard with a new one — a reader either sees a complete
+// generation or falls back to a miss (safe re-scan). All awaited so a completed build actually persists
+// before the serverless function is frozen.
+async function putLargeInner(key: string, json: string): Promise<void> {
+  const b64 = gzipSync(Buffer.from(json, "utf8")).toString("base64");
+  const g = Date.now().toString(36);
+  const shards = Math.max(1, Math.ceil(b64.length / KVZ_SHARD_MAX));
+  const r = await redis();
+  if (r) {
+    for (let i = 0; i < shards; i++) {
+      await r.set(`tf:kvz:${key}:${g}:${i}`, { v: b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX), t: Date.now() }, { ex: REDIS_GC_TTL_S });
+    }
+    await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: REDIS_GC_TTL_S });
+  }
+  await cache().then((c) => c?.putKv(`z:${key}`, b64));
+}
+// Fire-and-forget (kept alive past function freeze). Use for non-critical large writes.
 export function cachePutLarge(key: string, json: string): void {
-  try {
-    const b64 = gzipSync(Buffer.from(json, "utf8")).toString("base64");
-    const shards = Math.max(1, Math.ceil(b64.length / KVZ_SHARD_MAX));
-    redisPut(`tf:kvz:${key}`, JSON.stringify({ shards, len: b64.length }));
-    for (let i = 0; i < shards; i++) redisPut(`tf:kvz:${key}:${i}`, b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX));
-    void cache().then((c) => c?.putKv(`z:${key}`, b64));
-  } catch { /* cache optional */ }
+  keepAlive(putLargeInner(key, json).catch(() => { /* cache optional */ }));
+}
+// Awaitable — use when the caller must know the write landed before it returns (roster / rarity persist).
+export async function cachePutLargeAsync(key: string, json: string): Promise<void> {
+  try { await putLargeInner(key, json); } catch { /* cache optional */ }
 }
 export async function cacheGetLarge(key: string, ttlMs: number): Promise<string | null> {
   try {
     const man = await redisGet(`tf:kvz:${key}`, ttlMs);
     if (man) {
-      const { shards } = JSON.parse(man) as { shards: number };
+      const { g, shards, len } = JSON.parse(man) as { g?: string; shards: number; len?: number };
       const parts: string[] = [];
-      let ok = shards > 0;
-      for (let i = 0; i < shards; i++) {
-        const part = await redisGet(`tf:kvz:${key}:${i}`, ttlMs);
+      let ok = shards > 0 && typeof g === "string";
+      for (let i = 0; ok && i < shards; i++) {
+        const part = await redisGet(`tf:kvz:${key}:${g}:${i}`, ttlMs);
         if (part == null) { ok = false; break; }
         parts.push(part);
       }
-      if (ok) return gunzipSync(Buffer.from(parts.join(""), "base64")).toString("utf8");
+      const joined = parts.join("");
+      if (ok && (typeof len !== "number" || joined.length === len)) return gunzipSync(Buffer.from(joined, "base64")).toString("utf8");
     }
     const localB64 = (await cache())?.getKv(`z:${key}`, ttlMs);
     if (localB64) return gunzipSync(Buffer.from(localB64, "base64")).toString("utf8");
     return null;
   } catch { return null; }
+}
+
+// Cross-instance build lock (Redis SET NX EX). Stops N cold serverless instances from all scanning the same
+// collection at once (the 429-storm amplifier). Returns true = you hold the lock; false = someone else does.
+// Degrades to true (allow) if Redis is absent or errors — never blocks real work on a cache hiccup.
+export async function tryLock(key: string, ttlS: number): Promise<boolean> {
+  try {
+    const r = await redis();
+    if (!r) return true;
+    const ok = await r.set(`tf:lock:${key}`, { t: Date.now() }, { nx: true, ex: ttlS });
+    return ok === "OK" || ok === true;
+  } catch { return true; }
 }
 
 // -- Diagnostic (safe to expose): reports whether the shared Redis layer is actually working in the
@@ -258,9 +290,9 @@ export async function redisStats(): Promise<{
           const kind =
             k.startsWith("tf:d:") ? "detail" :
             k.startsWith("tf:c:") ? "collectionMeta" :
-            k.startsWith("tf:kv:slimlist2:") ? "roster" :
+            k.startsWith("tf:kvz:slimlist2:") ? "roster" :
             k.startsWith("tf:kv:comps:") ? "comps" :
-            k.startsWith("tf:kv:rarityfreq:") ? "rarity" :
+            k.startsWith("tf:kvz:rarityfreq:") ? "rarity" :
             k.startsWith("tf:kv:portfolio2:") ? "portfolio" :
             k.startsWith("tf:kv:holdings2:") ? "holdings" :
             k.startsWith("tf:kv:sales:") ? "sales" : "other";

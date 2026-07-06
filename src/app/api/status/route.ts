@@ -23,7 +23,7 @@ export async function GET() {
   const notes: string[] = [];
   if (!health.configured) notes.push("Redis env vars not detected — the shared cache is OFF (every load hits the network).");
   else if (!health.roundTrip) notes.push("Redis is configured but a read/write test failed — cache not usable right now.");
-  if (details > 500) notes.push(`~${details} per-NFT detail keys in Redis — these should be local-only now; if this keeps growing, the details-in-Redis fix isn't deployed.`);
+  if (details > 5000) notes.push(`~${details} per-NFT detail keys — details are slimmed + 48h-capped; if this dominates, comps detail churn is the cause.`);
   if (stats.dbsize > FREE_TIER_KEY_HINT) notes.push(`~${stats.dbsize} keys — check the Upstash STORAGE gauge; if it's near 256MB, trim rosters or upgrade.`);
   if (notes.length === 0) notes.push("Healthy. Cache alive, details staying out of Redis. Watch the Upstash STORAGE gauge as traffic grows.");
 

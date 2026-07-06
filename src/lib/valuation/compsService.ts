@@ -152,7 +152,7 @@ async function build(colId: string): Promise<CompsModel | null> {
     supply, floor, traitFreq, builtAt: now,
     sales: usable.map((s) => ({ rank: s.rank, price: s.price, soldAt: s.soldAt, traits: s.traits, seller: s.seller, buyer: s.buyer })),
   };
-  try { cachePut(`comps:${colId}`, JSON.stringify(persisted)); } catch { /* cache optional */ }
+  try { cachePut(`comps:${colId}`, JSON.stringify(persisted), 12 * 60 * 60); } catch { /* cache optional */ } // readable 6h; 12h ex
 
   return buildCompsModel(usable, supply, { floor, rarityFactor: rarityFactorForPercentile, traitFreq, ...adaptiveHalfLifeOptions() });
 }

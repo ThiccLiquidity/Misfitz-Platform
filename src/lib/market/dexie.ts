@@ -104,7 +104,7 @@ function refreshXchUsdRate(): void {
         if (typeof rate === "number" && rate > 0) {
           _rateValue = rate;
           _rateAt = Date.now();
-          cachePut("xchrate:usd", String(rate)); // persist so a restart doesn't flash the fallback price
+          cachePut("xchrate:usd", String(rate), 24 * 60 * 60); // 24h ex
         }
       }
     } catch {
@@ -455,7 +455,7 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
     }
     const result = [...byNft.values()];
     recordSalesActivity(colId, result); // free busyness signal — tunes market-data freshness, no extra calls
-    cachePut(`sales:${colId}`, JSON.stringify(result)); // persist so a restart doesn't re-page Dexie
+    cachePut(`sales:${colId}`, JSON.stringify(result), 60 * 60); // readable 30min; 1h ex
     return result;
   });
 }

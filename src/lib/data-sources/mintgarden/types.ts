@@ -84,6 +84,9 @@ export interface MgListItem {
   collection_id: string; // col1...
   collection_name: string;
   owner_address_encoded_id?: string | null;
+  // Present ONLY when the list is fetched with include_metadata=true — full CHIP-0007 attributes inline,
+  // so we can build the whole rarity table from ~100 list pages instead of one detail fetch per NFT.
+  metadata?: { attributes?: MgAttribute[]; series_number?: number | null } | null;
   // Safety flags (same gate as detail) so the fast path can drop blocked NFTs before display.
   is_blocked?: boolean | null;
   collection_blocked_content?: boolean | null;

@@ -165,7 +165,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
       // must not silently truncate the collection — that drops every for-sale NFT past the failure point.
       let page: MgPage<MgListItem> | null = null;
       for (let attempt = 0; attempt < 3 && !page; attempt++) {
-        page = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true).catch(() => null);
+        page = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true, true).catch(() => null); // include_metadata: traits inline for cards + rarity reuse
         if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
       }
       if (!page) { complete = false; break; } // abort this scan WITHOUT caching a partial list

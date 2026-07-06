@@ -118,7 +118,7 @@ export async function fetchOwnerListings(address: string): Promise<OwnerListings
   if (items.length > 0) {
     try {
       const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
-      cachePut(cacheKey, JSON.stringify(payload)); // write-through for the next open of this wallet
+      cachePut(cacheKey, JSON.stringify(payload), 60 * 60); // holdings readable 30min; 1h ex
     } catch { /* cache optional */ }
   }
 
