@@ -1,12 +1,11 @@
 import type { NftData } from "@/types";
-import { getAddressPortfolio } from "./service";
 import { fetchOwnerListings } from "@/lib/data-sources/mintgarden/owner";
 import { mapListItemToCard } from "@/lib/data-sources/mintgarden/map";
 import { fetchXchUsdRate, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
-import { getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
-import { estimateFairValue } from "@/lib/valuation/estimate";
+import { getSeed } from "@/lib/data-sources/seed/registry";
+import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 
 // Aggregates a collector's holdings across one or more addresses into a single flat binder feed.
 // Each NFT carries its own collection's totalSupply + name so rarity is computed correctly per
@@ -62,30 +61,6 @@ function summarize(nfts: NftData[], xchUsdRate: number, addresses: string[], tru
   };
 }
 
-// FULL/eager: per-NFT detail for every holding (traits + estimated ranks + refined value). Used by
-// the enrichment API route to stream the complete data after the fast grid is already on screen.
-export async function getMyHoldingsFull(addresses: string[]): Promise<MyHoldings> {
-  if (addresses.length === 0) return EMPTY;
-  const portfolios = await Promise.all(addresses.map((a) => getAddressPortfolio(a).catch(() => null)));
-  const nfts: NftData[] = [];
-  const seen = new Set<string>();
-  let xchUsdRate = XCH_USD_FALLBACK;
-  let truncated = false;
-  for (const p of portfolios) {
-    if (!p) continue;
-    xchUsdRate = p.xchUsdRate;
-    truncated = truncated || p.truncated;
-    for (const g of p.groups) {
-      for (const item of g.items) {
-        if (seen.has(item.nft.launcherId)) continue;
-        seen.add(item.nft.launcherId);
-        nfts.push({ ...item.nft, totalSupply: item.totalSupply, collectionName: item.collectionName });
-      }
-    }
-  }
-  return summarize(nfts, xchUsdRate, addresses, truncated, false);
-}
-
 // Seed overlay (opt-in, TRAITFOLIO_SEED=1): for a collection seeded from its mint metadata (e.g. Misfitz),
 // stamp OUR OpenRarity rank + full traits + per-trait rarity % onto each held card by mint number — with
 // ZERO MintGarden calls (the seed is bundled). This is the fast path\'s big win: seeded holdings come out
@@ -98,30 +73,9 @@ async function applySeedOverlay(nfts: NftData[], floorByCol: Map<string, number 
   const seedByCol = new Map(seeds);
   if (![...seedByCol.values()].some(Boolean)) return; // nothing seeded -> skip
 
-  // Per-collection trait-frequency -> rarity % (count of that value / supply), built once per seeded col.
-  const pctByCol = new Map<string, (t: string, v: string) => number>();
-  for (const [id, seed] of seedByCol) {
-    if (!seed) continue;
-    const tf = new Map<string, number>();
-    for (const key in seed.byNumber) for (const [t, v] of seed.byNumber[key].traits) {
-      const kk = `${t}|${v}`; tf.set(kk, (tf.get(kk) ?? 0) + 1);
-    }
-    pctByCol.set(id, (t, v) => Math.round(((tf.get(`${t}|${v}`) ?? 0) / seed.supply) * 10000) / 100);
-  }
-
   for (const n of nfts) {
     const seed = seedByCol.get(n.collectionSlug);
-    if (!seed) continue;
-    const num = numberFromName(n.name);
-    const e = num != null ? seed.byNumber[String(num)] : undefined;
-    if (!e) continue;
-    const pct = pctByCol.get(n.collectionSlug)!;
-    n.rarityRank = e.rank;
-    n.rankEstimated = false;
-    n.totalSupply = seed.supply; // true mint supply so "#N of 10000" + tiers are exact
-    n.traits = e.traits.map(([trait_type, value]) => ({ trait_type, value, rarityPercent: pct(trait_type, value) }));
-    const floor = floorByCol.get(n.collectionSlug) ?? null;
-    if (floor != null) n.fairValue = estimateFairValue({ floorXch: floor, rarityRank: e.rank, totalSupply: seed.supply, xchUsdRate }) ?? n.fairValue;
+    if (seed) stampSeedOntoCard(n, seed, xchUsdRate, floorByCol.get(n.collectionSlug) ?? null);
   }
 }
 

@@ -5,11 +5,11 @@ import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
-import { estimateFairValue } from "@/lib/valuation/estimate";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { isCompsEnabled } from "@/lib/config";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
-import { isSeeded, getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
+import { isSeeded, getSeed } from "@/lib/data-sources/seed/registry";
+import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 
 // The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / VALUATION.md).
 // Pulls an address's live holdings from MintGarden, values each NFT, groups by collection, and
@@ -226,13 +226,6 @@ export async function enrichNftsByIds(
   // fast-path overlay instead of clobbering it, and wallet numbers match the collection page exactly.
   const seedCols = [...new Set(details.filter((d): d is NonNullable<typeof d> => !!d && isSeeded(d.collection?.id ?? "")).map((d) => d.collection.id))];
   const seedByCol = new Map(await Promise.all(seedCols.map(async (c) => [c, await getSeed(c).catch(() => null)] as const)));
-  const seedPct = new Map<string, (t: string, v: string) => number>();
-  for (const [c, seed] of seedByCol) {
-    if (!seed) continue;
-    const tf = new Map<string, number>();
-    for (const key in seed.byNumber) for (const [t, v] of seed.byNumber[key].traits) { const kk = `${t}|${v}`; tf.set(kk, (tf.get(kk) ?? 0) + 1); }
-    seedPct.set(c, (t, v) => Math.round(((tf.get(`${t}|${v}`) ?? 0) / seed.supply) * 10000) / 100);
-  }
 
   const out: NftData[] = [];
   const outCol: string[] = []; // collection (col1...) per out card, for the comps blend
@@ -246,24 +239,7 @@ export async function enrichNftsByIds(
     const m = mapDetailToNftData(d, xchUsdRate, typeof floor === "number" ? floor : null);
     const card: NftData = { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
     const seed = seedByCol.get(colId);
-    if (seed) {
-      const num = numberFromName(card.name); // card.name is the mapped display name ("Misfitz #3663"); raw d.name is a different field
-      const e = num != null ? seed.byNumber[String(num)] : undefined;
-      if (e) {
-        const pct = seedPct.get(colId)!;
-        card.rarityRank = e.rank;
-        card.rankEstimated = false;
-        card.totalSupply = seed.supply;
-        card.traits = e.traits.map(([trait_type, value]) => ({ trait_type, value, rarityPercent: pct(trait_type, value) }));
-        // Recompute the baseline value with the SEED rank (MintGarden gave this NFT no rank, so its
-        // fairValue was null/wrong). Without this the comps blend below is skipped (guarded on fairValue)
-        // and the wallet shows a bad/absent value. Mirrors buildBaseCollection + the fast-path overlay.
-        const seedFloor = floorByCollection[colId];
-        if (typeof seedFloor === "number") {
-          card.fairValue = estimateFairValue({ floorXch: seedFloor, rarityRank: e.rank, totalSupply: seed.supply, xchUsdRate }) ?? card.fairValue;
-        }
-      }
-    }
+    if (seed) stampSeedOntoCard(card, seed, xchUsdRate, typeof floorByCollection[colId] === "number" ? floorByCollection[colId] : null);
     out.push(card);
     outCol.push(colId);
   }

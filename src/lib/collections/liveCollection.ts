@@ -4,7 +4,8 @@ import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchC
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
-import { getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
+import { getSeed } from "@/lib/data-sources/seed/registry";
+import { seedPctFn, stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { cacheGet, cachePut, cacheGetLarge, cachePutLarge } from "@/lib/db/nftCache";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
@@ -93,19 +94,6 @@ export async function getCollectionView(id: string, size = 60): Promise<Collecti
     })),
     cursor: page.next ?? null,
   };
-}
-
-// Next page of cards for "load more" (the collection + floor are TTL-cached, so this is cheap).
-export async function getCollectionNftsPage(id: string, cursor: string, size = 60): Promise<{ nfts: NftData[]; cursor: string | null }> {
-  if (!id.startsWith("col1")) return { nfts: [], cursor: null };
-  const [col, rate] = await Promise.all([getCollection(id).catch(() => null), fetchXchUsdRate()]);
-  if (!col) return { nfts: [], cursor: null };
-  const xchUsdRate = rate ?? XCH_USD_FALLBACK;
-  const [page, floorXch] = await Promise.all([
-    listCollectionNfts(id, cursor, size).catch(() => ({ items: [], next: null, previous: null })),
-    resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null),
-  ]);
-  return { nfts: cardsFrom(page.items ?? [], col, floorXch, xchUsdRate), cursor: page.next ?? null };
 }
 
 // ── Full collection (rarity-sorted) ───────────────────────────────────────────
@@ -257,23 +245,8 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   // unblocks the valuation model. No-op unless the collection is seeded (TRAITFOLIO_SEED=1).
   const seed = await getSeed(id);
   if (seed) {
-    // Per-trait rarity % from the seed's OWN frequency (count of that value / supply), so each trait shows
-    // its rarity like other collections. Built once (cheap; buildBaseCollection is cached).
-    const tf = new Map<string, number>();
-    for (const key in seed.byNumber) for (const [t, v] of seed.byNumber[key].traits) {
-      const kk = `${t}|${v}`; tf.set(kk, (tf.get(kk) ?? 0) + 1);
-    }
-    const pct = (t: string, v: string) => Math.round(((tf.get(`${t}|${v}`) ?? 0) / seed.supply) * 10000) / 100;
-    for (const c of cards) {
-      const num = numberFromName(c.name);
-      const e = num != null ? seed.byNumber[String(num)] : undefined;
-      if (!e) continue;
-      c.rarityRank = e.rank;
-      c.rankEstimated = false;
-      c.totalSupply = seed.supply; // true mint supply so "#N of 10000" and tiers are exact
-      c.traits = e.traits.map(([trait_type, value]) => ({ trait_type, value, rarityPercent: pct(trait_type, value) }));
-      if (floorXch != null) c.fairValue = estimateFairValue({ floorXch, rarityRank: e.rank, totalSupply: seed.supply, xchUsdRate });
-    }
+    const pct = seedPctFn(seed);
+    for (const c of cards) stampSeedOntoCard(c, seed, xchUsdRate, floorXch, pct);
   }
 
   cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last

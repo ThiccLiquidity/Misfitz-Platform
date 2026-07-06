@@ -248,38 +248,6 @@ export async function fetchCollectionListingCount(dexieCollectionId: string): Pr
   });
 }
 
-// ── Per-NFT active listing ────────────────────────────────────────────────────
-
-/**
- * Checks whether a specific NFT has an active ask on Dexie.
- * @param launcherId  NFT launcher id, must start with "nft1"
- * Cached for 2 minutes. Returns null if not listed or on error.
- */
-export async function fetchNftListing(
-  launcherId: string,
-): Promise<{ priceXch: number } | null> {
-  // Guard: mock / synthetic IDs never start with "nft1" — skip the network call
-  if (!launcherId.startsWith("nft1")) return null;
-
-  return withCache(`listing_${launcherId}`, 2 * 60_000, async () => {
-    try {
-      const url = new URL(`${DEXIE_BASE}/offers`);
-      url.searchParams.set("status", "0");         // 0 = active on Dexie
-      url.searchParams.set("offered", launcherId);
-      url.searchParams.set("sort", "price_asc");   // lowest ask first
-      url.searchParams.set("page_size", "1");
-
-      const res = await tfetch(url.toString());
-      if (!res.ok) return null;
-      const json = await res.json() as { offers?: { price?: number }[] };
-      const price = json?.offers?.[0]?.price;
-      return typeof price === "number" ? { priceXch: price } : null;
-    } catch {
-      return null;
-    }
-  });
-}
-
 // ── Convenience: full context for a collection page ───────────────────────────
 
 /**

@@ -146,7 +146,7 @@ export function enrichNfts(
     const fairValueXch = fairValue?.totalEstimate ?? 0;
 
     // ── Listing ─────────────────────────────────────────────────────────────
-    // Real listing is injected at the detail-page level (fetchNftListing).
+    // Real listing is injected from the Dexie active-offer map at the collection/binder level.
     // At binder level we use a deterministic mock so every card has a price.
     const listing =
       fairValueXch > 0 ? mockListing(fairValueXch, nft.launcherId) : null;
