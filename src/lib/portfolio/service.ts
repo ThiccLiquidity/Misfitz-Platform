@@ -246,7 +246,7 @@ export async function enrichNftsByIds(
     const card: NftData = { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
     const seed = seedByCol.get(colId);
     if (seed) {
-      const num = numberFromName((d as { name?: string }).name ?? "");
+      const num = numberFromName(card.name); // card.name is the mapped display name ("Misfitz #3663"); raw d.name is a different field
       const e = num != null ? seed.byNumber[String(num)] : undefined;
       if (e) {
         const pct = seedPct.get(colId)!;

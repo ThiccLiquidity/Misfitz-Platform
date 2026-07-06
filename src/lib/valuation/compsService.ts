@@ -98,7 +98,7 @@ async function build(colId: string): Promise<CompsModel | null> {
     const last = saleEvents.length ? saleEvents[saleEvents.length - 1] : null;
     const seller = last?.previous_address?.encoded_id ?? undefined;
     const buyer = last?.address?.encoded_id ?? undefined;
-    const num = numberFromName(((d as { name?: string }).name) ?? "");
+    const num = numberFromName((d as { data?: { metadata_json?: { name?: string } } }).data?.metadata_json?.name ?? "");
     return { id: s.id, mgRank: Number.isFinite(rank) && rank > 0 ? rank : null, num, price: s.price, ageDays: (now - soldAt) / 86_400_000, soldAt, traits, seller, buyer };
   });
   const fetched = rows.filter((x): x is SaleRow => x !== null);
