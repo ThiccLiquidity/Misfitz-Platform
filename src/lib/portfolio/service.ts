@@ -8,6 +8,7 @@ import { valueRange, type Confidence } from "@/lib/valuation/range";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { isCompsEnabled } from "@/lib/config";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { isSeeded, getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
 
 // The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / VALUATION.md).
 // Pulls an address's live holdings from MintGarden, values each NFT, groups by collection, and
@@ -210,13 +211,26 @@ export async function enrichNftsByIds(
   // Non-blocking: uses the cached table if warm, else kicks a background build and skips this pass.
   const needFreq = [...new Set(
     details
-      .filter((d): d is NonNullable<typeof d> => !!d && !d.collection?.attributes_frequency_counts && !!d.collection?.id?.startsWith("col1"))
+      .filter((d): d is NonNullable<typeof d> => !!d && !d.collection?.attributes_frequency_counts && !!d.collection?.id?.startsWith("col1") && !isSeeded(d.collection.id))
       .map((d) => d.collection.id),
   )];
   const freqByCol = new Map<string, Record<string, Record<string, number>>>();
   if (needFreq.length > 0) {
     const results = await Promise.all(needFreq.map((c) => getCollectionFrequency(c).catch(() => null)));
     needFreq.forEach((c, i) => { const r = results[i]; if (r) freqByCol.set(c, r.freq); });
+  }
+
+  // Seeded collections: our bundled OpenRarity ranks + traits are authoritative. Fetch the seed(s) once
+  // and OVERRIDE MintGarden's (unranked) rank/traits per card by mint number — so enrichment confirms the
+  // fast-path overlay instead of clobbering it, and wallet numbers match the collection page exactly.
+  const seedCols = [...new Set(details.filter((d): d is NonNullable<typeof d> => !!d && isSeeded(d.collection?.id ?? "")).map((d) => d.collection.id))];
+  const seedByCol = new Map(await Promise.all(seedCols.map(async (c) => [c, await getSeed(c).catch(() => null)] as const)));
+  const seedPct = new Map<string, (t: string, v: string) => number>();
+  for (const [c, seed] of seedByCol) {
+    if (!seed) continue;
+    const tf = new Map<string, number>();
+    for (const key in seed.byNumber) for (const [t, v] of seed.byNumber[key].traits) { const kk = `${t}|${v}`; tf.set(kk, (tf.get(kk) ?? 0) + 1); }
+    seedPct.set(c, (t, v) => Math.round(((tf.get(`${t}|${v}`) ?? 0) / seed.supply) * 10000) / 100);
   }
 
   const out: NftData[] = [];
@@ -229,7 +243,20 @@ export async function enrichNftsByIds(
     }
     const floor = floorByCollection[colId];
     const m = mapDetailToNftData(d, xchUsdRate, typeof floor === "number" ? floor : null);
-    out.push({ ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName });
+    const card: NftData = { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
+    const seed = seedByCol.get(colId);
+    if (seed) {
+      const num = numberFromName((d as { name?: string }).name ?? "");
+      const e = num != null ? seed.byNumber[String(num)] : undefined;
+      if (e) {
+        const pct = seedPct.get(colId)!;
+        card.rarityRank = e.rank;
+        card.rankEstimated = false;
+        card.totalSupply = seed.supply;
+        card.traits = e.traits.map(([trait_type, value]) => ({ trait_type, value, rarityPercent: pct(trait_type, value) }));
+      }
+    }
+    out.push(card);
     outCol.push(colId);
   }
 

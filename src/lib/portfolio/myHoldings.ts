@@ -5,6 +5,8 @@ import { mapListItemToCard } from "@/lib/data-sources/mintgarden/map";
 import { fetchXchUsdRate, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
+import { estimateFairValue } from "@/lib/valuation/estimate";
 
 // Aggregates a collector's holdings across one or more addresses into a single flat binder feed.
 // Each NFT carries its own collection's totalSupply + name so rarity is computed correctly per
@@ -84,6 +86,45 @@ export async function getMyHoldingsFull(addresses: string[]): Promise<MyHoldings
   return summarize(nfts, xchUsdRate, addresses, truncated, false);
 }
 
+// Seed overlay (opt-in, TRAITFOLIO_SEED=1): for a collection seeded from its mint metadata (e.g. Misfitz),
+// stamp OUR OpenRarity rank + full traits + per-trait rarity % onto each held card by mint number — with
+// ZERO MintGarden calls (the seed is bundled). This is the fast path\'s big win: seeded holdings come out
+// fully ranked + valued on the FIRST paint instead of waiting on per-NFT detail enrichment. Mirrors the
+// collection-page overlay in liveCollection so wallet and collection views show identical numbers. No-op
+// unless the collection is seeded (getSeed returns null when the flag is off).
+async function applySeedOverlay(nfts: NftData[], floorByCol: Map<string, number | null>, xchUsdRate: number): Promise<void> {
+  const colIds = [...new Set(nfts.map((n) => n.collectionSlug))];
+  const seeds = await Promise.all(colIds.map(async (id) => [id, await getSeed(id).catch(() => null)] as const));
+  const seedByCol = new Map(seeds);
+  if (![...seedByCol.values()].some(Boolean)) return; // nothing seeded -> skip
+
+  // Per-collection trait-frequency -> rarity % (count of that value / supply), built once per seeded col.
+  const pctByCol = new Map<string, (t: string, v: string) => number>();
+  for (const [id, seed] of seedByCol) {
+    if (!seed) continue;
+    const tf = new Map<string, number>();
+    for (const key in seed.byNumber) for (const [t, v] of seed.byNumber[key].traits) {
+      const kk = `${t}|${v}`; tf.set(kk, (tf.get(kk) ?? 0) + 1);
+    }
+    pctByCol.set(id, (t, v) => Math.round(((tf.get(`${t}|${v}`) ?? 0) / seed.supply) * 10000) / 100);
+  }
+
+  for (const n of nfts) {
+    const seed = seedByCol.get(n.collectionSlug);
+    if (!seed) continue;
+    const num = numberFromName(n.name);
+    const e = num != null ? seed.byNumber[String(num)] : undefined;
+    if (!e) continue;
+    const pct = pctByCol.get(n.collectionSlug)!;
+    n.rarityRank = e.rank;
+    n.rankEstimated = false;
+    n.totalSupply = seed.supply; // true mint supply so "#N of 10000" + tiers are exact
+    n.traits = e.traits.map(([trait_type, value]) => ({ trait_type, value, rarityPercent: pct(trait_type, value) }));
+    const floor = floorByCol.get(n.collectionSlug) ?? null;
+    if (floor != null) n.fairValue = estimateFairValue({ floorXch: floor, rarityRank: e.rank, totalSupply: seed.supply, xchUsdRate }) ?? n.fairValue;
+  }
+}
+
 // FAST/initial: build the binder from the slim holdings list + one metadata fetch per collection —
 // no per-NFT detail. Renders in ~1s; YourBinder then calls the enrichment route to fill in traits and
 // our own estimated ranks. Floor is resolved per collection (Dexie ask -> MintGarden -> Dexie sales ->
@@ -147,6 +188,7 @@ export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings
     return { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
   });
 
+  await applySeedOverlay(nfts, floorByCol, xchUsdRate);
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
   return summarize(nfts, xchUsdRate, addresses, truncated, false);
 }

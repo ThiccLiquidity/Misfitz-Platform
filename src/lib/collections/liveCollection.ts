@@ -118,6 +118,12 @@ interface BaseCollection { cards: NftData[]; floorXch: number | null; xchUsdRate
 const _fullCache = new Map<string, { value: BaseCollection; expiresAt: number }>();
 const FULL_PAGE_SIZE = 100;
 const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their rarest ~12k
+// The whole-collection roster scan is the ONE expensive step (30-70s of sequential MintGarden paging).
+// A roster is essentially static — it only changes when new NFTs are minted — so we cache the slim list
+// for a long time. listLooksFull() self-heals growth: once nft_count exceeds the cached list, the cache
+// is treated as not-full and re-scanned. Net effect: one visit warms it for everyone, borderline
+// permanently, while listings / floors / comps still refresh on their own shorter cycles.
+const SLIMLIST_TTL_MS = 30 * 24 * 60 * 60_000; // 30 days (matches the rarity-scan cache)
 
 export interface FullCollection {
   nfts: NftData[]; // sorted rarest-first (rank asc; unranked last)
@@ -153,7 +159,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   const declaredCount = typeof col.nft_count === "number" ? col.nft_count : 0;
   const listLooksFull = (list: MgListItem[], wasCapped: boolean) =>
     wasCapped || declaredCount <= 0 || list.length >= Math.floor(declaredCount * 0.98);
-  const slimHit = await cacheGet(`slimlist2:${id}`, 30 * 60_000);
+  const slimHit = await cacheGet(`slimlist2:${id}`, SLIMLIST_TTL_MS);
   if (slimHit) {
     try {
       const parsed = JSON.parse(slimHit) as { items: MgListItem[]; capped: boolean };
