@@ -144,13 +144,18 @@ function NftRarityCardImpl({
             role={onArtClick ? "button" : undefined}
             aria-label={onArtClick ? "View full image" : undefined}
           >
-            <Image
-              src={nft.imageUrl}
-              alt={nft.name}
-              fill
-              className="object-contain"
-              sizes={isDetail ? "380px" : "260px"}
-            />
+            {nft.imageUrl ? (
+              <Image
+                src={nft.imageUrl}
+                alt={nft.name}
+                fill
+                className="object-contain"
+                sizes={isDetail ? "380px" : "260px"}
+                unoptimized
+              />
+            ) : (
+              <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.05)" }} aria-hidden />
+            )}
           </div>
           {isDetail && (
             <div className="tcg-art-clean-label">Art as minted</div>

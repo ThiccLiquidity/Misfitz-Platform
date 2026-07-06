@@ -6,7 +6,7 @@ import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { getSeed } from "@/lib/data-sources/seed/registry";
 import { seedPctFn, stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
-import { cacheGet, cachePut, cacheGetLarge, cachePutLarge } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock } from "@/lib/db/nftCache";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
@@ -101,7 +101,7 @@ export async function getCollectionView(id: string, size = 60): Promise<Collecti
 // through every NFT (slim list items carry openrarity_rank for ranked collections), sort by rank, and
 // cache the result. First call for a collection is slow (sequential paging); after that it's instant
 // for 10 min. The binder renders only the visible slice, so big collections stay light in the DOM.
-interface BaseCollection { cards: NftData[]; floorXch: number | null; xchUsdRate: number; capped: boolean }
+interface BaseCollection { cards: NftData[]; floorXch: number | null; xchUsdRate: number; capped: boolean; warming?: boolean }
 const _fullCache = new Map<string, { value: BaseCollection; expiresAt: number }>();
 const FULL_PAGE_SIZE = 100;
 const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their rarest ~12k
@@ -156,27 +156,60 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
       }
     } catch { /* re-page */ }
   }
+  let scanWarming = false;
   if (items.length === 0) {
-    let cursor: string | null | undefined = undefined;
-    let pages = 0;
-    let complete = true; // stays true only if EVERY page fetched OK — a truncated scan must NOT be cached
-    do {
-      // Retry a transiently-failed page (MintGarden 429 / timeout) before giving up. One hiccup mid-scan
-      // must not silently truncate the collection — that drops every for-sale NFT past the failure point.
-      let page: MgPage<MgListItem> | null = null;
-      for (let attempt = 0; attempt < 3 && !page; attempt++) {
-        page = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true, true).catch(() => null); // include_metadata: traits inline for cards + rarity reuse
-        if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    // Resume from a prior time-boxed invocation's checkpoint (a big collection can't finish in one 60s
+    // function, so we scan in ~35s slices, persisting {items, cursor} between them).
+    let ckItems: MgListItem[] = [];
+    let ckCursor: string | null | undefined = undefined;
+    try {
+      const ckRaw = await cacheGetLarge(`slimscan:${id}`, 15 * 60_000);
+      if (ckRaw) { const ck = JSON.parse(ckRaw) as { items?: MgListItem[]; cursor?: string | null }; ckItems = ck.items ?? []; ckCursor = ck.cursor ?? undefined; }
+    } catch { /* fresh scan */ }
+
+    // ONE instance scans a roster at a time (Redis NX). Lock-losers return warming with whatever exists
+    // (checkpoint, else a single page) — never empty, never a competing full scan that 429-storms the winner.
+    const gotLock = await tryLock(`roster:${id}`, 120);
+    if (!gotLock) {
+      items = ckItems.length ? ckItems : ((await listCollectionNfts(id, undefined, FULL_PAGE_SIZE, false, true).catch(() => null))?.items ?? []);
+      scanWarming = true;
+    } else {
+      try {
+        items = ckItems.length && ckCursor ? ckItems : [];
+        let cursor: string | null | undefined = ckItems.length && ckCursor ? ckCursor : undefined;
+        let pages = Math.ceil(items.length / FULL_PAGE_SIZE);
+        let complete = true;
+        const deadline = Date.now() + 35_000;
+        do {
+          // Check the budget BEFORE starting a page so a slow page can't overrun the 60s function cap.
+          if (cursor && Date.now() > deadline) {
+            await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 30 * 60);
+            scanWarming = true; complete = false; break;
+          }
+          let page: MgPage<MgListItem> | null = null;
+          for (let attempt = 0; attempt < 3 && !page && Date.now() < deadline; attempt++) {
+            const budget = Math.max(2_000, Math.min(15_000, deadline - Date.now())); // per-attempt: never overrun the deadline
+            page = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true, true, budget).catch(() => null); // include_metadata
+            if (!page && attempt < 2 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
+          if (!page) {
+            // Fetch failed / timed out — checkpoint any progress so a later poll resumes instead of restarting.
+            if (cursor && items.length > 0) { await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 30 * 60); scanWarming = true; }
+            complete = false; break;
+          }
+          items.push(...(page.items ?? []));
+          cursor = page.next;
+          pages += 1;
+          if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
+        } while (cursor);
+        // Persist a COMPLETE scan, AWAITED so the rarity build reading slimlist2 immediately after finds it.
+        if (complete && items.length > 0 && listLooksFull(items, capped)) {
+          await cachePutLargeAsync(`slimlist2:${id}`, JSON.stringify({ items, capped }));
+        }
+      } finally {
+        await releaseLock(`roster:${id}`); // release promptly so the next poll resumes (don't wait out the 120s TTL)
       }
-      if (!page) { complete = false; break; } // abort this scan WITHOUT caching a partial list
-      items.push(...(page.items ?? []));
-      cursor = page.next;
-      pages += 1;
-      if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
-    } while (cursor);
-    // Only persist a COMPLETE scan (natural end or a clean MAX_PAGES cap). A truncated scan is still used
-    // for THIS render, but not cached — so the next request retries and fills the full collection + listings.
-    if (complete && items.length > 0 && listLooksFull(items, capped)) cachePutLarge(`slimlist2:${id}`, JSON.stringify({ items, capped }));
+    }
   }
 
   const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
@@ -250,8 +283,8 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   }
 
   cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last
-  const base: BaseCollection = { cards, floorXch, xchUsdRate, capped };
-  _fullCache.set(id, { value: base, expiresAt: Date.now() + 10 * 60_000 }); // fixed 10m; shrinking this only multiplied cold re-assembly
+  const base: BaseCollection = { cards, floorXch, xchUsdRate, capped, warming: scanWarming };
+  if (!scanWarming) _fullCache.set(id, { value: base, expiresAt: Date.now() + 10 * 60_000 }); // never cache a partial scan
   return base;
 }
 
@@ -268,7 +301,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   let cards = base.cards;
   let rarityWarming = false;
   if (id.startsWith("col1") && !base.cards.some((c) => c.rarityRank != null)) {
-    const rarity = await getCollectionFrequency(id).catch(() => null);
+    const rarity = base.warming ? null : await getCollectionFrequency(id).catch(() => null); // skip rarity while roster still scanning (no competing scan)
     if (rarity && Object.keys(rarity.rankById).length > 0) {
       // Our ranks run 1..M over the NFTs we could actually rank (traited + successfully fetched). The
       // tier bands divide rank by the card's display supply, so if M < supply — big collections capped
@@ -302,7 +335,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   }
 
   const result = (nfts: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) =>
-    ({ nfts, total: nfts.length, capped: base.capped, hotTraits, warming: warming || rarityWarming });
+    ({ nfts, total: nfts.length, capped: base.capped, hotTraits, warming: warming || rarityWarming || !!base.warming });
   if (!isCompsEnabled()) return result(cards, [], false);
   const comps = await getCompsModel(id).catch(() => null);
   if (!comps) return result(cards, [], true); // cold model → warming; old values until the background build warms up

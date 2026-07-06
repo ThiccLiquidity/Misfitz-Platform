@@ -239,11 +239,12 @@ export function listCollectionNfts(
   size = 50,
   background = false,
   includeMetadata = false,
+  timeoutMs?: number,
 ): Promise<MgPage<MgListItem>> {
   const q = new URLSearchParams({ size: String(size) });
   if (cursor) q.set("page", cursor);
   if (includeMetadata) q.set("include_metadata", "true"); // inline CHIP-0007 attributes per NFT
-  return getJson<MgPage<MgListItem>>(`/collections/${encodeURIComponent(collectionId)}/nfts?${q}`, DEFAULT_TIMEOUT_MS, background);
+  return getJson<MgPage<MgListItem>>(`/collections/${encodeURIComponent(collectionId)}/nfts?${q}`, timeoutMs ?? (includeMetadata ? 15_000 : DEFAULT_TIMEOUT_MS), background);
 }
 
 const EMPTY_PAGE: MgPage<MgListItem> = { items: [], next: null, previous: null };

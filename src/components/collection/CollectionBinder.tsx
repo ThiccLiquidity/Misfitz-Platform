@@ -68,53 +68,62 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let tries = 0;
+    let lastTotal = 0;
     const hotKey = (h: { type: string; value: string; ratio: number }[]) => h.map((x) => `${x.type}|${x.value}`).join(",");
     const load = () => {
       setIndexing(true);
       fetch(`/api/collection/${view.id}/all`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean } | null) => {
-          if (cancelled || !data?.nfts?.length) return;
-          if (firstAllLoadRef.current) {
-            firstAllLoadRef.current = false;
-            setNfts(data.nfts);
-          } else {
-            const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
-            setNfts((prev) => prev.map((card) => {
-              const fresh = byId.get(card.launcherId);
-              if (!fresh) return card;
-              // Only produce a NEW card object when a value actually changed — otherwise keep the same
-              // identity so memoized cards don't re-render on a no-op re-poll.
-              const newRank = card.rarityRank ?? fresh.rarityRank ?? null;
-              const newTotal = fresh.fairValue?.totalEstimate ?? card.fairValue?.totalEstimate ?? null;
-              const curTotal = card.fairValue?.totalEstimate ?? null;
-              if (newRank === (card.rarityRank ?? null) && newTotal === curTotal && (fresh.valueCurve ?? null) === (card.valueCurve ?? null)) {
-                return card;
-              }
-              // Refresh the (warmed) value/rank; KEEP the enriched traits + Dexie listing already on the card.
-              return {
-                ...card,
-                rarityRank: newRank,
-                rankEstimated: card.rarityRank != null ? card.rankEstimated : fresh.rankEstimated,
-                fairValue: fresh.fairValue ?? card.fairValue,
-                valueBasis: fresh.valueBasis ?? card.valueBasis,
-                valueConfidence: fresh.valueConfidence ?? card.valueConfidence,
-                valueCurve: fresh.valueCurve ?? card.valueCurve,
-                valueTraitMult: fresh.valueTraitMult ?? card.valueTraitMult,
-                valueTraitTop: fresh.valueTraitTop ?? card.valueTraitTop,
-              };
-            }));
+          if (cancelled) return;
+          const nfts = data?.nfts ?? [];
+          const reschedule = () => { if (tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); } };
+          if (nfts.length) {
+            if (firstAllLoadRef.current) {
+              firstAllLoadRef.current = false;
+              setNfts(nfts);
+            } else {
+              const byId = new Map(nfts.map((n) => [n.launcherId, n]));
+              setNfts((prev) => {
+                const prevIds = new Set(prev.map((n) => n.launcherId));
+                const merged = prev.map((card) => {
+                  const fresh = byId.get(card.launcherId);
+                  if (!fresh) return card;
+                  const newRank = card.rarityRank ?? fresh.rarityRank ?? null;
+                  const newTotal = fresh.fairValue?.totalEstimate ?? card.fairValue?.totalEstimate ?? null;
+                  const curTotal = card.fairValue?.totalEstimate ?? null;
+                  if (newRank === (card.rarityRank ?? null) && newTotal === curTotal && (fresh.valueCurve ?? null) === (card.valueCurve ?? null)) {
+                    return card;
+                  }
+                  return {
+                    ...card,
+                    rarityRank: newRank,
+                    rankEstimated: card.rarityRank != null ? card.rankEstimated : fresh.rankEstimated,
+                    fairValue: fresh.fairValue ?? card.fairValue,
+                    valueBasis: fresh.valueBasis ?? card.valueBasis,
+                    valueConfidence: fresh.valueConfidence ?? card.valueConfidence,
+                    valueCurve: fresh.valueCurve ?? card.valueCurve,
+                    valueTraitMult: fresh.valueTraitMult ?? card.valueTraitMult,
+                    valueTraitTop: fresh.valueTraitTop ?? card.valueTraitTop,
+                  };
+                });
+                const appended = nfts.filter((n) => !prevIds.has(n.launcherId)); // new cards from a fuller (resumed) scan
+                return appended.length ? [...merged, ...appended] : merged;
+              });
+            }
+            setCapped(Boolean(data?.capped));
+            if (data?.hotTraits && data.hotTraits.length > 0) {
+              setHotTraits((prev) => (hotKey(prev) === hotKey(data.hotTraits!) ? prev : data.hotTraits!));
+            }
+            setFullLoaded(true);
+            if (nfts.length > lastTotal) { lastTotal = nfts.length; tries = 0; } // grew -> reset backoff, keep polling
           }
-          setCapped(Boolean(data.capped));
-          if (data.hotTraits && data.hotTraits.length > 0) {
-            setHotTraits((prev) => (hotKey(prev) === hotKey(data.hotTraits!) ? prev : data.hotTraits!));
-          }
-          setWarming(Boolean(data.warming));
-          setFullLoaded(true);
-          // Backoff instead of a fixed 15s x 24: ~20s, 34s, 58s, 60s… a few times, then stop.
-          if (data.warming && tries < 6) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); }
+          // Keep polling while the server is warming OR we got nothing yet (roster still scanning / lock-loser empty).
+          const stillWarming = !data || data.warming === true || nfts.length === 0;
+          setWarming(stillWarming);
+          if (stillWarming) reschedule();
         })
-        .catch(() => {})
+        .catch(() => { if (!cancelled && tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); } })
         .finally(() => { if (!cancelled) setIndexing(false); });
     };
     load();

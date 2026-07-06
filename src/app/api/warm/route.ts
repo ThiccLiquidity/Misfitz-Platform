@@ -39,6 +39,7 @@ export async function GET(req: Request) {
   if (!authorized(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const url = new URL(req.url);
   const i = Math.max(0, Number(url.searchParams.get("i") ?? "0") | 0);
+  const attempt = Math.max(0, Number(url.searchParams.get("a") ?? "0") | 0);
 
   const trending = await getTrendingCollections(TOP_N).catch(() => []);
   const ids = trending.map((c) => c.id).filter((id): id is string => typeof id === "string" && id.startsWith("col1"));
@@ -50,18 +51,26 @@ export async function GET(req: Request) {
   // All three persist to Redis. Bounded by a shared budget so one slow collection can't blow the function
   // (its build keeps running after we respond and may still land in cache — pure upside).
   await withBudget((async () => {
-    try { await getAllCollectionCards(id); result.roster = true; } catch { /* best effort */ }
-    try { const r = await getCollectionFrequency(id, { wait: true }); result.rarity = !!r; } catch { /* best effort */ }
-    try { const m = await getCompsModel(id, { wait: true }); result.comps = !!m; } catch { /* best effort */ }
+    // One roster slice per invocation (the ?a= chain resumes the rest); don't start a 2nd slice that would
+    // be killed at the 60s cap and leak the lock.
+    try { for (let k = 0; k < 30; k++) { const rr = await getAllCollectionCards(id); if (!rr.warming) { result.roster = true; break; } if (Date.now() - t0 > 6_000) break; } } catch { /* best effort */ }
+    // Only build rarity + comps once the roster is COMPLETE — otherwise getCollectionFrequency would launch
+    // its own un-timeboxed full scan that dies at 60s and wastes rate budget.
+    if (result.roster) {
+      try { const r = await getCollectionFrequency(id, { wait: true }); result.rarity = !!r; } catch { /* best effort */ }
+      try { const m = await getCompsModel(id, { wait: true }); result.comps = !!m; } catch { /* best effort */ }
+    }
   })(), WARM_BUDGET_MS);
   const ms = Date.now() - t0;
 
-  // Chain the next collection as its own fresh-budget invocation, kept alive past this response.
-  const next = i + 1;
-  if (next < ids.length) {
+  // If the roster didn't finish this pass (big collection, time-boxed), RESUME the same collection next
+  // invocation (its scan is checkpointed) — up to a few attempts — before moving on. Otherwise advance.
+  let nextI = i + 1, nextA = 0;
+  if (!result.roster && attempt < 4) { nextI = i; nextA = attempt + 1; }
+  if (nextI < ids.length) {
     const secret = process.env.CRON_SECRET as string;
-    await keepAlive(fetch(`${url.origin}/api/warm?i=${next}`, { headers: { authorization: `Bearer ${secret}` } }));
+    await keepAlive(fetch(`${url.origin}/api/warm?i=${nextI}&a=${nextA}`, { headers: { authorization: `Bearer ${secret}` } }));
   }
 
-  return NextResponse.json({ ok: true, i, id, ms, result, remaining: Math.max(0, ids.length - next) });
+  return NextResponse.json({ ok: true, i, attempt, id, ms, result, resuming: nextI === i });
 }

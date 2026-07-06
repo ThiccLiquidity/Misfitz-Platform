@@ -48,7 +48,7 @@ function envBySuffix(suffixes: string[]): string {
 const REDIS_URL = envBySuffix(["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL"]);
 const REDIS_TOKEN = envBySuffix(["KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN"]);
 const REDIS_GC_TTL_S = 30 * 24 * 60 * 60; // 30d hard expiry so orphaned keys eventually clear; freshness checked on read
-type RedisLike = { get(key: string): Promise<unknown>; set(key: string, value: unknown, opts?: { ex?: number; nx?: boolean }): Promise<unknown> };
+type RedisLike = { get(key: string): Promise<unknown>; set(key: string, value: unknown, opts?: { ex?: number; nx?: boolean }): Promise<unknown>; del(...keys: string[]): Promise<unknown> };
 let _redisPromise: Promise<RedisLike | null> | undefined;
 function redis(): Promise<RedisLike | null> {
   if (!REDIS_URL || !REDIS_TOKEN) return Promise.resolve(null);
@@ -185,26 +185,26 @@ const KVZ_SHARD_MAX = 800_000; // base64 chars per shard, safely under the ~1MB 
 // shard keys so a torn re-write can never mix an old shard with a new one — a reader either sees a complete
 // generation or falls back to a miss (safe re-scan). All awaited so a completed build actually persists
 // before the serverless function is frozen.
-async function putLargeInner(key: string, json: string): Promise<void> {
+async function putLargeInner(key: string, json: string, exSeconds: number = REDIS_GC_TTL_S): Promise<void> {
   const b64 = gzipSync(Buffer.from(json, "utf8")).toString("base64");
   const g = Date.now().toString(36);
   const shards = Math.max(1, Math.ceil(b64.length / KVZ_SHARD_MAX));
   const r = await redis();
   if (r) {
     for (let i = 0; i < shards; i++) {
-      await r.set(`tf:kvz:${key}:${g}:${i}`, { v: b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX), t: Date.now() }, { ex: REDIS_GC_TTL_S });
+      await r.set(`tf:kvz:${key}:${g}:${i}`, { v: b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX), t: Date.now() }, { ex: exSeconds });
     }
-    await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: REDIS_GC_TTL_S });
+    await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: exSeconds });
   }
   await cache().then((c) => c?.putKv(`z:${key}`, b64));
 }
 // Fire-and-forget (kept alive past function freeze). Use for non-critical large writes.
-export function cachePutLarge(key: string, json: string): void {
-  keepAlive(putLargeInner(key, json).catch(() => { /* cache optional */ }));
+export function cachePutLarge(key: string, json: string, exSeconds?: number): void {
+  keepAlive(putLargeInner(key, json, exSeconds).catch(() => { /* cache optional */ }));
 }
 // Awaitable — use when the caller must know the write landed before it returns (roster / rarity persist).
-export async function cachePutLargeAsync(key: string, json: string): Promise<void> {
-  try { await putLargeInner(key, json); } catch { /* cache optional */ }
+export async function cachePutLargeAsync(key: string, json: string, exSeconds?: number): Promise<void> {
+  try { await putLargeInner(key, json, exSeconds); } catch { /* cache optional */ }
 }
 export async function cacheGetLarge(key: string, ttlMs: number): Promise<string | null> {
   try {
@@ -230,6 +230,11 @@ export async function cacheGetLarge(key: string, ttlMs: number): Promise<string 
 // Cross-instance build lock (Redis SET NX EX). Stops N cold serverless instances from all scanning the same
 // collection at once (the 429-storm amplifier). Returns true = you hold the lock; false = someone else does.
 // Degrades to true (allow) if Redis is absent or errors — never blocks real work on a cache hiccup.
+// Release a lock early (after a scan slice checkpoints) so the next poll can resume immediately instead of
+// waiting out the TTL. Best-effort.
+export async function releaseLock(key: string): Promise<void> {
+  try { const r = await redis(); if (r) await r.del(`tf:lock:${key}`); } catch { /* ignore */ }
+}
 export async function tryLock(key: string, ttlS: number): Promise<boolean> {
   try {
     const r = await redis();
