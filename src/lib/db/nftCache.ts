@@ -163,3 +163,27 @@ export function cachePut(key: string, json: string): void {
   redisPut(`tf:kv:${key}`, json);
   void cache().then((c) => c?.putKv(key, json));
 }
+
+// -- Diagnostic (safe to expose): reports whether the shared Redis layer is actually working in the
+// running environment, WITHOUT leaking secrets. Performs a real round-trip (set+get of tf:health:ping),
+// so calling it also registers commands on the Redis dashboard = instant proof the connection is live.
+export async function redisHealth(): Promise<{
+  configured: boolean; urlHost: string | null; hasToken: boolean;
+  pkgLoaded: boolean; roundTrip: boolean; waitUntil: boolean; error?: string;
+}> {
+  const configured = !!(REDIS_URL && REDIS_TOKEN);
+  let urlHost: string | null = null;
+  try { urlHost = REDIS_URL ? new URL(REDIS_URL).host : null; } catch { urlHost = null; }
+  let pkgLoaded = false, roundTrip = false, error: string | undefined;
+  try {
+    const r = await redis();
+    pkgLoaded = !!r;
+    if (r) {
+      const k = "tf:health:ping";
+      await r.set(k, { v: "ok", t: Date.now() }, { ex: 60 });
+      const got = (await r.get(k)) as { v?: string } | null;
+      roundTrip = got?.v === "ok";
+    }
+  } catch (e) { error = (e as Error)?.message ?? String(e); }
+  return { configured, urlHost, hasToken: !!REDIS_TOKEN, pkgLoaded, roundTrip, waitUntil: !!_waitUntil, error };
+}
