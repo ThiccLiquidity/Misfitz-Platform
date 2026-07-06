@@ -5,6 +5,7 @@ import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { adaptiveTtl } from "@/lib/market/activity";
+import { getSeed, numberFromName, seedTraitsToTraits } from "@/lib/data-sources/seed/registry";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
@@ -243,6 +244,22 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
       card.dexieOfferId = null;
       card.listingUnverified = false;
       card.dealScore = null;
+    }
+  }
+
+  // Seed overlay (opt-in): for a collection seeded from its mint metadata, stamp OUR OpenRarity rank +
+  // full traits onto each card by its mint number. Instant + complete; skips the slow trait scan and
+  // unblocks the valuation model. No-op unless the collection is seeded (TRAITFOLIO_SEED=1).
+  const seed = await getSeed(id);
+  if (seed) {
+    for (const c of cards) {
+      const num = numberFromName(c.name);
+      const e = num != null ? seed.byNumber[String(num)] : undefined;
+      if (!e) continue;
+      c.rarityRank = e.rank;
+      c.rankEstimated = false;
+      if (!c.traits || c.traits.length === 0) c.traits = seedTraitsToTraits(e);
+      if (floorXch != null) c.fairValue = estimateFairValue({ floorXch, rarityRank: e.rank, totalSupply: c.totalSupply ?? seed.supply, xchUsdRate });
     }
   }
 

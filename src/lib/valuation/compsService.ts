@@ -18,6 +18,7 @@ import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/v
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
+import { isSeeded, getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
 import { adaptiveHalfLifeOptions } from "@/lib/valuation/compsConfig";
 
 interface CacheEntry { model: CompsModel | null; expiresAt: number; building?: Promise<CompsModel | null> }
@@ -67,7 +68,7 @@ function modelFromPersisted(p: PersistedComps): CompsModel | null {
 
 // One fetched sale before we\'ve resolved a usable rank. mgRank is MintGarden\'s rank if present, else
 // null (a collection MintGarden hasn\'t ranked — we fall back to OUR computed ranks below).
-interface SaleRow { id: string; mgRank: number | null; price: number; ageDays: number; soldAt: number; traits: Trait[]; seller?: string; buyer?: string }
+interface SaleRow { id: string; mgRank: number | null; num: number | null; price: number; ageDays: number; soldAt: number; traits: Trait[]; seller?: string; buyer?: string }
 
 async function build(colId: string): Promise<CompsModel | null> {
   const [sales, floorXch] = await Promise.all([
@@ -97,7 +98,8 @@ async function build(colId: string): Promise<CompsModel | null> {
     const last = saleEvents.length ? saleEvents[saleEvents.length - 1] : null;
     const seller = last?.previous_address?.encoded_id ?? undefined;
     const buyer = last?.address?.encoded_id ?? undefined;
-    return { id: s.id, mgRank: Number.isFinite(rank) && rank > 0 ? rank : null, price: s.price, ageDays: (now - soldAt) / 86_400_000, soldAt, traits, seller, buyer };
+    const num = numberFromName(((d as { name?: string }).name) ?? "");
+    return { id: s.id, mgRank: Number.isFinite(rank) && rank > 0 ? rank : null, num, price: s.price, ageDays: (now - soldAt) / 86_400_000, soldAt, traits, seller, buyer };
   });
   const fetched = rows.filter((x): x is SaleRow => x !== null);
   if (fetched.length === 0) return null;
@@ -106,9 +108,21 @@ async function build(colId: string): Promise<CompsModel | null> {
   // MintGarden hasn\'t ranked, fall back to OUR own computed ranks (getCollectionFrequency) + our trait
   // table — SCALED to supply exactly like the collection cards, so the fitted curve lines up with the
   // ranks shown on screen. This is what gives unranked collections a real sale-driven curve + hot traits.
+  const seed = isSeeded(colId) ? await getSeed(colId) : null;
   const haveMgRanks = fetched.some((r) => r.mgRank != null);
   let rankOf: (r: SaleRow) => number | null;
-  if (haveMgRanks) {
+  if (seed) {
+    supply = seed.supply; // seed is authoritative for a seeded collection
+    if (!traitFreq) { // build the trait-frequency table from the seed so trait-demand works too
+      const f: TraitFreq = {};
+      for (const k in seed.byNumber) for (const [tt, v] of seed.byNumber[k].traits) {
+        const cat = (f[tt.toLowerCase()] ??= {}); const val = String(v).toLowerCase();
+        cat[val] = (cat[val] ?? 0) + 1;
+      }
+      traitFreq = f;
+    }
+    rankOf = (r) => (r.num != null ? seed.byNumber[String(r.num)]?.rank ?? null : null);
+  } else if (haveMgRanks) {
     if (supply <= 0) supply = fetched.reduce((m, r) => Math.max(m, r.mgRank ?? 0), 0);
     rankOf = (r) => r.mgRank;
   } else {
