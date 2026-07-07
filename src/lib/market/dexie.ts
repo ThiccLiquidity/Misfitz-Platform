@@ -92,20 +92,54 @@ let _rateValue = XCH_USD_FALLBACK;
 let _rateAt = 0;
 let _rateRefreshing = false;
 
+// Try several free XCH/USD sources in order; use the first that returns a sane number. CoinGecko's free
+// tier rate-limits datacenter IPs (Vercel), which is why the rate got stuck on the fallback — so we don't
+// depend on any single provider. Set COINGECKO_API_KEY (free demo key) to make CoinGecko reliable + first.
+async function fetchRateFromSources(): Promise<number | null> {
+  const sane = (n: unknown): number | null => (typeof n === "number" && n > 0 && n < 10_000 ? n : null);
+  const key = process.env.COINGECKO_API_KEY;
+  const sources: Array<() => Promise<number | null>> = [
+    async () => { // CoinGecko (uses the demo key + header if configured)
+      const res = await tfetch(`${COINGECKO_BASE}/simple/price?ids=chia&vs_currencies=usd`, key ? { headers: { "x-cg-demo-api-key": key } } : undefined, 3500);
+      if (!res.ok) return null;
+      const j = (await res.json()) as { chia?: { usd?: number } };
+      return sane(j?.chia?.usd);
+    },
+    async () => { // CoinCap
+      const res = await tfetch("https://api.coincap.io/v2/assets/chia", undefined, 3500);
+      if (!res.ok) return null;
+      const j = (await res.json()) as { data?: { priceUsd?: string } };
+      return sane(j?.data?.priceUsd != null ? Number(j.data.priceUsd) : NaN);
+    },
+    async () => { // CryptoCompare
+      const res = await tfetch("https://min-api.cryptocompare.com/data/price?fsym=XCH&tsyms=USD", undefined, 3500);
+      if (!res.ok) return null;
+      const j = (await res.json()) as { USD?: number };
+      return sane(j?.USD);
+    },
+    async () => { // Coinbase spot
+      const res = await tfetch("https://api.coinbase.com/v2/prices/XCH-USD/spot", undefined, 3500);
+      if (!res.ok) return null;
+      const j = (await res.json()) as { data?: { amount?: string } };
+      return sane(j?.data?.amount != null ? Number(j.data.amount) : NaN);
+    },
+  ];
+  for (const src of sources) {
+    try { const r = await src(); if (r != null) return r; } catch { /* try next source */ }
+  }
+  return null;
+}
+
 function refreshXchUsdRate(): void {
   if (_rateRefreshing) return;
   _rateRefreshing = true;
   (async () => {
     try {
-      const res = await tfetch(`${COINGECKO_BASE}/simple/price?ids=chia&vs_currencies=usd`, undefined, 3000);
-      if (res.ok) {
-        const json = (await res.json()) as { chia?: { usd?: number } };
-        const rate = json?.chia?.usd;
-        if (typeof rate === "number" && rate > 0) {
-          _rateValue = rate;
-          _rateAt = Date.now();
-          cachePut("xchrate:usd", String(rate), 24 * 60 * 60); // 24h ex
-        }
+      const rate = await fetchRateFromSources();
+      if (typeof rate === "number" && rate > 0) {
+        _rateValue = rate;
+        _rateAt = Date.now();
+        cachePut("xchrate:usd", String(rate), 24 * 60 * 60); // 24h ex; refreshed every ~60s while viewed
       }
     } catch {
       /* keep last known rate */
@@ -119,11 +153,14 @@ let _rateSeeded = false;
 export async function fetchXchUsdRate(): Promise<number | null> {
   if (!_rateSeeded) {
     _rateSeeded = true;
-    // Seed the last-known rate from the DB (better than the constant fallback) before CoinGecko answers.
-    void cacheGet("xchrate:usd", 24 * 60 * 60_000).then((j) => {
+    // AWAIT the shared last-known rate once per instance. On serverless every request can be a cold
+    // instance, so a NON-blocking seed meant the first render returned the stale constant almost every
+    // time. Leave _rateAt = 0 so a CoinGecko refresh still fires below.
+    try {
+      const j = await cacheGet("xchrate:usd", 24 * 60 * 60_000);
       const r = j != null ? Number(j) : NaN;
-      if (Number.isFinite(r) && r > 0 && _rateAt === 0) _rateValue = r;
-    });
+      if (Number.isFinite(r) && r > 0) _rateValue = r;
+    } catch { /* keep the constant fallback */ }
   }
   if (Date.now() - _rateAt > 60_000) refreshXchUsdRate(); // fire-and-forget; do NOT await
   return _rateValue;

@@ -1,7 +1,9 @@
 import type { NftData } from "@/types";
 import { fetchOwnerNftDetails } from "@/lib/data-sources/mintgarden/owner";
 import { mapDetailToNftData, nftMarketAnchorXch, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
-import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
+import { getCollectionFrequency, scaledRankOf, type CollectionFrequency } from "@/lib/rarity/collectionFrequency";
+import { estimateFairValue } from "@/lib/valuation/estimate";
+import { computeDealScore } from "@/lib/rarity/enrich";
 import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
@@ -215,10 +217,12 @@ export async function enrichNftsByIds(
       .filter((d): d is NonNullable<typeof d> => !!d && !d.collection?.attributes_frequency_counts && !!d.collection?.id?.startsWith("col1") && !isSeeded(d.collection.id))
       .map((d) => d.collection.id),
   )];
-  const freqByCol = new Map<string, Record<string, Record<string, number>>>();
+  const freqByCol = new Map<string, CollectionFrequency>();
   if (needFreq.length > 0) {
-    const results = await Promise.all(needFreq.map((c) => getCollectionFrequency(c).catch(() => null)));
-    needFreq.forEach((c, i) => { const r = results[i]; if (r) freqByCol.set(c, r.freq); });
+    // waitMs: read the already-cached rank table (one fast Redis round-trip) so wallet cards get OUR ranks.
+    // A never-scanned collection races out to null and keeps building in the background (shown warming).
+    const results = await Promise.all(needFreq.map((c) => getCollectionFrequency(c, { waitMs: 1500 }).catch(() => null)));
+    needFreq.forEach((c, i) => { const r = results[i]; if (r) freqByCol.set(c, r); });
   }
 
   // Seeded collections: our bundled OpenRarity ranks + traits are authoritative. Fetch the seed(s) once
@@ -232,14 +236,30 @@ export async function enrichNftsByIds(
   for (const d of details) {
     if (!d || !isDisplayableNft(d)) continue;
     const colId = d.collection.id;
-    if (!d.collection.attributes_frequency_counts && freqByCol.has(colId)) {
-      d.collection.attributes_frequency_counts = freqByCol.get(colId)!; // our own table -> estimated ranks + trait rarity
+    const rarity = freqByCol.get(colId);
+    if (!d.collection.attributes_frequency_counts && rarity) {
+      d.collection.attributes_frequency_counts = rarity.freq; // our own table -> per-trait rarity %
     }
     const floor = floorByCollection[colId];
     const m = mapDetailToNftData(d, xchUsdRate, typeof floor === "number" ? floor : null);
     const card: NftData = { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
     const seed = seedByCol.get(colId);
-    if (seed) stampSeedOntoCard(card, seed, xchUsdRate, typeof floorByCollection[colId] === "number" ? floorByCollection[colId] : null);
+    if (seed) {
+      stampSeedOntoCard(card, seed, xchUsdRate, typeof floor === "number" ? floor : null);
+    } else if (rarity) {
+      // Non-seeded unranked: use OUR scaled rank (identical to the collection page) instead of the estimator
+      // rank, and rebuild the baseline value the same way — so wallet numbers match the collection view AND
+      // the comps model (fitted against this scaled rank) prices off the right point on the curve.
+      const supply = card.totalSupply ?? rarity.total;
+      const scaled = scaledRankOf(rarity, card.id, supply);
+      if (scaled != null) {
+        card.rarityRank = scaled;
+        card.rankEstimated = true;
+        if (typeof floor === "number") card.fairValue = estimateFairValue({ floorXch: floor, rarityRank: scaled, totalSupply: supply, xchUsdRate }) ?? card.fairValue;
+        card.rarityScore = supply > 0 ? Math.round((100 - (scaled / supply) * 100) * 10) / 10 : null; // keep score consistent with the scaled rank
+        if (card.listing && card.fairValue) card.dealScore = computeDealScore(card.fairValue.totalEstimate, card.listing.priceXch); // re-score against our value (matches collection view)
+      }
+    }
     out.push(card);
     outCol.push(colId);
   }

@@ -3,7 +3,7 @@ import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgard
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
-import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
+import { getCollectionFrequency, scaledRankOf } from "@/lib/rarity/collectionFrequency";
 import { getSeed } from "@/lib/data-sources/seed/registry";
 import { seedPctFn, stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock } from "@/lib/db/nftCache";
@@ -308,13 +308,11 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       // at 2000, traitless NFTs, or fetch gaps — the largest rank would only reach percentile M/supply
       // and NOTHING lands in the common band (every count skews rare). Scale each rank to the display
       // supply so rank/supply is the TRUE percentile within the ranked set and each tier gets its share.
-      const M = Object.keys(rarity.rankById).length;
       cards = base.cards
         .map((c) => {
-          const r = rarity.rankById[c.id];
-          if (r == null) return c;
           const supply = c.totalSupply ?? rarity.total;
-          const scaledRank = Math.max(1, Math.min(supply, Math.round(((r - 0.5) / M) * supply)));
+          const scaledRank = scaledRankOf(rarity, c.id, supply);
+          if (scaledRank == null) return c;
           const fairValue = floorXch != null
             ? estimateFairValue({ floorXch, rarityRank: scaledRank, totalSupply: supply, xchUsdRate })
             : c.fairValue;

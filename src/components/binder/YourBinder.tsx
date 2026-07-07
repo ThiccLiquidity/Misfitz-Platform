@@ -77,24 +77,41 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
     setEnriching(true);
     setProgress(0);
+    const postChunk = async (ids: string[]): Promise<{ nfts?: NftData[] } | null> => {
+      const res = await fetch("/api/binder", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, floors, xchUsdRate: holdings.xchUsdRate }),
+      });
+      return res.ok ? ((await res.json()) as { nfts?: NftData[] }) : null;
+    };
+    const applyChunk = (data: { nfts?: NftData[] } | null, unranked: Set<string>) => {
+      if (!data?.nfts || cancelled) return;
+      const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
+      setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
+      for (const n of data.nfts) {
+        if (n.collectionSlug?.startsWith("col1") && n.rarityRank == null) unranked.add(n.launcherId);
+        else unranked.delete(n.launcherId);
+      }
+    };
     (async () => {
       let done = 0;
+      const unranked = new Set<string>();
       for (const ids of chunks) {
         if (cancelled) return;
-        try {
-          const res = await fetch("/api/binder", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ids, floors, xchUsdRate: holdings.xchUsdRate }),
-          });
-          const data = res.ok ? ((await res.json()) as { nfts?: NftData[] }) : null;
-          if (data?.nfts && !cancelled) {
-            const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
-            setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
-          }
-        } catch { /* keep fast card on failure */ }
+        try { applyChunk(await postChunk(ids), unranked); } catch { /* keep fast card on failure */ }
         done += ids.length;
         if (!cancelled) setProgress(Math.min(1, done / total));
+      }
+      // A first-ever warming collection (not scanned yet) lands its ranks a moment later — re-enrich the
+      // still-unranked cards a couple times so they fill in without a manual reload (small, cached payloads).
+      for (let attempt = 0; attempt < 2 && unranked.size > 0 && !cancelled; attempt++) {
+        await new Promise((r) => setTimeout(r, attempt === 0 ? 15_000 : 30_000));
+        if (cancelled) break;
+        const retry = [...unranked];
+        for (let i = 0; i < retry.length && !cancelled; i += CHUNK) {
+          try { applyChunk(await postChunk(retry.slice(i, i + CHUNK)), unranked); } catch { /* ignore */ }
+        }
       }
       if (!cancelled) setEnriching(false);
     })();

@@ -147,16 +147,32 @@ async function loadRosterItems(colId: string): Promise<MgListItem[] | null> {
   } catch { return null; }
 }
 
-export async function getCollectionFrequency(colId: string, opts: { wait?: boolean } = {}): Promise<CollectionFrequency | null> {
+// waitMs: wait UP TO this long for the (usually cache-backed) build to resolve, else fall back to the last
+// value/null — lets the wallet read an already-cached rank table (one fast Redis round-trip) without
+// blocking on a cold FULL scan (which races out to null and keeps building in the background).
+export async function getCollectionFrequency(colId: string, opts: { wait?: boolean; waitMs?: number } = {}): Promise<CollectionFrequency | null> {
   if (!colId.startsWith("col1")) return null;
   const hit = _cache.get(colId);
   if (hit && Date.now() < hit.expiresAt && !hit.building) return hit.value;
-  if (hit?.building) return opts.wait ? hit.building : (hit.value ?? null);
+  const raced = (p: Promise<CollectionFrequency | null>, fb: CollectionFrequency | null): Promise<CollectionFrequency | null> =>
+    opts.waitMs ? Promise.race([p, new Promise<CollectionFrequency | null>((r) => setTimeout(() => r(fb), opts.waitMs))]) : Promise.resolve(fb);
+  if (hit?.building) return opts.wait ? hit.building : raced(hit.building, hit.value ?? null);
 
   const building = build(colId)
     .then((v) => { _cache.set(colId, { value: v, expiresAt: Date.now() + (v ? (v.complete ? TTL : 4 * 60_000) : COLD_TTL) }); return v; })
     .catch(() => { _cache.set(colId, { value: null, expiresAt: Date.now() + COLD_TTL }); return null; });
   _cache.set(colId, { value: hit?.value ?? null, expiresAt: hit?.expiresAt ?? 0, building });
   keepAlive(building); // survive serverless function freeze so the scan actually finishes on the first visit
-  return opts.wait ? building : (hit?.value ?? null);
+  return opts.wait ? building : raced(building, hit?.value ?? null);
+}
+
+// The scaled rank used by BOTH the collection page and the wallet so they show the SAME rank for an NFT.
+// Our ranks run 1..M over the NFTs we could rank; scale to the display supply so rank/supply is the true
+// percentile within the ranked set (each tier gets its share). null if this NFT wasn't ranked.
+export function scaledRankOf(rarity: CollectionFrequency, id: string, supply: number): number | null {
+  const r = rarity.rankById[id];
+  if (r == null) return null;
+  const M = Object.keys(rarity.rankById).length;
+  if (M <= 0 || supply <= 0) return null;
+  return Math.max(1, Math.min(supply, Math.round(((r - 0.5) / M) * supply)));
 }
