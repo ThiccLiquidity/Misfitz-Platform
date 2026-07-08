@@ -112,6 +112,42 @@ const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their 
 // permanently, while listings / floors / comps still refresh on their own shorter cycles.
 const SLIMLIST_TTL_MS = 30 * 24 * 60 * 60_000; // 30 days (matches the rarity-scan cache)
 
+// FRESH MintGarden marketplace listings (NFTs listed on MintGarden but not necessarily on Dexie). Uses
+// require_price=true so it fetches ONLY the for-sale NFTs (a small subset) — cheap. Cached 5 min in-proc so
+// a sold/de-listed NFT drops off within minutes, unlike the 30-day roster price we used to (wrongly) trust.
+interface MgListing { priceXch: number }
+const _mgListings = new Map<string, { value: Map<string, MgListing>; expiresAt: number }>();
+const _mgListingsInflight = new Map<string, Promise<Map<string, MgListing>>>();
+async function fetchMgListings(id: string): Promise<Map<string, MgListing>> {
+  const hit = _mgListings.get(id);
+  if (hit && Date.now() < hit.expiresAt) return hit.value;
+  const pending = _mgListingsInflight.get(id);
+  if (pending) return pending;
+  const run = (async () => {
+    const map = new Map<string, MgListing>();
+    let cursor: string | null | undefined = undefined;
+    let pages = 0;
+    const deadline = Date.now() + 12_000; // never let listings paging push /all toward the 60s cap
+    try {
+      do {
+        const page: MgPage<MgListItem> | null = await listCollectionNfts(id, cursor, 100, true, false, undefined, true).catch(() => null); // require_price=true
+        if (!page) break;
+        for (const it of page.items ?? []) {
+          const xch = (it.token_code == null || it.token_code === "XCH") && typeof it.price === "number" && it.price > 0 ? it.price : null;
+          if (xch != null && it.id) map.set(it.id, { priceXch: xch });
+        }
+        cursor = page.next;
+        pages += 1;
+      } while (cursor && pages < 30 && Date.now() < deadline); // for-sale set is small; page + time caps for safety
+    } catch { /* partial map is fine */ }
+    _mgListings.set(id, { value: map, expiresAt: Date.now() + 5 * 60_000 });
+    _mgListingsInflight.delete(id);
+    return map;
+  })();
+  _mgListingsInflight.set(id, run);
+  return run;
+}
+
 export interface FullCollection {
   nfts: NftData[]; // sorted rarest-first (rank asc; unranked last)
   total: number;
@@ -135,6 +171,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   // Kick off the floor + Dexie active-offers fetches in parallel with the (sequential) NFT paging.
   const floorPromise = resolveCollectionFloorXch(id, typeof col.floor_price === "number" ? col.floor_price : null);
   const offersPromise = fetchCollectionActiveOffers(id).catch(() => new Map<string, CollectionOffer>());
+  const mgListingsPromise = fetchMgListings(id).catch(() => new Map<string, MgListing>());
 
   // The slim NFT list is the slow part (sequential cursor paging — 30-70s for a big collection). Persist
   // it so a restart doesn't re-page the whole collection; refresh window is modest (new mints appear then).
@@ -213,6 +250,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   }
 
   const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
+  const mgListings = await mgListingsPromise;
 
   // Floor = cheapest CLEAN single-NFT XCH offer from Dexie. The scan now queries requested=xch&sort=
   // price_asc (Dexie only honors the price sort when a requested asset is set), so it actually returns
@@ -245,26 +283,19 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
       card.dealScore = offer.xchOnly && card.fairValue && offer.priceXch > 0
         ? computeDealScore(card.fairValue.totalEstimate, offer.priceXch)
         : null;
-    } else if (offer && offer.multiNft) {
-      card.listing = null;
-      card.listingAssets = null;
-      card.listingRequested = null;
-      card.dexieOfferId = null;
-      card.listingUnverified = false;
-      card.dealScore = null;
-    } else if (card.listing) {
-      // Listed on MintGarden's marketplace (not on Dexie). MintGarden marketplace listings are XCH-priced,
-      // so we treat the shown price as an XCH-only ask and DO score it. We keep a soft "confirm on
-      // MintGarden" note (listingUnverified) since we didn't read the raw offer terms, but no longer hide
-      // the deal score — that made overpriced MintGarden listings render as a neutral/green "no score".
+    } else if (mgListings.get(card.id)) {
+      // Listed on MintGarden's marketplace (not on Dexie) — sourced FRESH (~5 min), not the stale roster.
+      // XCH-priced, so we score it; marked unverified since we didn't read the raw offer terms.
+      const mg = mgListings.get(card.id)!;
+      card.listing = { priceXch: mg.priceXch, priceUsd: Math.round(mg.priceXch * xchUsdRate * 100) / 100 };
       card.listingAssets = ["XCH"];
-      card.listingRequested = [{ code: "XCH", amount: card.listing.priceXch }];
+      card.listingRequested = [{ code: "XCH", amount: mg.priceXch }];
       card.dexieOfferId = null;
       card.listingUnverified = true;
-      card.dealScore = card.fairValue && card.listing.priceXch > 0
-        ? computeDealScore(card.fairValue.totalEstimate, card.listing.priceXch)
-        : null;
+      card.dealScore = card.fairValue && mg.priceXch > 0 ? computeDealScore(card.fairValue.totalEstimate, mg.priceXch) : null;
     } else {
+      // Not for sale on Dexie or MintGarden -> clear any stale roster listing.
+      card.listing = null;
       card.listingAssets = null;
       card.listingRequested = null;
       card.dexieOfferId = null;
@@ -321,7 +352,7 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
           // path never runs for unranked collections (their comps model needs openrarity_rank), so
           // WITHOUT this the deal finder shows nothing for exactly these collections.
           const xchOnly = !!c.listingRequested && c.listingRequested.length === 1 && c.listingRequested[0].code === "XCH";
-          const dealScore = c.listing && c.dexieOfferId && xchOnly && fairValue && c.listing.priceXch > 0
+          const dealScore = c.listing && xchOnly && fairValue && c.listing.priceXch > 0
             ? computeDealScore(fairValue.totalEstimate, c.listing.priceXch)
             : c.dealScore;
           return { ...c, rarityRank: scaledRank, rankEstimated: true, fairValue, dealScore };

@@ -30,6 +30,7 @@ function CollectionCardImpl({ c }: { c: CollectionSummary }) {
             fill
             className="object-cover transition duration-300 group-hover:scale-105"
             sizes="(max-width: 640px) 50vw, 220px"
+            unoptimized
           />
         ) : (
           <div className="flex h-full items-center justify-center text-3xl opacity-30">◈</div>

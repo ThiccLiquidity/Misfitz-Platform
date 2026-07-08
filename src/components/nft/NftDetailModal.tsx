@@ -146,7 +146,7 @@ export function NftDetailModal({
         />
 
         {/* Full-screen lightbox — just the NFT art, big and clean. Click anywhere / ✕ to close. */}
-        {lightbox && (
+        {lightbox && nft.imageUrl && (
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center bg-black/[0.97] p-4 backdrop-blur-md sm:p-10"
             onClick={(e) => { e.stopPropagation(); setLightbox(false); }}
@@ -163,7 +163,7 @@ export function NftDetailModal({
               ✕
             </button>
             <div className="relative aspect-square w-full max-w-md sm:max-w-lg" style={{ maxHeight: "72vh" }}>
-              <Image src={nft.imageUrl} alt={nft.name} fill className="object-contain" sizes="(max-width:640px) 90vw, 512px" priority />
+              <Image src={nft.imageUrl} alt={nft.name} fill className="object-contain" sizes="(max-width:640px) 90vw, 512px" priority unoptimized />
             </div>
           </div>
         )}

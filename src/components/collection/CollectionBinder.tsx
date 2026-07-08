@@ -237,7 +237,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             const comps = e.valueBasis
               ? {} // keep e's comps fairValue/valueBasis/valueConfidence (already spread from ...e)
               : (n.valueBasis ? { fairValue: n.fairValue, valueBasis: n.valueBasis, valueConfidence: n.valueConfidence } : {});
-            const merged = { ...e, ...comps, listing: n.listing, listingAssets: n.listingAssets, listingRequested: n.listingRequested, dexieOfferId: n.dexieOfferId };
+            const merged = { ...e, ...comps, listing: n.listing, listingAssets: n.listingAssets, listingRequested: n.listingRequested, dexieOfferId: n.dexieOfferId, listingUnverified: n.listingUnverified };
             // Re-score the deal against the displayed (comps-blended) value, clean single-NFT XCH only.
             const xchOnly = !!n.listingRequested && n.listingRequested.length === 1 && n.listingRequested[0].code === "XCH";
             const dealScore = n.listing && n.dexieOfferId && xchOnly && n.listing.priceXch > 0 && merged.fairValue
@@ -324,7 +324,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         <div className="flex items-center gap-4">
           {view.imageUrl && (
             <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl">
-              <Image src={view.imageUrl} alt={view.name} fill className="object-cover" sizes="56px" />
+              <Image src={view.imageUrl} alt={view.name} fill className="object-cover" sizes="56px" unoptimized />
             </div>
           )}
           <div className="min-w-0 flex-1">

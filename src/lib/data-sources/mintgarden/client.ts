@@ -240,10 +240,12 @@ export function listCollectionNfts(
   background = false,
   includeMetadata = false,
   timeoutMs?: number,
+  requirePrice = false,
 ): Promise<MgPage<MgListItem>> {
   const q = new URLSearchParams({ size: String(size) });
   if (cursor) q.set("page", cursor);
   if (includeMetadata) q.set("include_metadata", "true"); // inline CHIP-0007 attributes per NFT
+  if (requirePrice) q.set("require_price", "true"); // only NFTs currently listed for sale on MintGarden
   return getJson<MgPage<MgListItem>>(`/collections/${encodeURIComponent(collectionId)}/nfts?${q}`, timeoutMs ?? (includeMetadata ? 15_000 : DEFAULT_TIMEOUT_MS), background);
 }
 
