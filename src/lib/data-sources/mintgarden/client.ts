@@ -1,6 +1,6 @@
 import type { MgCollection, MgNftDetail, MgListItem, MgPage } from "./types";
 import { decodeChiaAddress } from "@/lib/chia/bech32";
-import { cachedDetailJson, storeDetailJson, cachedCollectionJson, storeCollectionJson } from "@/lib/db/nftCache";
+import { cachedDetailJson, cachedDetailJsonMany, storeDetailJson, cachedCollectionJson, storeCollectionJson } from "@/lib/db/nftCache";
 
 // Thin typed HTTP client for the public MintGarden API. No SDK, no auth — just fetch + types.
 // Isolated here so MintGardenDataSource and mappers never touch URLs or transport concerns.
@@ -183,11 +183,14 @@ function slimNftDetail(d: MgNftDetail): MgNftDetail {
   };
 }
 
-export function getNftDetail(nftId: string, background = false, bulk = false): Promise<MgNftDetail> {
+export function getNftDetail(nftId: string, background = false, bulk = false, skipCacheRead = false): Promise<MgNftDetail> {
   return cached(`nft_${nftId}`, NFT_DETAIL_TTL, async () => {
-    // L2: our persistent DB cache — once fetched, served from here forever (no MintGarden call).
-    const hit = await cachedDetailJson(nftId);
-    if (hit) { try { return JSON.parse(hit) as MgNftDetail; } catch { /* corrupt row -> refetch */ } }
+    // L2: our persistent DB cache — once fetched, served from here forever (no MintGarden call). skipCacheRead
+    // is set by getNftDetailsBatch, which already checked the cache via one MGET, so we don't re-GET a known miss.
+    if (!skipCacheRead) {
+      const hit = await cachedDetailJson(nftId);
+      if (hit) { try { return JSON.parse(hit) as MgNftDetail; } catch { /* corrupt row -> refetch */ } }
+    }
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -250,6 +253,28 @@ export function listCollectionNfts(
 }
 
 const EMPTY_PAGE: MgPage<MgListItem> = { items: [], next: null, previous: null };
+
+// Batch-fetch details, reading ALL cache hits in ONE Redis MGET (vs one GET per id) — the biggest command
+// saver on the enrichment/comps paths. Only cache-missing ids hit MintGarden (bounded concurrency). Order
+// preserved; each entry is the detail or null.
+export async function getNftDetailsBatch(ids: string[], background = false): Promise<(MgNftDetail | null)[]> {
+  const out: (MgNftDetail | null)[] = new Array(ids.length).fill(null);
+  if (ids.length === 0) return out;
+  const cachedJsons = await cachedDetailJsonMany(ids).catch(() => new Array<string | null>(ids.length).fill(null));
+  const miss: number[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    const j = cachedJsons[i];
+    if (j) { try { out[i] = JSON.parse(j) as MgNftDetail; continue; } catch { /* refetch */ } }
+    miss.push(i);
+  }
+  if (miss.length) {
+    const LIMIT = 12; let next = 0;
+    await Promise.all(Array.from({ length: Math.min(LIMIT, miss.length) }, async () => {
+      while (next < miss.length) { const k = miss[next++]; out[k] = await getNftDetail(ids[k], background, false, true).catch(() => null); }
+    }));
+  }
+  return out;
+}
 
 // NFTs held by an xch1 ADDRESS or a did:chia PROFILE. Both decode (bech32m) to a 32-byte hex; we pick
 // /address vs /profile by the human-readable part. Tolerates empty results so "holds nothing" reads as

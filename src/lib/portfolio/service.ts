@@ -4,7 +4,7 @@ import { mapDetailToNftData, nftMarketAnchorXch, isDisplayableNft } from "@/lib/
 import { getCollectionFrequency, scaledRankOf, type CollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { computeDealScore } from "@/lib/rarity/enrich";
-import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
+import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
 import { getCompsModel } from "@/lib/valuation/compsService";
@@ -197,17 +197,7 @@ export async function enrichNftsByIds(
   xchUsdRate: number,
 ): Promise<NftData[]> {
   // small bounded-concurrency pool
-  const details = new Array<Awaited<ReturnType<typeof getNftDetail>> | null>(ids.length);
-  let next = 0;
-  const LIMIT = 12;
-  await Promise.all(
-    Array.from({ length: Math.min(LIMIT, ids.length) }, async () => {
-      while (next < ids.length) {
-        const i = next++;
-        try { details[i] = await getNftDetail(ids[i]); } catch { details[i] = null; }
-      }
-    }),
-  );
+  const details = await getNftDetailsBatch(ids); // ONE Redis MGET for cached details; network only for misses
 
   // For collections MintGarden hasn't ranked (no attributes_frequency_counts) but whose NFTs carry
   // traits, inject OUR OWN computed frequency table so the rank estimator + trait-rarity math can run.

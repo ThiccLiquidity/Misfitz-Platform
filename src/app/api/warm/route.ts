@@ -13,7 +13,7 @@ import { getCompsModel } from "@/lib/valuation/compsService";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const TOP_N = 50;
+const TOP_N = 20;
 const WARM_BUDGET_MS = 45_000; // cap the heavy work so we always have time to chain + respond
 
 // Only a caller holding CRON_SECRET may trigger this (Vercel Cron auto-sends it as a Bearer token when the

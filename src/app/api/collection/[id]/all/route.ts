@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     // Don't pin a still-"warming" payload at the edge — serve those no-store so the warmed data appears next.
     const cache = r.warming
       ? "no-store"
-      : "public, max-age=60, s-maxage=120, stale-while-revalidate=600";
+      : "public, max-age=60, s-maxage=300, stale-while-revalidate=3600";
     return NextResponse.json(r, { headers: { "Cache-Control": cache } });
   } catch {
     return NextResponse.json({ error: "upstream unavailable" }, { status: 502 });

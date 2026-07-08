@@ -13,7 +13,7 @@
 
 import { fetchCollectionCompletedSales, fetchCollectionFloor } from "@/lib/market/dexie";
 import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
-import { getNftDetail } from "@/lib/data-sources/mintgarden/client";
+import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
 import { cacheGet, cachePut, keepAlive } from "@/lib/db/nftCache";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
@@ -25,6 +25,9 @@ interface CacheEntry { model: CompsModel | null; expiresAt: number; building?: P
 const _cache = new Map<string, CacheEntry>();
 const TTL = 45 * 60_000;
 const DB_TTL = 6 * 60 * 60_000; // keep persisted inputs 6h; we still background-refresh once memory expires
+const REFRESH_AGE_MS = 2 * 60 * 60_000; // background-refresh a rehydrated model once its inputs pass this age.
+// MUST be < DB_TTL (minus build time): at DB_TTL the blob is already a cacheGet miss, so the refresh would
+// never fire and every collection would hit a cold "warming" window every 6h. 2h keeps hot models fresh cheaply.
 const MAX_NFTS = 300; // cap on detail fetches for a cold build (bounds cost; recency-prioritised)
 const CONC = 6;
 
@@ -83,8 +86,9 @@ async function build(colId: string): Promise<CompsModel | null> {
 
   let supply = 0; // collection size, for rank percentile + rank-distance bandwidth
   let traitFreq: TraitFreq | undefined;
-  const rows: (SaleRow | null)[] = await pool(recent, CONC, async (s) => {
-    const d = await getNftDetail(s.id, true).catch(() => null);
+  const detailList = await getNftDetailsBatch(recent.map((s) => s.id), true); // ONE MGET for cached; network only for misses
+  const rows: (SaleRow | null)[] = recent.map((s, i) => {
+    const d = detailList[i];
     if (!d) return null;
     const col = d.collection as { nft_count?: number; attributes_frequency_counts?: TraitFreq } | undefined;
     if (typeof col?.nft_count === "number" && col.nft_count > supply) supply = col.nft_count;
@@ -197,7 +201,7 @@ export async function getCompsModel(colId: string, opts: { wait?: boolean } = {}
         if (model) {
           _cache.set(colId, { model, expiresAt: Date.now() + TTL });
           // Refresh from the network in the background if the persisted inputs are getting old.
-          if (Date.now() - persisted.builtAt > TTL) void kickBuild(colId, model);
+          if (Date.now() - persisted.builtAt > REFRESH_AGE_MS) void kickBuild(colId, model); // refresh aged (>2h) inputs in the background (was 45min)
           return model;
         }
       } catch { /* corrupt blob -> network build */ }

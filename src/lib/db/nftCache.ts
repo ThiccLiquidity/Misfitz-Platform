@@ -48,7 +48,7 @@ function envBySuffix(suffixes: string[]): string {
 const REDIS_URL = envBySuffix(["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL"]);
 const REDIS_TOKEN = envBySuffix(["KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN"]);
 const REDIS_GC_TTL_S = 30 * 24 * 60 * 60; // 30d hard expiry so orphaned keys eventually clear; freshness checked on read
-type RedisLike = { get(key: string): Promise<unknown>; set(key: string, value: unknown, opts?: { ex?: number; nx?: boolean }): Promise<unknown>; del(...keys: string[]): Promise<unknown> };
+type RedisLike = { get(key: string): Promise<unknown>; mget(...keys: string[]): Promise<unknown[]>; set(key: string, value: unknown, opts?: { ex?: number; nx?: boolean }): Promise<unknown>; del(...keys: string[]): Promise<unknown> };
 let _redisPromise: Promise<RedisLike | null> | undefined;
 function redis(): Promise<RedisLike | null> {
   if (!REDIS_URL || !REDIS_TOKEN) return Promise.resolve(null);
@@ -147,13 +147,39 @@ function cache(): Promise<CacheDb | null> {
 // whole-collection rarity scans pass bulk=true and stay OUT of Redis — they are the high-volume thing that
 // filled the store to 256MB. (Local SQLite is also written; it's a no-op on read-only serverless FS but
 // real on a persistent host.)
-const DETAIL_REDIS_TTL_MS = 48 * 60 * 60_000; // 48h
+const DETAIL_REDIS_TTL_MS = 24 * 60 * 60_000; // 24h (was 48h) — bounds the biggest storage consumer
 export async function cachedDetailJson(id: string): Promise<string | null> {
   return (await redisGet(`tf:d:${id}`, DETAIL_REDIS_TTL_MS)) ?? (await cache())?.getDetail(id) ?? null;
 }
 export function storeDetailJson(id: string, json: string, bulk = false): void {
-  if (!bulk) redisPut(`tf:d:${id}`, json, 48 * 60 * 60); // interactive/comps -> Redis, 48h ex; bulk scans skip Redis
+  if (!bulk) redisPut(`tf:d:${id}`, json, 24 * 60 * 60); // interactive/comps -> Redis, 24h ex; bulk scans skip Redis
   void cache().then((c) => c?.putDetail(id, json));
+}
+// Read many details in ONE Redis command (MGET) instead of N GETs — the single biggest command saver on the
+// wallet/comps enrichment paths. Returns json-or-null per id (order preserved); local SQLite backfills misses.
+export async function cachedDetailJsonMany(ids: string[]): Promise<(string | null)[]> {
+  const out: (string | null)[] = new Array(ids.length).fill(null);
+  if (ids.length === 0) return out;
+  try {
+    const r = await redis();
+    if (r) {
+      const now = Date.now();
+      const CHUNK = 100; // bound each MGET's response size (a detail can be tens of KB) + per-chunk failure blast radius
+      for (let start = 0; start < ids.length; start += CHUNK) {
+        const slice = ids.slice(start, start + CHUNK);
+        try {
+          const vals = (await r.mget(...slice.map((id) => `tf:d:${id}`))) as ({ v?: string; t?: number } | null)[];
+          for (let j = 0; j < slice.length; j++) {
+            const o = vals[j];
+            if (o && typeof o.v === "string" && typeof o.t === "number" && now - o.t < DETAIL_REDIS_TTL_MS) out[start + j] = o.v;
+          }
+        } catch { /* this chunk falls to local/network; other chunks unaffected */ }
+      }
+    }
+  } catch { /* fall through to local */ }
+  const c = await cache();
+  if (c) for (let i = 0; i < ids.length; i++) if (out[i] == null) { try { out[i] = c.getDetail(ids[i]); } catch { /* ignore */ } }
+  return out;
 }
 export async function cachedCollectionJson(id: string): Promise<string | null> {
   return (await redisGet(`tf:c:${id}`, COLLECTION_TTL_MS)) ?? (await cache())?.getCollection(id) ?? null;
@@ -191,10 +217,16 @@ async function putLargeInner(key: string, json: string, exSeconds: number = REDI
   const shards = Math.max(1, Math.ceil(b64.length / KVZ_SHARD_MAX));
   const r = await redis();
   if (r) {
-    for (let i = 0; i < shards; i++) {
-      await r.set(`tf:kvz:${key}:${g}:${i}`, { v: b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX), t: Date.now() }, { ex: exSeconds });
+    if (shards === 1) {
+      // Fits in one shard (the common case: gzipped roster/rarity ~80-200KB) -> inline it in the manifest so
+      // a read is ONE GET instead of manifest + shard. Big command saver on the hottest read paths.
+      await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards: 1, len: b64.length, data: b64 }), t: Date.now() }, { ex: exSeconds });
+    } else {
+      for (let i = 0; i < shards; i++) {
+        await r.set(`tf:kvz:${key}:${g}:${i}`, { v: b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX), t: Date.now() }, { ex: exSeconds });
+      }
+      await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: exSeconds });
     }
-    await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: exSeconds });
   }
   await cache().then((c) => c?.putKv(`z:${key}`, b64));
 }
@@ -210,16 +242,22 @@ export async function cacheGetLarge(key: string, ttlMs: number): Promise<string 
   try {
     const man = await redisGet(`tf:kvz:${key}`, ttlMs);
     if (man) {
-      const { g, shards, len } = JSON.parse(man) as { g?: string; shards: number; len?: number };
-      const parts: string[] = [];
-      let ok = shards > 0 && typeof g === "string";
-      for (let i = 0; ok && i < shards; i++) {
-        const part = await redisGet(`tf:kvz:${key}:${g}:${i}`, ttlMs);
-        if (part == null) { ok = false; break; }
-        parts.push(part);
+      const m = JSON.parse(man) as { g?: string; shards: number; len?: number; data?: string };
+      let joined: string | null = null;
+      if (typeof m.data === "string") {
+        joined = m.data; // inlined single-shard payload -> 1 GET total
+      } else if (m.shards > 0 && typeof m.g === "string") {
+        const r = await redis();
+        if (r) {
+          const keys = Array.from({ length: m.shards }, (_, i) => `tf:kvz:${key}:${m.g}:${i}`);
+          const vals = (await r.mget(...keys)) as ({ v?: string } | null)[]; // ONE command for all shards
+          const parts: string[] = [];
+          let ok = true;
+          for (const o of vals) { if (o && typeof o.v === "string") parts.push(o.v); else { ok = false; break; } }
+          if (ok) joined = parts.join("");
+        }
       }
-      const joined = parts.join("");
-      if (ok && (typeof len !== "number" || joined.length === len)) return gunzipSync(Buffer.from(joined, "base64")).toString("utf8");
+      if (joined != null && (typeof m.len !== "number" || joined.length === m.len)) return gunzipSync(Buffer.from(joined, "base64")).toString("utf8");
     }
     const localB64 = (await cache())?.getKv(`z:${key}`, ttlMs);
     if (localB64) return gunzipSync(Buffer.from(localB64, "base64")).toString("utf8");
@@ -271,7 +309,7 @@ export async function redisHealth(): Promise<{
 // -- Ops/storage stats (safe to expose): total key count + a breakdown by kind, via a bounded SCAN. Lets
 // a /status endpoint show what is actually consuming the shared store so we know if/when to upgrade. No
 // secrets. Bounded to keep it cheap even on a busy DB.
-export async function redisStats(): Promise<{
+export async function redisStats(deep = false): Promise<{
   configured: boolean; dbsize: number; scanned: number; complete: boolean;
   byPrefix: Record<string, number>;
 }> {
@@ -287,7 +325,7 @@ export async function redisStats(): Promise<{
     try { dbsize = (await c.dbsize?.()) ?? -1; } catch { /* ignore */ }
     const byPrefix: Record<string, number> = {};
     let cursor: string | number = 0, scanned = 0, iters = 0, complete = true;
-    if (c.scan) {
+    if (deep && c.scan) { // SCAN is ~60 commands; only run it for an explicit deep check
       do {
         const res = (await c.scan(cursor, { count: 1000 })) as [string, string[]];
         const next: string = res[0]; const keys: string[] = res[1] ?? [];

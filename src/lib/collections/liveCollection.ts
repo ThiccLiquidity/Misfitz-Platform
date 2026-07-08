@@ -112,6 +112,27 @@ const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their 
 // permanently, while listings / floors / comps still refresh on their own shorter cycles.
 const SLIMLIST_TTL_MS = 30 * 24 * 60 * 60_000; // 30 days (matches the rarity-scan cache)
 
+// Project a roster item down to ONLY the fields cards / rarity / listings actually read, so the persisted
+// roster doesn't carry MintGarden's untyped cruft (creator avatar URLs, timestamps, descriptions, edition
+// fields). Cuts the stored roster ~40-50% before gzip. Keeps metadata.attributes (traits) intact.
+function slimRosterItem(it: MgListItem): MgListItem {
+  return {
+    id: it.id,
+    encoded_id: it.encoded_id,
+    name: it.name,
+    thumbnail_uri: it.thumbnail_uri ?? null,
+    openrarity_rank: it.openrarity_rank ?? null,
+    price: it.price ?? null,
+    token_code: it.token_code ?? null,
+    collection_id: it.collection_id,
+    collection_name: it.collection_name,
+    owner_address_encoded_id: it.owner_address_encoded_id ?? null,
+    metadata: it.metadata ? { attributes: it.metadata.attributes, series_number: it.metadata.series_number ?? null } : null,
+    is_blocked: it.is_blocked ?? null,
+    collection_blocked_content: it.collection_blocked_content ?? null,
+  };
+}
+
 // FRESH MintGarden marketplace listings (NFTs listed on MintGarden but not necessarily on Dexie). Uses
 // require_price=true so it fetches ONLY the for-sale NFTs (a small subset) — cheap. Cached 5 min in-proc so
 // a sold/de-listed NFT drops off within minutes, unlike the 30-day roster price we used to (wrongly) trust.
@@ -241,7 +262,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
         } while (cursor);
         // Persist a COMPLETE scan, AWAITED so the rarity build reading slimlist2 immediately after finds it.
         if (complete && items.length > 0 && listLooksFull(items, capped)) {
-          await cachePutLargeAsync(`slimlist2:${id}`, JSON.stringify({ items, capped }));
+          await cachePutLargeAsync(`slimlist2:${id}`, JSON.stringify({ items: items.map(slimRosterItem), capped }));
         }
       } finally {
         await releaseLock(`roster:${id}`); // release promptly so the next poll resumes (don't wait out the 120s TTL)

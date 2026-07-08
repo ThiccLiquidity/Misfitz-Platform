@@ -1,4 +1,4 @@
-import { listAddressNfts, getNftDetail, getCollection } from "./client";
+import { listAddressNfts, getNftDetailsBatch, getCollection } from "./client";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { isDisplayableNft } from "./map";
 import type { MgCollection, MgListItem, MgNftDetail } from "./types";
@@ -10,7 +10,6 @@ import type { MgCollection, MgListItem, MgNftDetail } from "./types";
 
 export const MAX_HOLDINGS = 2000; // slim-list ceiling — big wallets render fast (list is light) then enrich in chunks
 const PAGE_SIZE = 50; // MintGarden address endpoint rejects larger sizes (returns nothing); keep at 50
-const DETAIL_CONCURRENCY = 12;
 
 // Minimal concurrency pool — runs `worker` over `items`, at most `limit` in flight.
 async function mapPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
@@ -50,13 +49,7 @@ export async function fetchOwnerNftDetails(address: string): Promise<OwnerDetail
 
   // 2) Eager-fetch full detail for each, bounded concurrency. Drop any that error individually so
   //    one bad NFT doesn't sink the whole wallet view.
-  const settled = await mapPool(ids, DETAIL_CONCURRENCY, async (id) => {
-    try {
-      return await getNftDetail(id);
-    } catch {
-      return null;
-    }
-  });
+  const settled = await getNftDetailsBatch(ids); // ONE MGET per 100-id chunk for cached details; network only for misses
   const details = settled.filter((d): d is MgNftDetail => d !== null).filter(isDisplayableNft);
   return { details, truncated };
 }
