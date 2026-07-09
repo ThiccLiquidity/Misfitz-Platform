@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { enrichNftsByIds } from "@/lib/portfolio/service";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { timed } from "@/lib/perf/timing";
 
 // Batched enrichment for the progressive binder: the client POSTs a chunk of NFT ids + the floors it
 // already resolved, and we return the enriched cards for just those ids. Cached detail fetches make
@@ -18,6 +19,6 @@ export async function POST(req: Request) {
   const floors = body.floors && typeof body.floors === "object" ? body.floors : {};
   const rate = typeof body.xchUsdRate === "number" ? body.xchUsdRate : XCH_USD_FALLBACK;
   if (ids.length === 0) return NextResponse.json({ nfts: [] });
-  const nfts = await enrichNftsByIds(ids, floors, rate);
+  const nfts = await timed("binder.enrich", () => enrichNftsByIds(ids, floors, rate));
   return NextResponse.json({ nfts });
 }

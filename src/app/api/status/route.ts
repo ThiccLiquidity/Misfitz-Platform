@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { redisHealth, redisStats } from "@/lib/db/nftCache";
 import { isSeeded, getSeed } from "@/lib/data-sources/seed/registry";
+import { perfSnapshot } from "@/lib/perf/timing";
 
 // One-stop health + storage check: GET /api/status. Tells you (a) the shared cache is alive and writing,
 // (b) the Misfitz seed is loaded, and (c) WHAT is filling Redis (rosters vs comps vs leftover details) so
@@ -26,6 +27,9 @@ export async function GET(req: Request) {
   else if (!health.roundTrip) notes.push("Redis is configured but a read/write test failed — cache not usable right now.");
   if (details > 5000) notes.push(`~${details} per-NFT detail keys — details are slimmed + 24h-capped; if this dominates, comps detail churn is the cause.`);
   if (stats.dbsize > FREE_TIER_KEY_HINT) notes.push(`~${stats.dbsize} keys — check the Upstash STORAGE gauge; if it's near 256MB, trim rosters or upgrade.`);
+  const perf = perfSnapshot(); // per-instance p50/p95/p99 — zero Redis cost
+  const slow = Object.entries(perf).filter(([, s]) => s.p95 > 3000).map(([ep, s]) => `${ep} p95=${s.p95}ms`);
+  if (slow.length) notes.push(`Slow (p95>3s, THIS instance): ${slow.join(", ")}. Cold starts / big collections / cache misses live here.`);
   if (notes.length === 0) notes.push("Healthy. Cache alive, details staying out of Redis. Watch the Upstash STORAGE gauge as traffic grows.");
 
   const ok = health.configured && health.roundTrip;
@@ -43,6 +47,7 @@ export async function GET(req: Request) {
         byKind: stats.byPrefix, // roster / comps / rarity / portfolio / holdings / detail / ...
       },
       seed: { enabled: isSeeded(MISFITZ), misfitzLoaded: !!seed, misfitzCount: seed ? Object.keys(seed.byNumber).length : 0 },
+      perf, // per-instance request timing (p50/p95/p99/max per endpoint); resets on instance recycle
       notes,
     },
     { headers: { "cache-control": "no-store" } },
