@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CollectionData, NftData } from "@/types";
 import { BinderView } from "./BinderView";
 import { BinderCollectionPicker } from "./BinderCollectionPicker";
@@ -36,6 +36,8 @@ const BINDER_SORTS: { value: SortKey; label: string }[] = [
   { value: "token-desc", label: "Token # down" },
 ];
 
+const ENRICH_CAP = 1000; // max cards enriched per view/selection — bounds a whale's per-open detail fetches
+
 export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [collectionId, setCollectionId] = useState<string>("all");
   const [tier, setTier] = useState<TierFilter>("all");
@@ -50,17 +52,65 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [nfts, setNfts] = useState<NftData[]>(holdings.nfts);
   const [enriching, setEnriching] = useState(!holdings.demo && holdings.addresses.length > 0);
   const [progress, setProgress] = useState(0);
+  const [warming, setWarming] = useState<boolean>(!!holdings.warming);
+  const [collections, setCollections] = useState(holdings.collections);
+  const [truncated, setTruncated] = useState(holdings.truncated);
+  const nftsRef = useRef<NftData[]>(holdings.nfts);
+  nftsRef.current = nfts;
+  const enrichedRef = useRef<Set<string>>(new Set()); // launcherIds already enriched this session (dedupe on-demand enrichment)
+
+  // Whale wallets can't be fully paged inside one serverless call, so the page SSRs a first batch with
+  // warming=true. Poll the resume endpoint until the full roster lands, growing the card set + collections
+  // as pages arrive. Enrichment (below) is held off until this completes so we enrich the FULL set once.
+  useEffect(() => {
+    if (!warming || holdings.addresses.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      let attempts = 0;
+      let fails = 0;
+      while (!cancelled && attempts < 60 && fails < 6) {
+        await new Promise((r) => setTimeout(r, 3500));
+        if (cancelled) return;
+        attempts += 1;
+        try {
+          const res = await fetch("/api/holdings", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ addresses: holdings.addresses }),
+          });
+          if (!res.ok) { fails += 1; continue; }
+          fails = 0;
+          const data = (await res.json()) as MyHoldings;
+          if (cancelled) return;
+          if (Array.isArray(data.nfts)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
+          if (Array.isArray(data.collections)) setCollections(data.collections);
+          setTruncated(data.truncated);
+          if (!data.warming) { setWarming(false); return; }
+        } catch { fails += 1; }
+      }
+      // Cap hit or repeated failures: stop warming so enrichment runs on whatever loaded (graceful degrade).
+      if (!cancelled) setWarming(false);
+    })();
+    return () => { cancelled = true; };
+  }, [warming, holdings.addresses]);
 
   useEffect(() => {
-    if (holdings.demo || holdings.addresses.length === 0) return;
+    if (holdings.demo || holdings.addresses.length === 0 || warming) return;
     let cancelled = false;
-    const all = holdings.nfts;
+    const all = nftsRef.current;
 
     // Seeded/authoritative cards already carry a real rank (rankEstimated === false) AND their traits from
     // the bundled seed — MintGarden has nothing to add for them, so enriching them just fires slow detail
     // fetches (and wakes the heavy comps build) for no gain. Skip them: a Misfitz-only wallet needs ZERO
     // enrichment and never shows the spinner. Only cards still missing real traits/ranks get enriched.
-    const pending = all.filter((n) => !(n.rankEstimated === false && (n.traits?.length ?? 0) > 0));
+    const oneCol = collectionId !== "all";
+    let pending = all.filter((n) => !(n.rankEstimated === false && (n.traits?.length ?? 0) > 0) && !enrichedRef.current.has(n.launcherId));
+    // Bound the work: enrich the SELECTED collection's cards, else (in "all") the most valuable first — capped.
+    // A 20k whale never fires 20k detail fetches on open; we enrich what's viewed, and each collection enriches
+    // on demand (deduped via enrichedRef). Normal wallets (< cap) still fully enrich, unchanged.
+    if (oneCol) pending = pending.filter((n) => n.collectionSlug === collectionId);
+    else pending = [...pending].sort((a, b) => (b.fairValue?.totalEstimate ?? 0) - (a.fairValue?.totalEstimate ?? 0));
+    pending = pending.slice(0, ENRICH_CAP);
     const total = pending.length;
     if (total === 0) { setEnriching(false); setProgress(1); return; }
 
@@ -90,6 +140,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
       setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
       for (const n of data.nfts) {
+        enrichedRef.current.add(n.launcherId);
         if (n.collectionSlug?.startsWith("col1") && n.rarityRank == null) unranked.add(n.launcherId);
         else unranked.delete(n.launcherId);
       }
@@ -117,15 +168,15 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     })();
 
     return () => { cancelled = true; };
-  }, [holdings.addresses, holdings.demo, holdings.nfts, holdings.xchUsdRate]);
+  }, [warming, collectionId, holdings.addresses, holdings.demo, holdings.xchUsdRate]);
 
   const oneCollection = collectionId !== "all";
 
   // Collections the collector hid drop out of the aggregate view, totals, stats, and counts.
   const visibleNfts = useMemo(() => nfts.filter((n) => !hidden.has(n.collectionSlug)), [nfts, hidden]);
   const visibleCollections = useMemo(
-    () => holdings.collections.filter((c) => !hidden.has(c.id)),
-    [holdings.collections, hidden],
+    () => collections.filter((c) => !hidden.has(c.id)),
+    [collections, hidden],
   );
 
   // If the collection in focus gets hidden, fall back to the All view.
@@ -197,7 +248,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
 
   return (
     <div>
-      <WorkingIndicator active={enriching} label="Reading wallet & refining rarity" progress={progress} />
+      <WorkingIndicator active={warming || enriching} label={warming ? `Loading your collection… ${nfts.length.toLocaleString()} so far` : "Reading wallet & refining rarity"} progress={warming ? undefined : progress} />
       {holdings.demo && (
         <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400">
           Demo binder (seeded Misfitz) — sign in or paste an address to see your real collection.
@@ -225,7 +276,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <div className="text-title text-2xl font-bold">{filtered.length}</div>
           <div className="text-subtle text-xs uppercase tracking-widest">NFTs</div>
           <div className="text-subtle mt-1 text-xs">
-            {visibleCollections.length} collection{visibleCollections.length === 1 ? "" : "s"}{holdings.truncated ? " · capped" : ""}
+            {visibleCollections.length} collection{visibleCollections.length === 1 ? "" : "s"}{warming ? " · loading…" : truncated ? " · capped at 25,000" : ""}
           </div>
         </div>
       </div>
@@ -241,7 +292,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <BinderView key={binderKey} collection={SHELL} nfts={filtered} hideFullPageLink />
         </div>
         <BinderCollectionPicker
-          collections={holdings.collections}
+          collections={collections}
           totalCount={visibleNfts.length}
           selectedId={collectionId}
           onSelect={pickCollection}

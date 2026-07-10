@@ -284,6 +284,7 @@ export async function listAddressNfts(
   cursor?: string | null,
   size = 50,
   type = "owned",
+  throwOnError = false,
 ): Promise<MgPage<MgListItem>> {
   const decoded = decodeChiaAddress(address);
   if (!decoded) return EMPTY_PAGE;
@@ -292,7 +293,12 @@ export async function listAddressNfts(
   const endpoint = decoded.hrp.startsWith("did:chia") ? "profile" : "address";
   const q = new URLSearchParams({ type, size: String(size) });
   if (cursor) q.set("page", cursor);
-  const page = await getJsonOrNull<MgPage<MgListItem>>(`/${endpoint}/${decoded.hex}/nfts?${q}`);
+  const url = `/${endpoint}/${decoded.hex}/nfts?${q}`;
+  // throwOnError: a caller PAGING a whole wallet must tell a transient error (429/5xx/timeout) apart from a
+  // genuine empty page — otherwise one blip reads as "end of list" and silently truncates the roster.
+  const page = throwOnError
+    ? await getJson<MgPage<MgListItem>>(url)
+    : await getJsonOrNull<MgPage<MgListItem>>(url);
   if (!page) return EMPTY_PAGE;
   return { items: page.items ?? [], next: page.next ?? null, previous: page.previous ?? null };
 }

@@ -30,15 +30,16 @@ export interface MyHoldings {
   collections: HeldCollection[];
   addresses: string[];
   truncated: boolean;
+  warming: boolean; // true while a big (whale) wallet is still paging in the background — poll again
   demo: boolean;
 }
 
 const EMPTY: MyHoldings = {
   nfts: [], totalEstimateXch: 0, totalEstimateUsd: 0, xchUsdRate: XCH_USD_FALLBACK,
-  collections: [], addresses: [], truncated: false, demo: false,
+  collections: [], addresses: [], truncated: false, warming: false, demo: false,
 };
 
-function summarize(nfts: NftData[], xchUsdRate: number, addresses: string[], truncated: boolean, demo: boolean): MyHoldings {
+function summarize(nfts: NftData[], xchUsdRate: number, addresses: string[], truncated: boolean, warming: boolean, demo: boolean): MyHoldings {
   const colMap = new Map<string, HeldCollection>();
   let total = 0;
   for (const n of nfts) {
@@ -57,6 +58,7 @@ function summarize(nfts: NftData[], xchUsdRate: number, addresses: string[], tru
     collections: [...colMap.values()].sort((a, b) => b.count - a.count),
     addresses,
     truncated,
+    warming,
     demo,
   };
 }
@@ -83,13 +85,13 @@ async function applySeedOverlay(nfts: NftData[], floorByCol: Map<string, number 
 // no per-NFT detail. Renders in ~1s; YourBinder then calls the enrichment route to fill in traits and
 // our own estimated ranks. Floor is resolved per collection (Dexie ask -> MintGarden -> Dexie sales ->
 // cheapest current listing among holdings) so values are consistent from the first paint.
-export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings> {
+export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: number } = {}): Promise<MyHoldings> {
   if (addresses.length === 0) return EMPTY;
   const t0 = Date.now();
 
   const [rate, ...owners] = await Promise.all([
     fetchXchUsdRate(),
-    ...addresses.map((a) => fetchOwnerListings(a).catch(() => null)),
+    ...addresses.map((a) => fetchOwnerListings(a, opts).catch(() => null)),
   ]);
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
 
@@ -97,9 +99,11 @@ export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings
   const collections = new Map<string, MgCollection>();
   const seen = new Set<string>();
   let truncated = false;
+  let warming = false;
   for (const o of owners) {
     if (!o) continue;
     truncated = truncated || o.truncated;
+    warming = warming || o.warming;
     for (const [id, c] of o.collections) if (!collections.has(id)) collections.set(id, c);
     for (const it of o.items) {
       if (seen.has(it.encoded_id)) continue;
@@ -144,5 +148,5 @@ export async function getMyHoldingsFast(addresses: string[]): Promise<MyHoldings
 
   await applySeedOverlay(nfts, floorByCol, xchUsdRate);
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
-  return summarize(nfts, xchUsdRate, addresses, truncated, false);
+  return summarize(nfts, xchUsdRate, addresses, truncated, warming, false);
 }

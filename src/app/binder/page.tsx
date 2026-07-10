@@ -10,6 +10,7 @@ import type { Metadata } from "next";
 // separated in the URL); the WalletProfileBar auto-remembers that set on this device so it loads next
 // time. When nothing is entered or saved we show a neutral empty state (no placeholder collection).
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // whale wallets page within an 8s SSR budget; the rest streams via /api/holdings
 
 export const metadata: Metadata = {
   title: "Your Binder",
@@ -22,9 +23,11 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
   const addresses = [...new Set(ids.filter(isValidChiaOwnerId))];
   const invalid = ids.length > 0 && addresses.length === 0;
 
-  const holdings = addresses.length ? await getMyHoldingsFast(addresses) : null;
-  const noResults = addresses.length > 0 && (!holdings || holdings.nfts.length === 0);
-  const showBinder = holdings && holdings.nfts.length > 0 ? holdings : null;
+  const holdings = addresses.length ? await getMyHoldingsFast(addresses, { budgetMs: 8_000 }) : null; // short budget = fast first paint; poll finishes big wallets
+  // A still-"warming" whale wallet may SSR with 0 items on the first pass — that is NOT "no results";
+  // render the binder so its poll loop can stream the rest in.
+  const noResults = addresses.length > 0 && (!holdings || (holdings.nfts.length === 0 && !holdings.warming));
+  const showBinder = holdings && (holdings.nfts.length > 0 || holdings.warming) ? holdings : null;
 
   return (
     <div className="py-2">

@@ -1,15 +1,15 @@
 import { listAddressNfts, getNftDetailsBatch, getCollection } from "./client";
-import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock } from "@/lib/db/nftCache";
 import { isDisplayableNft } from "./map";
 import { recordTiming } from "@/lib/perf/timing";
-import type { MgCollection, MgListItem, MgNftDetail } from "./types";
+import type { MgCollection, MgListItem, MgNftDetail, MgPage } from "./types";
 
 // Shared by MintGardenDataSource.getNftsByOwner and the portfolio service: page through an
-// address's holdings (cursor-based), then eager-fetch each NFT's full detail with bounded
-// concurrency (the chosen "traits everywhere" behaviour). Caps keep a whale wallet from firing
-// thousands of requests; the caller is told when results were truncated.
+// address's holdings (cursor-based). Caps keep a whale wallet from firing thousands of requests;
+// the caller is told when results were truncated.
 
-export const MAX_HOLDINGS = 2000; // slim-list ceiling — big wallets render fast (list is light) then enrich in chunks
+export const MAX_HOLDINGS = 25000; // hard safety rail — covers essentially every real collector (incl. 20k whales)
+const LEGACY_DETAIL_CAP = 2000;    // fetchOwnerNftDetails (legacy/eager path) stays capped — no budget, no resume
 const PAGE_SIZE = 50; // MintGarden address endpoint rejects larger sizes (returns nothing); keep at 50
 
 // Minimal concurrency pool — runs `worker` over `items`, at most `limit` in flight.
@@ -32,92 +32,157 @@ export interface OwnerDetails {
 }
 
 export async function fetchOwnerNftDetails(address: string): Promise<OwnerDetails> {
-  // 1) Page through the (slim) holdings list until we hit MAX_HOLDINGS or run out.
+  // Legacy/eager path (not on the live binder). Capped low — it fetches full detail per NFT with no budget.
   const ids: string[] = [];
   let cursor: string | null | undefined = undefined;
   let truncated = false;
   do {
-    const page = await listAddressNfts(address, cursor, PAGE_SIZE);
+    const page: MgPage<MgListItem> = await listAddressNfts(address, cursor, PAGE_SIZE);
     for (const item of page.items) {
-      if (ids.length >= MAX_HOLDINGS) {
-        truncated = true;
-        break;
-      }
+      if (ids.length >= LEGACY_DETAIL_CAP) { truncated = true; break; }
       ids.push(item.encoded_id);
     }
     cursor = page.next;
-  } while (cursor && ids.length < MAX_HOLDINGS);
+  } while (cursor && ids.length < LEGACY_DETAIL_CAP);
 
-  // 2) Eager-fetch full detail for each, bounded concurrency. Drop any that error individually so
-  //    one bad NFT doesn't sink the whole wallet view.
-  const settled = await getNftDetailsBatch(ids); // ONE MGET per 100-id chunk for cached details; network only for misses
+  const settled = await getNftDetailsBatch(ids);
   const details = settled.filter((d): d is MgNftDetail => d !== null).filter(isDisplayableNft);
   return { details, truncated };
 }
 
-// FAST path for progressive loading: page the (slim) holdings list and fetch each UNIQUE collection's
-// metadata once (supply / floor / trait-frequencies) — a handful of requests instead of one per NFT.
-// The binder renders from this immediately; per-NFT traits + estimated ranks are streamed in after.
+// FAST path for progressive loading. Whale-safe: MintGarden caps the address endpoint at 50/page, so a 20k
+// wallet is ~400 SEQUENTIAL requests — far more than one serverless invocation (60s cap) can do. So we page
+// within a TIME BUDGET, checkpoint the cursor + items + per-collection metadata to Redis, and RESUME on the
+// next call. warming=true means "more pages are coming — poll again". The completed roster is cached
+// gzip+sharded, so a 25k-item list persists past Upstash's ~1MB per-write limit.
 export interface OwnerListings {
   items: MgListItem[];
   collections: Map<string, MgCollection>;
   truncated: boolean;
+  warming: boolean; // true while more pages are still being fetched (poll again to get the rest)
 }
 
-// Holdings change only when the collector buys/sells, so a short DB cache makes re-opening the same
-// wallet (or a saved multi-wallet profile) near-instant without going stale for long. Keyed by the
-// normalized owner id. This is the per-user hot path the indexer plan (Phase 1) set out to cover.
-const HOLDINGS_TTL = 30 * 60_000;
+const HOLDINGS_TTL = 30 * 60_000; // completed roster: read-fresh for 30 min
+const HOLDINGS_EX_S = 60 * 60;    // ...persisted 1h
+const HOLDSCAN_TTL = 20 * 60_000; // in-progress checkpoint: read-fresh 20 min
+const HOLDSCAN_EX_S = 30 * 60;    // ...persisted 30 min
+const PAGE_BUDGET_MS = 28_000;    // per-invocation paging budget — leaves room for metadata + writes under 60s
+
 interface CachedListings { items: MgListItem[]; collections: [string, MgCollection][]; truncated: boolean }
+interface HoldingsCheckpoint { cursor: string | null; items: MgListItem[]; truncated: boolean; collections: [string, MgCollection][] }
 
-export async function fetchOwnerListings(address: string): Promise<OwnerListings> {
+// Fetch metadata only for collections NOT already resolved (carried in the checkpoint across passes), so a
+// resume pass costs ~zero collection lookups instead of re-resolving every collection every time.
+async function collectionsFor(items: MgListItem[], existing?: Map<string, MgCollection>): Promise<Map<string, MgCollection>> {
+  const map = existing ? new Map(existing) : new Map<string, MgCollection>();
+  const need = Array.from(new Set(items.map((i) => i.collection_id))).filter((id) => !map.has(id));
+  const cols = await mapPool(need, 8, (id) => getCollection(id).catch(() => null));
+  need.forEach((id, i) => { const c = cols[i]; if (c) map.set(id, c); });
+  return map;
+}
+
+export async function fetchOwnerListings(address: string, opts: { budgetMs?: number } = {}): Promise<OwnerListings> {
   const t0 = Date.now();
-  const short = `${address.slice(0, 8)}…${address.slice(-4)}`;
-  const cacheKey = `holdings2:${address.trim().toLowerCase()}`;
-  try {
-    const hit = await cacheGet(cacheKey, HOLDINGS_TTL);
-    if (hit) {
-      const c = JSON.parse(hit) as CachedListings;
-      if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings CACHE HIT in ${Date.now() - t0}ms (${c.items.length} nfts, ${c.collections.length} cols)`);
-      recordTiming("wallet.holdings", Date.now() - t0);
-      return { items: c.items, collections: new Map(c.collections), truncated: c.truncated };
-    }
-  } catch { /* cache miss / unavailable -> fetch live */ }
+  const budgetMs = opts.budgetMs ?? PAGE_BUDGET_MS;
+  const short = `${address.slice(0, 8)}...${address.slice(-4)}`;
+  const key = address.trim().toLowerCase();
 
-  const items: MgListItem[] = [];
+  // 1) Completed roster already cached? Serve it — no paging.
+  try {
+    const done = await cacheGetLarge(`holdings3:${key}`, HOLDINGS_TTL);
+    if (done) {
+      const c = JSON.parse(done) as CachedListings;
+      if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings CACHE HIT in ${Date.now() - t0}ms (${c.items.length} nfts)`);
+      recordTiming("wallet.holdings", Date.now() - t0);
+      return { items: c.items, collections: new Map(c.collections), truncated: c.truncated, warming: false };
+    }
+  } catch { /* fall through to resume/scan */ }
+
+  // 2) Resume from a checkpoint if one exists (a previous invocation ran out of budget mid-scan).
+  let items: MgListItem[] = [];
   let cursor: string | null | undefined = undefined;
   let truncated = false;
-  let pages = 0;
-  const tPage = Date.now();
-  do {
-    const page = await listAddressNfts(address, cursor, PAGE_SIZE);
-    pages += 1;
-    for (const item of page.items) {
-      if (items.length >= MAX_HOLDINGS) { truncated = true; break; }
-      if (isDisplayableNft({ is_blocked: item.is_blocked, blocked_content: item.collection_blocked_content })) items.push(item);
+  let colMap = new Map<string, MgCollection>();
+  try {
+    const cp = await cacheGetLarge(`holdscan:${key}`, HOLDSCAN_TTL);
+    if (cp) {
+      const c = JSON.parse(cp) as HoldingsCheckpoint;
+      items = c.items ?? [];
+      cursor = c.cursor ?? undefined;
+      truncated = c.truncated;
+      colMap = new Map(c.collections ?? []);
     }
-    cursor = page.next;
-  } while (cursor && items.length < MAX_HOLDINGS);
-  const pageMs = Date.now() - tPage;
+  } catch { /* start fresh */ }
 
-  const colIds = Array.from(new Set(items.map((i) => i.collection_id)));
-  const tCol = Date.now();
-  const cols = await mapPool(colIds, 8, (id) => getCollection(id).catch(() => null));
-  const colMs = Date.now() - tCol;
-  const collections = new Map<string, MgCollection>();
-  colIds.forEach((id, i) => { const c = cols[i]; if (c) collections.set(id, c); });
-
-  // Only cache a NON-empty result. Caching an empty list (a transient MintGarden error or a bad page
-  // size) would poison this wallet with "no NFTs" for the whole TTL. An empty wallet is cheap to
-  // re-check, so skipping the write when there is nothing costs nothing.
-  if (items.length > 0) {
-    try {
-      const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
-      cachePut(cacheKey, JSON.stringify(payload), 60 * 60); // holdings readable 30min; 1h ex
-    } catch { /* cache optional */ }
+  // 3) One pager per wallet at a time. If another request holds the lock, return what's checkpointed
+  //    (possibly empty) and let the caller poll again — no duplicate paging storm.
+  const gotLock = await tryLock(`holds:${key}`, 55).catch(() => false);
+  if (!gotLock) {
+    return { items, collections: await collectionsFor(items, colMap), truncated, warming: true };
   }
 
-  if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings LIVE in ${Date.now() - t0}ms — paging ${pageMs}ms (${pages}p, ${items.length} nfts), collections ${colMs}ms (${colIds.length})`);
-  recordTiming("wallet.holdings", Date.now() - t0);
-  return { items, collections, truncated };
+  // Fetch one page with a short retry so a single 429/timeout doesn't abort the whole pass. Returns null
+  // only after retries fail — the caller then checkpoints + returns warming (never a false "complete").
+  async function fetchPage(cur: string | null | undefined): Promise<MgPage<MgListItem> | null> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { return await listAddressNfts(address, cur, PAGE_SIZE, "owned", true); }
+      catch {
+        if (attempt < 2 && Date.now() - t0 < budgetMs) await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
+        else break; // out of budget or retries -> null -> checkpoint + warming (resume next poll)
+      }
+    }
+    return null;
+  }
+
+  try {
+    const seen = new Set(items.map((i) => i.encoded_id));
+    let hitBudget = false;
+    let pageErr = false;
+    do {
+      if (Date.now() - t0 > budgetMs) { hitBudget = true; break; }
+      const page = await fetchPage(cursor);
+      if (!page) { pageErr = true; break; } // transient after retries — stop, keep progress, resume next poll
+      for (const item of page.items) {
+        if (items.length >= MAX_HOLDINGS) { truncated = true; break; }
+        if (seen.has(item.encoded_id)) continue;
+        seen.add(item.encoded_id);
+        if (isDisplayableNft({ is_blocked: item.is_blocked, blocked_content: item.collection_blocked_content })) items.push(item);
+      }
+      cursor = page.next;
+    } while (cursor && items.length < MAX_HOLDINGS);
+
+    // COMPLETE only if we reached a genuine end (or the cap) WITHOUT budget/error stopping us early.
+    const complete = !hitBudget && !pageErr && (!cursor || items.length >= MAX_HOLDINGS);
+
+    // Persist paging progress BEFORE resolving collections (a network step), so a function kill during
+    // collectionsFor never loses this pass's pages. Carries the collections resolved so far.
+    if (!complete) {
+      const pre: HoldingsCheckpoint = { cursor: cursor ?? null, items, truncated, collections: [...colMap.entries()] };
+      await cachePutLargeAsync(`holdscan:${key}`, JSON.stringify(pre), HOLDSCAN_EX_S);
+    }
+
+    const collections = await collectionsFor(items, colMap); // only newly-seen collections hit the network
+
+    if (complete) {
+      if (items.length > 0) {
+        const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
+        await cachePutLargeAsync(`holdings3:${key}`, JSON.stringify(payload), HOLDINGS_EX_S);
+      }
+      const cleared: HoldingsCheckpoint = { cursor: null, items: [], truncated, collections: [] };
+      await cachePutLargeAsync(`holdscan:${key}`, JSON.stringify(cleared), 1); // drop the checkpoint
+      recordTiming("wallet.holdings", Date.now() - t0);
+      if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings COMPLETE in ${Date.now() - t0}ms (${items.length} nfts)`);
+      return { items, collections, truncated, warming: false };
+    }
+
+    // Budget hit / more pages remain / transient error: update the checkpoint WITH the newly-resolved
+    // collections (so the next pass skips re-resolving them) and poll again.
+    const checkpoint: HoldingsCheckpoint = { cursor: cursor ?? null, items, truncated, collections: [...collections.entries()] };
+    await cachePutLargeAsync(`holdscan:${key}`, JSON.stringify(checkpoint), HOLDSCAN_EX_S);
+    recordTiming("wallet.holdings", Date.now() - t0);
+    if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings PARTIAL ${items.length} nfts in ${Date.now() - t0}ms (warming)`);
+    return { items, collections, truncated, warming: true };
+  } finally {
+    await releaseLock(`holds:${key}`);
+  }
 }
