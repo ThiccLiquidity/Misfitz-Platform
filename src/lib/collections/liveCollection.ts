@@ -8,6 +8,7 @@ import { getSeed } from "@/lib/data-sources/seed/registry";
 import { seedPctFn, stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock, keepAlive } from "@/lib/db/nftCache";
 import { writeValueIndex } from "@/lib/valuation/valueIndex";
+import { hasNoComps } from "@/lib/valuation/compsService";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
@@ -392,7 +393,13 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
   };
   if (!isCompsEnabled()) return result(cards, [], false);
   const comps = await getCompsModel(id).catch(() => null);
-  if (!comps) return result(cards, [], true); // cold model → warming; old values until the background build warms up
+  if (!comps) {
+    // No comps model. If the collection genuinely has NO clean sales, the baseline IS final — return
+    // non-warming so the value index is written and the portfolio/browse stop polling. Otherwise the model
+    // is still building → warming (old values until it lands).
+    if (await hasNoComps(id).catch(() => false)) return result(cards, [], false);
+    return result(cards, [], true);
+  }
 
   const nfts = cards.map((card) => {
     if (card.rarityRank == null || !card.fairValue) return card;

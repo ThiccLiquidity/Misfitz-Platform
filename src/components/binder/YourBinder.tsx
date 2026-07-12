@@ -12,6 +12,7 @@ import type { MyHoldings } from "@/lib/portfolio/myHoldings";
 import { useHiddenCollections } from "@/lib/portfolio/useHiddenCollections";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
+import { stampValueEntry, type ValueEntry } from "@/lib/valuation/valueEntry";
 
 const SHELL: CollectionData = {
   slug: "my-binder", name: "Your Binder", description: null, bannerUrl: null, iconUrl: null,
@@ -157,16 +158,34 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         done += ids.length;
         if (!cancelled) setProgress(Math.min(1, done / total));
       }
-      // A first-ever warming collection (not scanned yet) lands its ranks a moment later — re-enrich the
-      // baseline/unranked cards until the comps model finishes building (it can take minutes on a cold
-      // serverless instance). Mirrors the collection page's persistence so portfolio value == browse value.
-      for (let attempt = 0; attempt < 12 && unranked.size > 0 && !cancelled; attempt++) {
-        await new Promise((r) => setTimeout(r, Math.min(60_000, 4_000 * 1.7 ** attempt)));
+      // Converge any cards still on the baseline via the CHEAP value-index endpoint — one lookup per
+      // collection (no per-NFT re-enrichment), which also kicks the shared cold build for not-yet-indexed
+      // collections. Stamps browse-identical values as they land. Replaces the old expensive /api/binder retry.
+      for (let attempt = 0; attempt < 15 && unranked.size > 0 && !cancelled; attempt++) {
+        await new Promise((r) => setTimeout(r, Math.min(30_000, 4_000 * 1.5 ** attempt)));
         if (cancelled) break;
-        const retry = [...unranked];
-        for (let i = 0; i < retry.length && !cancelled; i += CHUNK) {
-          try { applyChunk(await postChunk(retry.slice(i, i + CHUNK)), unranked); } catch { /* ignore */ }
-        }
+        const byCol: Record<string, string[]> = {};
+        const cardCol = new Map(nftsRef.current.map((n) => [n.launcherId, n.collectionSlug]));
+        for (const id of unranked) { const c = cardCol.get(id); if (c?.startsWith("col1")) (byCol[c] ??= []).push(id); }
+        if (Object.keys(byCol).length === 0) break;
+        try {
+          const res = await fetch("/api/values", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cols: byCol }) });
+          if (!res.ok) continue;
+          const data = (await res.json()) as { values?: Record<string, ValueEntry> };
+          if (cancelled) return;
+          const vals = data.values ?? {};
+          const gotIds = Object.keys(vals);
+          if (gotIds.length) {
+            setNfts((prev) => prev.map((n) => {
+              const e = vals[n.launcherId];
+              if (!e) return n;
+              const c = { ...n };
+              stampValueEntry(c, e, holdings.xchUsdRate);
+              return c;
+            }));
+            for (const id of gotIds) { unranked.delete(id); enrichedRef.current.add(id); }
+          }
+        } catch { /* transient — poll again */ }
       }
       if (!cancelled) setEnriching(false);
     })();

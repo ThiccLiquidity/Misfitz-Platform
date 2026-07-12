@@ -78,7 +78,10 @@ async function build(colId: string): Promise<CompsModel | null> {
     fetchCollectionCompletedSales(colId),
     fetchCollectionFloor(colId).catch(() => null),
   ]);
-  if (sales.length === 0) return null;
+  if (sales.length === 0) {
+    try { cachePut(`comps-none:${colId}`, "1", 60 * 60); } catch { /* best effort */ } // no clean sales -> remember it
+    return null;
+  }
 
   // Most-recent sales first, capped — these dominate the recency-weighted model anyway.
   const recent = [...sales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, MAX_NFTS);
@@ -196,6 +199,12 @@ function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean): Pro
  * network build (returning null now so the caller keeps the old estimate and never blocks).
  * Pass `wait: true` only from background jobs that can afford to await the full build.
  */
+// True when a recent build found NO clean sales for this collection (so no comps model will ever exist and
+// callers should settle on the baseline value rather than waiting/polling).
+export async function hasNoComps(colId: string): Promise<boolean> {
+  try { return (await cacheGet(`comps-none:${colId}`, 60 * 60_000)) != null; } catch { return false; }
+}
+
 export async function getCompsModel(colId: string, opts: { wait?: boolean } = {}): Promise<CompsModel | null> {
   if (!colId.startsWith("col1")) return null;
   const hit = _cache.get(colId);

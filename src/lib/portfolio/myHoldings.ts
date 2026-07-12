@@ -6,7 +6,7 @@ import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/typ
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { getSeed } from "@/lib/data-sources/seed/registry";
 import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
-import { stampCardsFromIndex } from "@/lib/valuation/valueIndex";
+import { stampCardsFromIndex, noteWarmset } from "@/lib/valuation/valueIndex";
 import { getAllCollectionCards } from "@/lib/collections/liveCollection";
 import { keepAlive } from "@/lib/db/nftCache";
 
@@ -161,6 +161,7 @@ export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: 
   for (const n of nfts) if (n.collectionSlug.startsWith("col1")) colCount.set(n.collectionSlug, (colCount.get(n.collectionSlug) ?? 0) + 1);
   const heldCols = [...colCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c]) => c);
   if (heldCols.length) keepAlive((async () => { for (const c of heldCols) await getAllCollectionCards(c).catch(() => null); })());
+  keepAlive(noteWarmset([...colCount.keys()])); // remember this wallet's collections so the nightly cron pre-warms them
 
   return summarize(nfts, xchUsdRate, addresses, truncated, warming, false);
 }

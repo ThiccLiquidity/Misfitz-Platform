@@ -3,6 +3,7 @@ import { getTrendingCollections } from "@/lib/collections/discovery";
 import { getAllCollectionCards } from "@/lib/collections/liveCollection";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { getCompsModel } from "@/lib/valuation/compsService";
+import { readWarmset } from "@/lib/valuation/valueIndex";
 
 // Nightly "top-collection treatment" warmer. Gives the top-N-by-volume collections the same instant,
 // pre-computed experience Misfitz gets from its seed: our OpenRarity rank table, the roster scan, and the
@@ -41,8 +42,8 @@ export async function GET(req: Request) {
   const i = Math.max(0, Number(url.searchParams.get("i") ?? "0") | 0);
   const attempt = Math.max(0, Number(url.searchParams.get("a") ?? "0") | 0);
 
-  const trending = await getTrendingCollections(TOP_N).catch(() => []);
-  const ids = trending.map((c) => c.id).filter((id): id is string => typeof id === "string" && id.startsWith("col1"));
+  const [trending, warmset] = await Promise.all([getTrendingCollections(TOP_N).catch(() => []), readWarmset().catch(() => [])]);
+  const ids = [...new Set([...trending.map((c) => c.id), ...warmset])].filter((id): id is string => typeof id === "string" && id.startsWith("col1")).slice(0, 50);
   if (i >= ids.length) return NextResponse.json({ ok: true, done: true, count: ids.length });
 
   const id = ids[i];
