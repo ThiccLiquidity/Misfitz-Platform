@@ -48,6 +48,17 @@ function lastSalePriceXch(events: MgNftDetail["events"]): number | null {
   return price;
 }
 
+// Up to `n` most-recent SALE prices (XCH), newest first. Raw chain sale events (type 2) — UNFILTERED by the
+// comps wash-defenses, so this is display-only "recent sales", never fed into valuation. Events are
+// chronological ascending, so take the tail and reverse.
+function recentSalesXch(events: MgNftDetail["events"], n = 3): { priceXch: number }[] {
+  const sales: { priceXch: number }[] = [];
+  for (const e of events ?? []) {
+    if (e?.type === 2 && typeof e.xch_price === "number" && e.xch_price > 0) sales.push({ priceXch: e.xch_price });
+  }
+  return sales.slice(-n).reverse();
+}
+
 // Per-NFT price signal used to derive a COLLECTION floor when the market has no other floor: this
 // NFT's most recent sale, else its current ask. Aggregated across a collection's NFTs in service.ts.
 export function nftMarketAnchorXch(detail: MgNftDetail): number | null {
@@ -219,6 +230,7 @@ export function mapDetailToNftData(
     rarityRank,
     rankEstimated,
     currentOwnerAddress: detail.owner_address?.encoded_id ?? null,
+    recentSales: ((r) => (r.length ? r : null))(recentSalesXch(detail.events)),
     fairValue,
     rarityScore,
     listing,

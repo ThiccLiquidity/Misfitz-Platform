@@ -72,6 +72,9 @@ export interface NftData {
   // and never set the collection floor. Verify the real terms on MintGarden before buying.
   listingUnverified?: boolean | null;
   dealScore: DealScore | null;
+  // Up to 3 most-recent SALE prices in XCH (newest first), straight from chain events — UNFILTERED by the
+  // comps wash-defenses, so display-only, never fed into valuation. Null when no sale history / not enriched.
+  recentSales?: { priceXch: number }[] | null;
   // Comparable-sales valuation (src/lib/valuation). When the comps model has evidence near this NFT,
   // fairValue.totalEstimate is blended toward the sales-implied value; these describe that influence.
   // valueConfidence 0..1 = how much real sales backed it; valueBasis = short human explanation.

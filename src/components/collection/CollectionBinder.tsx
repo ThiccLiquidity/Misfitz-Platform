@@ -44,6 +44,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [sort, setSort] = useState<SortKey>("rank-asc");
   const [traitFilters, setTraitFilters] = useState<TraitFilters>({});
   const [forSaleOnly, setForSaleOnly] = useState(false);
+  const prevSortRef = useRef<SortKey>("rank-asc"); // restore the shopper's sort when they leave Best Deals
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [collectorOnly, setCollectorOnly] = useState(false);
@@ -366,6 +367,37 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
 
 
       <TierStatsBar collection={SHELL} nfts={nfts} />
+
+      {/* Best Deals — the headline shopping action: for-sale only, sorted by our deal score. */}
+      {(() => {
+        const on = forSaleOnly && sort === "deal-desc";
+        const toggle = () => {
+          if (on) { setForSaleOnly(false); setSort(prevSortRef.current ?? "rank-asc"); }
+          else { prevSortRef.current = sort; setForSaleOnly(true); setSort("deal-desc"); }
+        };
+        return (
+          <div className="mb-4 flex justify-center px-1">
+            <button
+              type="button"
+              onClick={toggle}
+              aria-pressed={on}
+              className="group relative inline-flex items-center gap-2.5 rounded-full px-7 py-3 text-base font-black uppercase tracking-wide text-white shadow-lg transition-transform duration-150 hover:scale-[1.03] active:scale-95"
+              style={{
+                background: on
+                  ? "linear-gradient(90deg,#16a34a,#22c55e 55%,#f0c040)"
+                  : "linear-gradient(90deg,#1f8f47,#2fae5e 55%,#c99a2e)",
+                boxShadow: on ? "0 0 0 3px rgba(34,197,94,0.35), 0 8px 22px rgba(34,197,94,0.35)" : "0 6px 18px rgba(0,0,0,0.35)",
+              }}
+            >
+              <span className="text-lg leading-none">{on ? "✅" : "🔥"}</span>
+              {on ? "Showing Best Deals" : "Best Deals"}
+              {listedCount > 0 && (
+                <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-bold tabular-nums">{listedCount} listed</span>
+              )}
+            </button>
+          </div>
+        );
+      })()}
 
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1320 }}>
         <FilterSidebar {...sidebarProps} />

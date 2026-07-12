@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { ListPriceCoach } from "./ListPriceCoach";
 import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
@@ -50,14 +52,22 @@ interface NftDetailModalProps {
   // Where the "View Full Page" button links. undefined = default DB collection route;
   // null = hide the button (live NFTs from MintGarden have no on-platform page).
   fullPageHref?: string | null;
+  // Portfolio context: show the "browse this collection" link (with a leave-warning) + the list-price coach.
+  fromPortfolio?: boolean;
 }
 
 export function NftDetailModal({
-  nft, collectionName, totalSupply, rarityTiers, onClose, fullPageHref,
+  nft, collectionName, totalSupply, rarityTiers, onClose, fullPageHref, fromPortfolio = false,
 }: NftDetailModalProps) {
   const { mode } = useThemeMode();
+  const router = useRouter();
   const isLight = mode === "light";
   const [lightbox, setLightbox] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  // Derive the XCH->USD rate the coach needs (the modal gets no rate prop) from the fair-value pair.
+  const fv = nft.fairValue;
+  const xchUsdRate = fv && fv.totalEstimate > 0 ? fv.totalEstimateUsd / fv.totalEstimate : 0;
+  const collectionHref = fromPortfolio && nft.collectionSlug?.startsWith("col1") ? `/collection/${nft.collectionSlug}` : null;
   const [showValueInfo, setShowValueInfo] = useState(false); // tap-to-toggle (touch has no hover)
   const [expandTrait, setExpandTrait] = useState(false);
   // Keyboard: Escape closes the lightbox if open, otherwise the modal (a11y).
@@ -343,6 +353,61 @@ export function NftDetailModal({
             </div>
           )}
 
+          {/* Recent sales (unfiltered chain events) — display only, never fed into valuation */}
+          {nft.recentSales && nft.recentSales.length > 0 && (
+            <div className="px-4 pt-2 pb-1">
+              <div className="rounded-lg px-3 py-2" style={{ border: `1px solid ${divider}` }}>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wide" style={{ color: lblColor }}>
+                  Recent sales <span style={{ color: subColor }}>· unfiltered</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {nft.recentSales.map((s, i) => (
+                    <span key={i} className="rounded-md px-2 py-0.5 text-xs font-bold tabular-nums"
+                      style={{ background: isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.06)", color: valColor }}>
+                      {formatXch(s.priceXch)} XCH
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* List-price coach (portfolio only): what to list at for each badge, with a live slider */}
+          {fromPortfolio && fv && fv.totalEstimate > 0 && (
+            <div className="px-4 pt-1 pb-1" onClick={(e) => e.stopPropagation()}>
+              <ListPriceCoach fairValueXch={fv.totalEstimate} xchUsdRate={xchUsdRate} mgNftUrl={mgNftUrl} isLight={isLight} />
+            </div>
+          )}
+
+          {/* Browse this collection (portfolio only) — warns before leaving portfolio view */}
+          {collectionHref && (
+            <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>
+              {!confirmLeave ? (
+                <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmLeave(true); }}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
+                  style={{ background: isLight ? `${accentColor}14` : `${accentColor}18`, border: `1px solid ${accentColor}55`, color: valColor }}>
+                  Browse this whole collection ↗
+                </button>
+              ) : (
+                <div className="rounded-lg px-3 py-2 text-center" style={{ border: `1px solid ${accentColor}55`, background: isLight ? "rgba(10,30,80,0.04)" : "rgba(255,255,255,0.03)" }}>
+                  <div className="mb-1.5 text-[11px] font-semibold" style={{ color: lblColor }}>
+                    You&apos;re leaving your portfolio for the collection browser.
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); router.push(collectionHref); }}
+                      className="flex-1 rounded-md py-1.5 text-xs font-bold text-white" style={{ background: accentColor }}>
+                      Continue
+                    </button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmLeave(false); }}
+                      className="flex-1 rounded-md py-1.5 text-xs font-bold" style={{ border: `1px solid ${divider}`, color: subColor }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* View Full Page link */}
           {resolvedFullPageHref !== null && (
             <div className="px-4 pt-3 pb-1" style={{ borderTop: `1px solid ${divider}` }}>
@@ -400,7 +465,7 @@ export function NftDetailModal({
                         style={{ color: subColor }}
                         title={hotTraitLabel(nft.valueTraitTop) ? `Trait demand · ${hotTraitLabel(nft.valueTraitTop)}` : "Trait demand"}
                       >
-                        Trait demand{hotTraitLabel(nft.valueTraitTop) ? ` · \uD83D\uDD25 ${hotTraitLabel(nft.valueTraitTop)}` : ""}
+                        Trait demand{hotTraitLabel(nft.valueTraitTop) ? ` · 🔥 ${hotTraitLabel(nft.valueTraitTop)}` : ""}
                       </button>
                       <span className="shrink-0 text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
                     </div>
@@ -444,10 +509,10 @@ export function NftDetailModal({
                 return (
                   <div className="mt-2 border-t pt-2 text-[10px]" style={{ borderColor: divider, color: subColor }}>
                     <div className="flex items-center justify-between">
-                      <span>{nft.rarityRank == null ? "Unranked \u2014 floor estimate" : "Sales confidence"}</span>
+                      <span>{nft.rarityRank == null ? "Unranked — floor estimate" : "Sales confidence"}</span>
                       {level && nft.rarityRank != null && (
                         <span style={{ color: level === "Low" ? "#f4a940" : lblColor, fontWeight: 700 }}>
-                          {level}{n != null ? ` \u00b7 ${n} sale${n === 1 ? "" : "s"}` : ""}
+                          {level}{n != null ? ` · ${n} sale${n === 1 ? "" : "s"}` : ""}
                         </span>
                       )}
                     </div>

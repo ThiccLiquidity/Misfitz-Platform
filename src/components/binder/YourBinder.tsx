@@ -141,7 +141,10 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
       for (const n of data.nfts) {
         enrichedRef.current.add(n.launcherId);
-        if (n.collectionSlug?.startsWith("col1") && n.rarityRank == null) unranked.add(n.launcherId);
+        // Re-ask cards still missing a rank OR still on the pre-comps baseline (valueBasis null): the comps
+        // model may be building in the background, so retrying lets the portfolio value converge to the same
+        // comps value the collection page shows, instead of being stuck on floor + rarity premium.
+        if (n.collectionSlug?.startsWith("col1") && (n.rarityRank == null || n.valueBasis == null)) unranked.add(n.launcherId);
         else unranked.delete(n.launcherId);
       }
     };
@@ -289,7 +292,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1440 }}>
         <FilterSidebar {...sidebarProps} />
         <div className="min-w-0 flex-1" style={{ maxWidth: 880 }}>
-          <BinderView key={binderKey} collection={SHELL} nfts={filtered} hideFullPageLink />
+          <BinderView key={binderKey} collection={SHELL} nfts={filtered} hideFullPageLink fromPortfolio />
         </div>
         <BinderCollectionPicker
           collections={collections}
@@ -326,7 +329,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             {hidden.size} hidden — show all
           </button>
         )}
-        <BinderView key={`m-${binderKey}`} collection={SHELL} nfts={filtered} hideFullPageLink />
+        <BinderView key={`m-${binderKey}`} collection={SHELL} nfts={filtered} hideFullPageLink fromPortfolio />
       </div>
 
       {/* Mobile filter sheet — tier + traits + sort (same FilterSidebar as desktop, in a bottom sheet) */}

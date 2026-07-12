@@ -21,6 +21,9 @@ interface BinderViewProps {
   // Grid path (phones/tablets): reveal more cards when paging past the last loaded page.
   onNeedMore?: () => void;
   hasMore?: boolean;
+  // Portfolio context: the modal shows the "view this collection" link (with a leave-warning) and the
+  // "what to list at for each badge" coach. Off on the collection page (you don't list someone else's NFT).
+  fromPortfolio?: boolean; // portfolio-only affordances
 }
 
 // Two-page spread binder with a CSS 3D page-flip mechanic (approved prototype §11).
@@ -42,7 +45,7 @@ interface BinderViewProps {
 //
 // z-index: spine(3) > right-area(2) > flipper(1) > underlay(0)
 // During animation: right-area raised to z-100 so flipper passes OVER spine rings.
-export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedMore, hasMore = false }: BinderViewProps) {
+export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedMore, hasMore = false, fromPortfolio = false }: BinderViewProps) {
   const { mode } = useThemeMode();
   const tokens = getThemeTokens(mode, collection.theme);
   const cssVars = themeTokensToCssVars(tokens);
@@ -377,6 +380,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
           rarityTiers={collection.rarityTiers}
           onClose={() => setOpenLauncherId(null)}
           fullPageHref={hideFullPageLink ? null : undefined}
+          fromPortfolio={fromPortfolio}
         />
       )}
     </div>
