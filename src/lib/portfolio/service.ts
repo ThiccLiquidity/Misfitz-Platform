@@ -12,6 +12,7 @@ import { isCompsEnabled } from "@/lib/config";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { isSeeded, getSeed } from "@/lib/data-sources/seed/registry";
 import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
+import { stampCardsFromIndex } from "@/lib/valuation/valueIndex";
 
 // The no-login "what's my wallet worth" service (ARCHITECTURE.md Product Vision / VALUATION.md).
 // Pulls an address's live holdings from MintGarden, values each NFT, groups by collection, and
@@ -280,5 +281,8 @@ export async function enrichNftsByIds(
       card.valueTraitTop = cv.traitTop ?? null;
     }
   }
+  // Prefer the browse-computed value index so /api/binder returns browse-identical numbers and never
+  // reverts an SSR-stamped card below the browse value (detail-derived comps above is the fallback).
+  await stampCardsFromIndex(out, xchUsdRate);
   return out;
 }

@@ -6,7 +6,8 @@ import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency, scaledRankOf } from "@/lib/rarity/collectionFrequency";
 import { getSeed } from "@/lib/data-sources/seed/registry";
 import { seedPctFn, stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
-import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock, keepAlive } from "@/lib/db/nftCache";
+import { writeValueIndex } from "@/lib/valuation/valueIndex";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
@@ -384,8 +385,11 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
     }
   }
 
-  const result = (nfts: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) =>
-    ({ nfts, total: nfts.length, capped: base.capped, hotTraits, warming: warming || rarityWarming || !!base.warming });
+  const result = (nfts: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) => {
+    const w = warming || rarityWarming || !!base.warming;
+    if (!w) keepAlive(writeValueIndex(id, nfts)); // browse writes the value index; the portfolio reads it (Phase 1)
+    return { nfts, total: nfts.length, capped: base.capped, hotTraits, warming: w };
+  };
   if (!isCompsEnabled()) return result(cards, [], false);
   const comps = await getCompsModel(id).catch(() => null);
   if (!comps) return result(cards, [], true); // cold model → warming; old values until the background build warms up
