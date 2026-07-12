@@ -314,6 +314,37 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   // Remounts the binder (resets its grid page) when the FILTER changes, not on enrichment polls / Show more.
   const filterKey = `${tier}|${sort}|${JSON.stringify(traitFilters)}|${forSaleOnly}|${priceMin}|${priceMax}|${collectorOnly}|${collectorTier}|${catFilter}|${search}`;
 
+  // Best Deals pill (rendered centered over the binder spread on both breakpoints, below).
+  const bestDealsOn = forSaleOnly && sort === "deal-desc";
+  const toggleBestDeals = () => {
+    if (bestDealsOn) { setForSaleOnly(false); setSort(prevSortRef.current ?? "rank-asc"); }
+    else { prevSortRef.current = sort; setForSaleOnly(true); setSort("deal-desc"); }
+  };
+  const bestDealsPill = (
+    <div className="mb-3 flex justify-center">
+      <style>{`@keyframes bd-glow{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,0.35)}50%{box-shadow:0 0 24px 5px rgba(34,197,94,0.6),0 4px 14px rgba(0,0,0,0.35)}}`}</style>
+      <button
+        type="button"
+        onClick={toggleBestDeals}
+        aria-pressed={bestDealsOn}
+        className="group relative inline-flex items-center gap-2.5 rounded-full px-7 py-3 text-base font-black uppercase tracking-wide text-white transition-transform duration-150 hover:scale-[1.04] active:scale-95"
+        style={{
+          background: bestDealsOn
+            ? "linear-gradient(90deg,#16a34a,#22c55e 55%,#f0c040)"
+            : "linear-gradient(90deg,#1f8f47,#2fae5e 55%,#c99a2e)",
+          animation: "bd-glow 2.2s ease-in-out infinite",
+        }}
+      >
+        <span className="text-lg leading-none">{bestDealsOn ? "✅" : "🔥"}</span>
+        {bestDealsOn ? "Showing Best Deals" : "Best Deals"}
+        {listedCount > 0 && (
+          <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-bold tabular-nums">{listedCount} listed</span>
+        )}
+      </button>
+    </div>
+  );
+
+
   return (
     <div className="py-2">
       <WorkingIndicator
@@ -368,40 +399,10 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
 
       <TierStatsBar collection={SHELL} nfts={nfts} />
 
-      {/* Best Deals — the headline shopping action: for-sale only, sorted by our deal score. */}
-      {(() => {
-        const on = forSaleOnly && sort === "deal-desc";
-        const toggle = () => {
-          if (on) { setForSaleOnly(false); setSort(prevSortRef.current ?? "rank-asc"); }
-          else { prevSortRef.current = sort; setForSaleOnly(true); setSort("deal-desc"); }
-        };
-        return (
-          <div className="mb-4 flex justify-center px-1">
-            <button
-              type="button"
-              onClick={toggle}
-              aria-pressed={on}
-              className="group relative inline-flex items-center gap-2.5 rounded-full px-7 py-3 text-base font-black uppercase tracking-wide text-white shadow-lg transition-transform duration-150 hover:scale-[1.03] active:scale-95"
-              style={{
-                background: on
-                  ? "linear-gradient(90deg,#16a34a,#22c55e 55%,#f0c040)"
-                  : "linear-gradient(90deg,#1f8f47,#2fae5e 55%,#c99a2e)",
-                boxShadow: on ? "0 0 0 3px rgba(34,197,94,0.35), 0 8px 22px rgba(34,197,94,0.35)" : "0 6px 18px rgba(0,0,0,0.35)",
-              }}
-            >
-              <span className="text-lg leading-none">{on ? "✅" : "🔥"}</span>
-              {on ? "Showing Best Deals" : "Best Deals"}
-              {listedCount > 0 && (
-                <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-bold tabular-nums">{listedCount} listed</span>
-              )}
-            </button>
-          </div>
-        );
-      })()}
-
       <div className="mx-auto hidden items-start justify-center gap-4 md:flex" style={{ maxWidth: 1320 }}>
         <FilterSidebar {...sidebarProps} />
         <div className="min-w-0 flex-1" style={{ maxWidth: 960 }}>
+          {bestDealsPill}
           <BinderView key={filterKey} collection={SHELL} nfts={displayed} hideFullPageLink onNeedMore={() => setVisible((v) => v + PAGE)} hasMore={visible < filtered.length} />
           {displayed.length < filtered.length && (
             <div className="mt-5 hidden justify-center xl:flex">
@@ -419,6 +420,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         <div className="mb-2 flex justify-end px-1">
           <MobileFilterButton onClick={() => setFilterSheetOpen(true)} activeCount={activeFilterCount} />
         </div>
+        {bestDealsPill}
         <BinderView key={filterKey} collection={SHELL} nfts={displayed} hideFullPageLink onNeedMore={() => setVisible((v) => v + PAGE)} hasMore={visible < filtered.length} />
         {displayed.length < filtered.length && (
           <div className="mt-4 hidden">
