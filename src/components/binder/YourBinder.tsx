@@ -140,7 +140,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       const byId = new Map(data.nfts.map((n) => [n.launcherId, n]));
       setNfts((prev) => prev.map((n) => byId.get(n.launcherId) ?? n));
       for (const n of data.nfts) {
-        enrichedRef.current.add(n.launcherId);
+        if (n.valueBasis != null || !n.collectionSlug?.startsWith("col1")) enrichedRef.current.add(n.launcherId);
         // Re-ask cards still missing a rank OR still on the pre-comps baseline (valueBasis null): the comps
         // model may be building in the background, so retrying lets the portfolio value converge to the same
         // comps value the collection page shows, instead of being stuck on floor + rarity premium.
@@ -158,9 +158,10 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         if (!cancelled) setProgress(Math.min(1, done / total));
       }
       // A first-ever warming collection (not scanned yet) lands its ranks a moment later — re-enrich the
-      // still-unranked cards a couple times so they fill in without a manual reload (small, cached payloads).
-      for (let attempt = 0; attempt < 2 && unranked.size > 0 && !cancelled; attempt++) {
-        await new Promise((r) => setTimeout(r, attempt === 0 ? 15_000 : 30_000));
+      // baseline/unranked cards until the comps model finishes building (it can take minutes on a cold
+      // serverless instance). Mirrors the collection page's persistence so portfolio value == browse value.
+      for (let attempt = 0; attempt < 12 && unranked.size > 0 && !cancelled; attempt++) {
+        await new Promise((r) => setTimeout(r, Math.min(60_000, 4_000 * 1.7 ** attempt)));
         if (cancelled) break;
         const retry = [...unranked];
         for (let i = 0; i < retry.length && !cancelled; i += CHUNK) {
