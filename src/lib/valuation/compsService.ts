@@ -15,7 +15,7 @@ import { fetchCollectionCompletedSales, fetchCollectionFloor } from "@/lib/marke
 import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
 import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
-import { cacheGet, cachePut, keepAlive } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, keepAlive, tryLock, releaseLock } from "@/lib/db/nftCache";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 import { isSeeded, getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
@@ -163,9 +163,21 @@ async function build(colId: string): Promise<CompsModel | null> {
 
 // Kick a network (re)build in the background, keeping the stale model live until it lands.
 function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean): Promise<CompsModel | null> {
-  const building = build(colId)
+  // One build per collection across ALL instances. Previously every cold lambda kicked its own duplicate
+  // build (429-storming the others, often dying before it persisted). Lock-losers return stale and pick up
+  // the persisted blob on the next poll. Null results cache only briefly so we re-check the blob soon.
+  const locked = (async (): Promise<CompsModel | null> => {
+    const got = await tryLock(`compsbuild:${colId}`, 120).catch(() => false);
+    if (!got) {
+      // Another instance is building — pick up its freshly-persisted blob if it's already there.
+      try { const raw = await cacheGet(`comps:${colId}`, DB_TTL); if (raw) { const m = modelFromPersisted(JSON.parse(raw) as PersistedComps); if (m) return m; } } catch { /* fall back to stale */ }
+      return stale;
+    }
+    try { return await build(colId); } finally { await releaseLock(`compsbuild:${colId}`); }
+  })();
+  const building = locked
     .then((model) => {
-      _cache.set(colId, { model, expiresAt: Date.now() + TTL });
+      _cache.set(colId, { model, expiresAt: Date.now() + (model ? TTL : 15_000) });
       return model;
     })
     .catch(() => {

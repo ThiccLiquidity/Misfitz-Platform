@@ -6,6 +6,8 @@ import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/typ
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { getSeed } from "@/lib/data-sources/seed/registry";
 import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
+import { getCompsModel } from "@/lib/valuation/compsService";
+import { keepAlive } from "@/lib/db/nftCache";
 
 // Aggregates a collector's holdings across one or more addresses into a single flat binder feed.
 // Each NFT carries its own collection's totalSupply + name so rarity is computed correctly per
@@ -148,5 +150,13 @@ export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: 
 
   await applySeedOverlay(nfts, floorByCol, xchUsdRate);
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
+  // Pre-warm the comps model for the collections this wallet holds — most-held first, capped — so the
+  // client's enrichment finds a WARM model instead of each 24-id chunk triggering its own cold build. Runs
+  // in the background (keepAlive survives the serverless freeze); the build lock dedupes across instances.
+  const colCount = new Map<string, number>();
+  for (const n of nfts) if (n.collectionSlug.startsWith("col1")) colCount.set(n.collectionSlug, (colCount.get(n.collectionSlug) ?? 0) + 1);
+  const heldCols = [...colCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c]) => c);
+  if (heldCols.length) keepAlive((async () => { for (const c of heldCols) await getCompsModel(c).catch(() => null); })());
+
   return summarize(nfts, xchUsdRate, addresses, truncated, warming, false);
 }

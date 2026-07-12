@@ -7,6 +7,7 @@ import { YourBinder } from "@/components/binder/YourBinder";
 // the fast slim-list grid paints in ~1s (art + floor-anchored value), then traits, our estimated ranks,
 // and refined values stream in — the same fast path as Your Binder. No account, no wallet connection.
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // background comps warm (keepAlive) needs room to finish
 
 export default async function PortfolioPage({
   searchParams,

@@ -7,6 +7,7 @@ import { timed } from "@/lib/perf/timing";
 // already resolved, and we return the enriched cards for just those ids. Cached detail fetches make
 // repeat chunks fast.
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // a kicked comps build must be able to finish + persist, not die with the request
 
 export async function POST(req: Request) {
   let body: { ids?: string[]; floors?: Record<string, number>; xchUsdRate?: number };
