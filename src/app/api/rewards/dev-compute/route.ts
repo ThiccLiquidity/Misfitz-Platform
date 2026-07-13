@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isRewardsShadowEnabled } from "@/lib/rewards/flag";
 import { computeRewardsSnapshot } from "@/lib/rewards/snapshotJob";
+import { observeLpDaily, computeLpSnapshot } from "@/lib/rewards/lpJob";
 import { MISFITZ_COLLECTION_ID } from "@/lib/rewards/consts";
 
 // DEV-ONLY helper: compute + persist this month's SHADOW snapshot on demand, so you can eyeball the dashboard
@@ -23,5 +24,7 @@ export async function GET() {
   const res = await computeRewardsSnapshot(MISFITZ_COLLECTION_ID, {
     epochStart: monthStartMs(now), epochEnd: now.getTime(), epoch, status: "mtd", dripMonth: 1,
   }).catch((e) => ({ ok: false, status: String((e as Error)?.message ?? e) }));
-  return NextResponse.json({ epoch, ...res }, { headers: { "cache-control": "no-store" } });
+  const lpObserve = await observeLpDaily(MISFITZ_COLLECTION_ID, epoch).catch((e) => ({ ok: false, poolLive: false, observed: 0, error: String((e as Error)?.message ?? e) }));
+  const lp = await computeLpSnapshot(MISFITZ_COLLECTION_ID, { epoch, dripMonth: 1, status: "mtd", advanceTenure: false }).catch((e) => ({ ok: false, status: String((e as Error)?.message ?? e) }));
+  return NextResponse.json({ epoch, ...res, lpObserve, lp }, { headers: { "cache-control": "no-store" } });
 }

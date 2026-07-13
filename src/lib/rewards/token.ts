@@ -1,43 +1,47 @@
 // MisFitz Rewards — $TOKEN supply model (PURE). Fixed 1,000,000,000 supply split into buckets, a monthly
 // GEOMETRIC drip (5% of the REMAINING drip pool), and buy-&-burn accounting. All amounts are bigint BASE UNITS
 // (Chia CAT = 3 decimals, so 1 token = 1000 base units) — no floats on the supply path. Reconciled by an
-// invariant: airdrop + dripPool + lp + team === totalSupply. Moves no funds; imported by nothing in the app.
+// invariant: airdrop + dripPool + lpSeed + lpReward + team === totalSupply. Moves no funds.
 //
-// Operator decisions (MISFITZ-REWARDS.md §10): total 1B; 10% airdrop / 80% drip / 7% LP / 3% team (operator
-// whale stake); drip 5%/mo of the remaining pool; burn = buy back then SEND to an unspendable address (no melt).
+// Operator decisions (MISFITZ-REWARDS.md §10 + §11): total 1B; 10% airdrop / 67% holder drip / 5% LP seed /
+// 15% LP rewards / 3% team. Drip 5%/mo of the remaining pool; burn = buy back then SEND to an unspendable
+// address (may be sent as LP tokens — a "burn into the pool"). The 15% LP-rewards reserve funds the tenure-
+// escalating LP airdrop (§11); it is released by the LP-rewards program, NOT by the holder drip.
 
 export const TOKEN_DECIMALS = 3;
 export const UNITS_PER_TOKEN = BigInt(1000); // Chia CAT smallest unit (3 dp)
 
 export interface TokenConfig {
   symbol: string;
-  burnAddress: string;      // provably-unspendable address the bot sends bought-back tokens to (operator sets it)
+  burnAddress: string;      // provably-unspendable address the bot sends bought-back tokens (or LP tokens) to
   dripRateBps: number;      // 500 = 5% of the REMAINING drip pool each month
   totalSupplyUnits: bigint;
   airdropUnits: bigint;     // one-time airdrop to holders at launch
-  dripPoolUnits: bigint;    // reserve released by the monthly drip
-  lpUnits: bigint;          // seed TibetSwap liquidity
+  dripPoolUnits: bigint;    // reserve released by the monthly holder drip
+  lpSeedUnits: bigint;      // one-time: pair with XCH to CREATE the TibetSwap $TOKEN/XCH pool
+  lpRewardUnits: bigint;    // reserve for the tenure-escalating LP-holder airdrop (§11); released by the LP program
   teamUnits: bigint;        // operator/team allocation ("make me a whale")
 }
 
 const T = (tokens: number): bigint => BigInt(tokens) * UNITS_PER_TOKEN;
 
-// 1,000,000,000 $TOKEN — 10% airdrop / 80% drip / 7% LP / 3% team. burnAddress + symbol are placeholders until
-// the TAIL is minted and the token is named.
+// 1,000,000,000 $TOKEN — 10% airdrop / 67% drip / 5% LP seed / 15% LP rewards / 3% team. burnAddress + symbol
+// are placeholders until the TAIL is minted and the token is named.
 export const MISFITZ_TOKEN: TokenConfig = {
   symbol: "$TOKEN",
   burnAddress: "xch1__UNSPENDABLE_BURN_ADDRESS_TBD__",
   dripRateBps: 500,
   totalSupplyUnits: T(1_000_000_000),
   airdropUnits:     T(100_000_000), // 10%
-  dripPoolUnits:    T(800_000_000), // 80%
-  lpUnits:          T(70_000_000),  // 7%
+  dripPoolUnits:    T(670_000_000), // 67%
+  lpSeedUnits:      T(50_000_000),  // 5%
+  lpRewardUnits:    T(150_000_000), // 15%
   teamUnits:        T(30_000_000),  // 3%
 };
 
 // Invariant: every base unit is accounted for across the buckets.
 export function reconciles(c: TokenConfig): boolean {
-  return c.airdropUnits + c.dripPoolUnits + c.lpUnits + c.teamUnits === c.totalSupplyUnits;
+  return c.airdropUnits + c.dripPoolUnits + c.lpSeedUnits + c.lpRewardUnits + c.teamUnits === c.totalSupplyUnits;
 }
 
 // Month N's drip (base units) + the pool remaining after it. Geometric: 5% of the remaining pool each month,
@@ -66,19 +70,21 @@ export function cumulativeDrip(poolUnits: bigint, months: number, rateBps: numbe
 }
 
 export interface Circulating {
-  releasedUnits: bigint;      // airdrop + team + lp + dripped-so-far (entered circulation)
-  burnedUnits: bigint;        // bought back and sent to the burn address (removed)
-  circulatingUnits: bigint;   // released - burned
-  dripRemainingUnits: bigint; // still locked in the drip reserve
+  releasedUnits: bigint;       // airdrop + team + lpSeed + dripped-so-far (entered circulation)
+  burnedUnits: bigint;         // bought back and sent to the burn address (removed)
+  circulatingUnits: bigint;    // released - burned
+  dripRemainingUnits: bigint;  // still locked in the holder-drip reserve
+  lpRewardReserveUnits: bigint; // still locked in the LP-rewards reserve (released by the LP program, §11)
 }
 
-// Circulating supply after `monthsElapsed`, given cumulative tokens bought-back-and-burned (operator-reported,
-// like the $CHIA conversion — the XCH burn pot buys $TOKEN on-market at a price the bot reports, then burns it).
+// Circulating supply after `monthsElapsed`, given cumulative tokens bought-back-and-burned (operator-reported).
+// NOTE: the LP-rewards reserve is treated as LOCKED here (like the drip reserve) — its release schedule lives in
+// the LP-rewards program (§11), so it is reported separately and NOT counted as released until that ships.
 export function circulating(c: TokenConfig, monthsElapsed: number, burnedUnits: bigint = BigInt(0)): Circulating {
   const dripped = cumulativeDrip(c.dripPoolUnits, monthsElapsed, c.dripRateBps);
-  const released = c.airdropUnits + c.teamUnits + c.lpUnits + dripped;
+  const released = c.airdropUnits + c.teamUnits + c.lpSeedUnits + dripped;
   // Refuse impossible inputs rather than silently clamp — burned > released can only be an operator units/tokens
-  // typo (×1000) and clamping would hide exactly that accounting bug.
+  // typo (x1000) and clamping would hide exactly that accounting bug.
   if (burnedUnits < BigInt(0)) throw new Error(`circulating: negative burnedUnits ${burnedUnits}`);
   if (burnedUnits > released) throw new Error(`circulating: burnedUnits ${burnedUnits} exceeds released ${released} — impossible, check units`);
   return {
@@ -86,6 +92,7 @@ export function circulating(c: TokenConfig, monthsElapsed: number, burnedUnits: 
     burnedUnits,
     circulatingUnits: released - burnedUnits,
     dripRemainingUnits: c.dripPoolUnits - dripped,
+    lpRewardReserveUnits: c.lpRewardUnits,
   };
 }
 

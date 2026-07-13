@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isRewardsShadowEnabled } from "@/lib/rewards/flag";
 import { computeRewardsSnapshot, readSnapshotFor } from "@/lib/rewards/snapshotJob";
+import { observeLpDaily, computeLpSnapshot, readLpSnapshotFor } from "@/lib/rewards/lpJob";
 import { MISFITZ_COLLECTION_ID } from "@/lib/rewards/consts";
 
 // SHADOW rewards compute cron (Vercel Cron; see vercel.json). Computes the month-to-date snapshot every run and,
@@ -40,6 +41,12 @@ export async function GET(req: Request) {
     epochStart: monthStartMs(now), epochEnd: now.getTime(), epoch: mtdEpoch, status: "mtd", dripMonth: dripMonthFor(mtdEpoch),
   }).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
 
+  // LP rewards: observe each roster wallet's LP balance today, then preview this month (no tenure advance).
+  results.lpObserve = await observeLpDaily(col, mtdEpoch).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
+  results.lpMtd = await computeLpSnapshot(col, {
+    epoch: mtdEpoch, dripMonth: dripMonthFor(mtdEpoch), status: "mtd", advanceTenure: false,
+  }).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
+
   // First two UTC days: write the previous month's FINAL once (don't overwrite an existing final).
   if (now.getUTCDate() <= 2) {
     const prev = new Date(monthStartMs(now) - 1);
@@ -51,6 +58,14 @@ export async function GET(req: Request) {
     else {
       results.final = await computeRewardsSnapshot(col, {
         epochStart: monthStartMs(prev), epochEnd: monthStartMs(now), epoch: prevEpoch, status: "final", dripMonth: dripMonthFor(prevEpoch), updatePointer: false,
+      }).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
+    }
+    // LP final: advance tenure exactly once per month (skip if the prev LP snapshot is already final).
+    const prevLp = await readLpSnapshotFor(col, prevEpoch).catch(() => null);
+    if (prevLp?.status === "final") results.lpFinal = { skipped: "already final" };
+    else {
+      results.lpFinal = await computeLpSnapshot(col, {
+        epoch: prevEpoch, dripMonth: dripMonthFor(prevEpoch), status: "final", advanceTenure: true, updatePointer: false,
       }).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
     }
   }

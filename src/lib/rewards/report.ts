@@ -64,7 +64,8 @@ export function formatTokenReport(c: TokenConfig, monthsElapsed = 0, burnedUnits
   L.push(`Total supply:  ${tokenStr(c.totalSupplyUnits)} ${c.symbol}`);
   L.push(`  Airdrop:     ${tokenStr(c.airdropUnits)}  (${pct(c.airdropUnits)})`);
   L.push(`  Drip pool:   ${tokenStr(c.dripPoolUnits)}  (${pct(c.dripPoolUnits)})  @ ${c.dripRateBps / 100}%/mo geometric`);
-  L.push(`  LP seed:     ${tokenStr(c.lpUnits)}  (${pct(c.lpUnits)})`);
+  L.push(`  LP seed:     ${tokenStr(c.lpSeedUnits)}  (${pct(c.lpSeedUnits)})`);
+  L.push(`  LP rewards:  ${tokenStr(c.lpRewardUnits)}  (${pct(c.lpRewardUnits)})  tenure-escalating LP airdrop`);
   L.push(`  Team:        ${tokenStr(c.teamUnits)}  (${pct(c.teamUnits)})`);
   const thisMonth = dripForMonth(c.dripPoolUnits, monthsElapsed, c.dripRateBps).drip;
   const circ = circulating(c, monthsElapsed, burnedUnits);

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { SnapshotDTO, OperatorSnapshotDTO, WalletLookupValue, TraderLeader, HolderLeader } from "@/lib/rewards/snapshotTypes";
+import type { LpSnapshotDTO, LpLeader } from "@/lib/rewards/lpTypes";
 
 // MisFitz Rewards - SHADOW dashboard (client). Imports ONLY the DTO types (type-only) - zero reward-engine code
 // reaches the browser. Reads the cron-computed snapshot from the flag-gated /api/rewards/snapshot; never computes.
@@ -87,6 +88,88 @@ function OperatorPanel({ colId, opsKey }: { colId: string; opsKey: string }) {
       <div className="text-subtle text-xs">
         &rarr; {xch(o.forRewardMojos)} to buy $CHIA (distribute) &middot; &rarr; {xch(o.forBurnMojos)} to buy &amp; burn $TOKEN &middot; keep {xch(o.keepArtistMojos)} (artist)
       </div>
+    </div>
+  );
+}
+
+const lpAmt = (s: string) => { try { return (Number(BigInt(s)) / 1000).toLocaleString("en-US", { maximumFractionDigits: 0 }); } catch { return "0"; } };
+
+// LP rewards section: an impermanent-loss acknowledge gate, then either "pool not live yet" or the pool depth +
+// the Liquidity Crew leaderboard. Reads the flag-gated /api/rewards/lp. Never solicits — no "provide" CTA.
+function LpSection({ colId }: { colId: string }) {
+  const [lp, setLp] = useState<LpSnapshotDTO | "pending" | null>(null);
+  const [ack, setAck] = useState(false);
+
+  useEffect(() => {
+    try { if (window.localStorage.getItem("mf_lp_il_ack") === "1") setAck(true); } catch { /* ignore */ }
+    let alive = true;
+    fetch(`/api/rewards/lp?col=${encodeURIComponent(colId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!alive) return; setLp(d && "poolLive" in d ? (d as LpSnapshotDTO) : "pending"); })
+      .catch(() => alive && setLp(null));
+    return () => { alive = false; };
+  }, [colId]);
+
+  if (lp === null) return null; // flag off / error -> render nothing
+  const acknowledge = () => { try { window.localStorage.setItem("mf_lp_il_ack", "1"); } catch { /* ignore */ } setAck(true); };
+
+  const rows: LpLeader[] = lp !== "pending" ? lp.top : [];
+  const live = lp !== "pending" && lp.poolLive;
+
+  return (
+    <div className="mt-4 rounded-2xl border border-sky-400/20 bg-sky-400/[0.05] p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="text-title text-base font-black">Liquidity Rewards</div>
+        <span className="rounded-full bg-sky-400/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-sky-300">$TOKEN/XCH LP</span>
+      </div>
+      <p className="text-subtle mt-1 text-xs">
+        Hold $TOKEN/XCH liquidity and earn a monthly $TOKEN airdrop &mdash; paid from day one, and it grows the longer
+        you hold (up to <b className="text-title">5&times; at 18 months</b>). Pull your liquidity and the streak resets.
+      </p>
+
+      {/* Impermanent-loss honesty gate */}
+      {!ack ? (
+        <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+          <div className="text-xs font-bold text-amber-200">Before you look &mdash; understand the risk</div>
+          <p className="text-subtle mt-1 text-[11px] leading-relaxed">
+            Providing liquidity converts half your XCH into $TOKEN. If $TOKEN&rsquo;s price falls, your position is worth
+            less than if you&rsquo;d simply held XCH &mdash; possibly much less. The monthly airdrop does <b>not</b> protect
+            you from that. Only pool what you&rsquo;re comfortable holding as $TOKEN.
+          </p>
+          <button type="button" onClick={acknowledge}
+            className="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/20 px-3 py-1.5 text-xs font-bold text-amber-100 transition hover:bg-amber-400/30">
+            I understand the risks
+          </button>
+        </div>
+      ) : lp === "pending" || !live ? (
+        <div className="text-subtle mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-4 text-center text-sm">
+          The $TOKEN/XCH pool isn&rsquo;t live yet. Once it&rsquo;s seeded, this is where the <b className="text-title">Liquidity Crew</b> leaderboard and your airdrop will show up.
+        </div>
+      ) : (
+        <div className="mt-3">
+          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3.5 py-3"><div className="text-subtle text-[10px] font-semibold uppercase tracking-[0.14em]">Airdrop this month</div><div className="mt-1 text-lg font-black tabular-nums text-sky-300">{tok(lp.distributedUnits)}</div></div>
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3.5 py-3"><div className="text-subtle text-[10px] font-semibold uppercase tracking-[0.14em]">LP holders</div><div className="text-title mt-1 text-lg font-black tabular-nums">{lp.holderCount.toLocaleString()}</div></div>
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3.5 py-3"><div className="text-subtle text-[10px] font-semibold uppercase tracking-[0.14em]">Pool depth</div><div className="text-title mt-1 text-lg font-black tabular-nums">{lp.pool ? xch(lp.pool.xchReserveMojos) : "-"}</div></div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+            <div className="text-subtle mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em]">Liquidity Crew &middot; longest + deepest win</div>
+            {rows.length === 0
+              ? <div className="text-subtle px-1 py-4 text-center text-sm">No LP holders yet this month.</div>
+              : <div className="flex flex-col gap-0.5">{rows.map((r, i) => (
+                  <div key={`${r.walletTrunc}:${i}`} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
+                    <div className="w-5 shrink-0 text-center text-sm font-black tabular-nums text-subtle">{i + 1}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-title truncate text-sm font-semibold leading-tight">{r.name || r.walletTrunc}</div>
+                      <div className="text-subtle truncate text-[11px] leading-tight">{lpAmt(r.lpUnits)} LP &middot; {r.monthsHeld}mo</div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-sky-400/15 px-2 py-0.5 text-[11px] font-bold text-sky-300">{r.multiplier.toFixed(1)}&times;</span>
+                    <div className="text-title w-24 shrink-0 text-right text-sm font-bold tabular-nums">{tok(r.tokenUnits)}</div>
+                  </div>
+                ))}</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -185,6 +268,8 @@ export function RewardsDashboard({ colId, opsKey }: { colId: string; opsKey?: st
                 </div>
               )}
             </div>
+
+            <LpSection colId={colId} />
 
             {/* Operator-only (renders nothing unless ?ops=<secret> resolves) */}
             {opsKey && <OperatorPanel colId={colId} opsKey={opsKey} />}

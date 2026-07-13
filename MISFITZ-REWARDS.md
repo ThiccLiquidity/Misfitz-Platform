@@ -213,3 +213,100 @@ window/resale, drip curve numbers, 500-epoch solvency property, wash-trade net-n
 mapping (XCH exactness, deal-tag thresholds, royalty math, window/finality, detect->engine vest-void).
 
 Verify locally: `npx tsc --noEmit` (clean) and `npm test` (all green).
+
+---
+
+## 11. $TOKEN LP Rewards (tenure-escalating LP airdrop) — DESIGN LOCKED, shadow-first, NOT built
+
+Goal (owner): incentivize people to hold $TOKEN/XCH liquidity. Reward anyone who holds LP, at any amount, and
+make the airdrop **progressively bigger the longer they hold** — without letting anyone game it, and without ever
+holding user funds or locking/withholding their rewards.
+
+### 11.1 Allocation change (see token.ts)
+Supply stays 1,000,000,000 $TOKEN. Re-split so LP rewards come mostly out of the holder drip:
+
+| Bucket | Was | Now | Purpose |
+|---|---|---|---|
+| Airdrop | 10% (100M) | 10% (100M) | one-time holder airdrop at launch |
+| Holder drip | 80% (800M) | **67% (670M)** | monthly rarity-weighted drip to MisFitz holders |
+| LP seed | (part of 7%) | **5% (50M)** | one-time: pair with XCH to CREATE the TibetSwap $TOKEN/XCH pool |
+| **LP rewards** | — | **15% (150M)** | the tenure-escalating LP-holder airdrop reserve |
+| Team | 3% (30M) | 3% (30M) | operator/team |
+
+Owner accepted the trade-off: the plain holder gift drops 80% -> 67% to fund deep, sticky liquidity.
+
+### 11.2 The mechanic
+- **Paid monthly, from day 1. Nothing is ever locked, withheld, or forfeited.** Everyone holding LP gets a share
+  of that month's LP-reward release right away.
+- Per-wallet weight each month = **time-weighted average LP balance that month (TWAB) x tenure multiplier**.
+- **Tenure multiplier** grows every consecutive month the wallet holds LP, and **resets to 1x if the wallet fully
+  exits** (LP balance -> 0). You keep everything already paid; you just restart the climb.
+
+  | Months held (continuous) | Multiplier |
+  |---|---|
+  | 1 | 1.0x |
+  | 3 | 1.5x |
+  | 6 | 2.5x |
+  | 12 | 4.0x |
+  | 18+ | 5.0x (cap) |
+
+  Net effect: a steady holder's monthly airdrop grows on its own as their multiplier rises while newcomers sit at
+  1x. Short-term holders still earn the 1x base; long-haul holders compound toward 5x.
+
+### 11.3 Anti-gaming (no lockups needed)
+- **TWAB over the daily cron snapshots** kills just-in-time liquidity — spiking LP right before a snapshot and
+  pulling after earns ~1/30 weight, not a full month.
+- **Exit resets the multiplier**, so bail-and-return farmers stay stuck near 1x forever.
+- **Linear in amount** -> sybil-neutral (splitting across N wallets earns the same).
+- **Roster-gated**: only wallets that also hold a MisFitz NFT qualify — real illiquid capital behind every wallet,
+  and it keeps the program collector-first (no MisFitz, no LP bonus). No registry, still no-login.
+- **Operator/team/seed wallets excluded** from the census and the public leaderboard.
+
+### 11.4 Burn -> LP burn (accepted)
+The royalty burn pot may buy $TOKEN, pair it with XCH, and send the resulting **LP tokens** to the burn address.
+Same permanent removal from circulation, but now as permanent, unpullable pool depth. Funded by the royalty flow,
+costs nothing from the 150M. (Amends the §2 "buy & burn" wording — logged as an accepted change.)
+
+### 11.5 Honesty + legal rails (non-negotiable, from the Fable review)
+- **Never show APR/APY or any % yield.** Only an absolute "this month's thank-you: N $TOKEN", like the drip.
+- **Mandatory plain-English IL gate** before any LP numbers render: providing liquidity converts half your XCH to
+  $TOKEN; if $TOKEN falls, the position is worth less than holding XCH; the thank-you does not protect you. One
+  acknowledge click (localStorage).
+- **Show live impermanent loss** (your LP worth now vs. if you'd just held) from the pool reserves.
+- **Never solicit.** The LP tile appears only for wallets already holding LP, plus one info page. No banners,
+  countdowns, or onboarding nudges. Reward follows a choice; it never induces one.
+- **Legal:** LP emissions look more like "yield farming" than the holder drip — a named line item for counsel.
+  Nothing leaves REWARDS_SHADOW=1 until cleared.
+
+### 11.6 Technical dependency (what still needs building)
+- Pool composition + LP-token supply: TibetSwap API `GET /pairs` gives `liquidity_asset_id`, reserves, and LP
+  supply in one cached call (verified). The $TOKEN pair won't exist until the operator seeds it (LP seed bucket).
+- Per-wallet LP-CAT balance: needs a Chia full-node / Coinset (`get_coin_records_by_hint`) or Spacescan
+  integration — same class as the on-chain royalty verifier (chainProvider.ts). MintGarden/Dexie can't do it.
+- New `lpObserve.ts` records each roster wallet's LP balance on the daily cron; the FINAL run computes TWAB x
+  tenure and feeds `{wallet, weight}` into the existing `allocateDrip()` (no allocator change). Rides the existing
+  drip manifest/bot. DID pastes resolve to xch1 first (CATs are address-held).
+
+### 11.7 Rollout
+SHADOW-first, exactly like trader rewards: two preview epochs with published "would-have-earned" numbers and
+**zero payouts**, behind REWARDS_SHADOW, legal-gated. Not started — this section is the captured design.
+
+### 11.8 Build status + fixed issues + known limitations (Fable review)
+Built shadow-first (behind REWARDS_SHADOW): `lpMath.ts` (pure: tenure curve, TWAB, `rollLpEpoch`), `lpPool.ts`
+(TibetSwap parse + position value), `lpProvider.ts` (LpChainProvider + Null/Mock providers + `fetchTokenPair` +
+`lpExcludedWallets`), `lpJob.ts` (observe daily / compute monthly), `lpTypes.ts`, `/api/rewards/lp`, cron +
+dev-compute wiring, dashboard LP section with the IL acknowledge gate. Tests: `lpMath.test.ts`, `lpPool.test.ts`.
+
+Fixed from the first Fable pass: **B1** obs/tenure now read+write with the LARGE cache API consistently (were
+mismatched -> pipeline was a silent no-op); **B2** operator/team/seed exclusion via `LP_EXCLUDED_WALLETS`;
+**B3** absent-wallet tenure now resets (rebuilt from the prev+observed union) with a data-outage guard; **S2**
+TWAB = sum / global-run-count (part-month holders diluted); **S4** tenure curve matches the locked table
+(1/1.5/2.5/4/5); **S7** tenure persisted before the snapshot; **S8** bounded-concurrency observe; **S9** a CONTINUITY CAP - only tenure is PER-UNIT via COHORTS - each chunk of liquidity ages on its own clock, so capital added this month starts at 1x and only reaches 5x after ITS OWN 18 months (a second Fable pass showed a single-slot cap only delayed the exploit one month; cohorts close it fully). Reductions trim NEWEST units first so aged units keep tenure; matured cohorts merge at the cap. **S2** a FINAL tenure-write failure now aborts before the snapshot is written (the cron's already-final guard can't mask a lost advance); **S3** persisted balances clamp non-negative.
+
+Known limitations / pre-real-payout follow-ups (documented, not yet done): **S1** a per-wallet provider error
+counts as a 0 that day (whole-epoch outage is guarded, partial isn't); **S3** the observe instant is the fixed
+cron time (jitter or on-chain coin-lifetime TWAB later); **S5** `dripMonthFor` needs `REWARDS_LAUNCH` set before
+real payouts, and the roll-forward-vs-burn of an epoch with zero eligible holders is undecided; **S6** DID-held
+NFTs must resolve to their xch1 address before LP lookup; **S8** the observe loop needs checkpointing for a very
+large roster under the 60s function cap. None of these can move funds while REWARDS_SHADOW is off; they're the checklist before the real on-chain LP
+provider replaces NullLpProvider.

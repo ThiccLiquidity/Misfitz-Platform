@@ -59,6 +59,10 @@ Notes on the two new optional vars:
 - `REWARDS_OPS_SECRET` gates the operator actions ("send X to the hot wallet"). Those numbers are NOT in the
   public payload. To see them, open the collection page with `?ops=<REWARDS_OPS_SECRET>`. Anyone without the
   secret just sees the public dashboard + leaderboards. Leave unset to disable the operator panel entirely.
+- `LP_TOKEN_ASSET_ID` (the $TOKEN TAIL) + `TIBETSWAP_API_BASE` power the LP-rewards program. Until the token is
+  minted and the $TOKEN/XCH pool is seeded on TibetSwap, `LP_TOKEN_ASSET_ID` is empty and the whole LP program is
+  dormant (the dashboard LP tile shows "pool not live yet"). `LP_EXCLUDED_WALLETS` (comma/space separated xch1 or
+  DID) keeps operator/team/pool-seed wallets off the LP census + leaderboard.
 - `REWARDS_PROFILE_OPTOUT` removes a wallet's name/pfp from the public leaderboards (it still shows a truncated
   address). List BOTH the `xch1…` and `did:chia…` forms if a person uses both. Takes effect on the next cron
   recompute (identities are baked into the snapshot).
