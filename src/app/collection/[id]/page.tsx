@@ -49,11 +49,12 @@ export default async function CollectionLivePage({ params, searchParams }: { par
       ],
     },
   };
+  const showRewards = isRewardsShadowEnabled() && view.id === MISFITZ_COLLECTION_ID;
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
-      {isRewardsShadowEnabled() && view.id === MISFITZ_COLLECTION_ID && <RewardsDashboard colId={view.id} opsKey={opsKey} />}
       <CollectionBinder key={view.id} view={view} />
+      {showRewards && <RewardsDashboard colId={view.id} opsKey={opsKey} />}
     </>
   );
 }
