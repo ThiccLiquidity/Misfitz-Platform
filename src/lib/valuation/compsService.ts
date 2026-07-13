@@ -11,7 +11,7 @@
 // process (or after the 45-min memory TTL) we rehydrate the FULL model from those persisted inputs with
 // ZERO network calls, and the trending-traits/curve appear instantly instead of waiting on a rebuild.
 
-import { fetchCollectionCompletedSales, fetchCollectionFloor } from "@/lib/market/dexie";
+import { fetchCollectionCompletedSales, fetchCollectionFloor, fetchCollectionSalesTip } from "@/lib/market/dexie";
 import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
 import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
@@ -20,14 +20,27 @@ import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 import { isSeeded, getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
 import { adaptiveHalfLifeOptions } from "@/lib/valuation/compsConfig";
+import { activityLevel, recordSalesActivity } from "@/lib/market/activity";
 
 interface CacheEntry { model: CompsModel | null; expiresAt: number; building?: Promise<CompsModel | null> }
 const _cache = new Map<string, CacheEntry>();
+const _newestSaleAt = new Map<string, number>(); // newest sale (ms) currently baked into each collection's model
+const _lastProbe = new Map<string, number>();     // last tip-probe time per collection (event-driven refresh throttle)
+const PROBE_THROTTLE_MS = 60_000;                  // at most one Dexie tip-probe per collection per minute per instance
+const _builtAt = new Map<string, number>();        // when each collection's model was last (re)built — powers the "values as of" freshness UI
 const TTL = 45 * 60_000;
 const DB_TTL = 6 * 60 * 60_000; // keep persisted inputs 6h; we still background-refresh once memory expires
 const REFRESH_AGE_MS = 2 * 60 * 60_000; // background-refresh a rehydrated model once its inputs pass this age.
 // MUST be < DB_TTL (minus build time): at DB_TTL the blob is already a cacheGet miss, so the refresh would
 // never fire and every collection would hit a cold "warming" window every 6h. 2h keeps hot models fresh cheaply.
+
+// Refresh a rehydrated model SOONER when the collection is busy: a hot collection folds in a new sale within
+// ~20 min instead of 2h; a quiet one keeps the cheap long interval. The level is seeded from the persisted
+// sale timestamps on rehydrate, so this works on a cold serverless instance with zero network calls.
+function adaptiveRefreshAge(colId: string): number {
+  const lvl = activityLevel(colId);
+  return lvl === 2 ? 20 * 60_000 : lvl === 1 ? 60 * 60_000 : REFRESH_AGE_MS;
+}
 const MAX_NFTS = 300; // cap on detail fetches for a cold build (bounds cost; recency-prioritised)
 const CONC = 6;
 
@@ -73,9 +86,9 @@ function modelFromPersisted(p: PersistedComps): CompsModel | null {
 // null (a collection MintGarden hasn\'t ranked — we fall back to OUR computed ranks below).
 interface SaleRow { id: string; mgRank: number | null; num: number | null; price: number; ageDays: number; soldAt: number; traits: Trait[]; seller?: string; buyer?: string }
 
-async function build(colId: string): Promise<CompsModel | null> {
+async function build(colId: string, opts: { fresh?: boolean } = {}): Promise<CompsModel | null> {
   const [sales, floorXch] = await Promise.all([
-    fetchCollectionCompletedSales(colId),
+    fetchCollectionCompletedSales(colId, 30, { fresh: opts.fresh }),
     fetchCollectionFloor(colId).catch(() => null),
   ]);
   if (sales.length === 0) {
@@ -152,6 +165,8 @@ async function build(colId: string): Promise<CompsModel | null> {
     usable.push({ rank, price: r.price, ageDays: r.ageDays, traits: r.traits, soldAt: r.soldAt, seller: r.seller, buyer: r.buyer });
   }
   if (usable.length === 0) return null;
+  _newestSaleAt.set(colId, usable.reduce((m, s) => Math.max(m, s.soldAt), 0)); // watermark for the event-driven probe
+  _builtAt.set(colId, now); // freshness stamp: values were just refit from live sales
   const floor = typeof floorXch === "number" ? floorXch : 0;
 
   // Write the INPUTS through to the DB so a cold process rehydrates instantly (no refetch).
@@ -165,7 +180,7 @@ async function build(colId: string): Promise<CompsModel | null> {
 }
 
 // Kick a network (re)build in the background, keeping the stale model live until it lands.
-function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean): Promise<CompsModel | null> {
+function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean, fresh?: boolean): Promise<CompsModel | null> {
   // One build per collection across ALL instances. Previously every cold lambda kicked its own duplicate
   // build (429-storming the others, often dying before it persisted). Lock-losers return stale and pick up
   // the persisted blob on the next poll. Null results cache only briefly so we re-check the blob soon.
@@ -176,7 +191,7 @@ function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean): Pro
       try { const raw = await cacheGet(`comps:${colId}`, DB_TTL); if (raw) { const m = modelFromPersisted(JSON.parse(raw) as PersistedComps); if (m) return m; } } catch { /* fall back to stale */ }
       return stale;
     }
-    try { return await build(colId); } finally { await releaseLock(`compsbuild:${colId}`); }
+    try { return await build(colId, { fresh }); } finally { await releaseLock(`compsbuild:${colId}`); }
   })();
   const building = locked
     .then((model) => {
@@ -190,6 +205,35 @@ function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean): Pro
   _cache.set(colId, { model: stale, expiresAt: stale ? Date.now() + TTL : 0, building });
   keepAlive(building); // survive serverless function freeze so the comps build actually lands + persists
   return wait ? building : Promise.resolve(stale);
+}
+
+// When this collection's displayed values were last (re)built (ms epoch), or null if no model on this
+// instance yet. Drives the "values as of X ago" freshness badge.
+export function compsBuiltAt(colId: string): number | null { return _builtAt.get(colId) ?? null; }
+
+// Event-driven freshness: a cheap Dexie tip-probe. If Dexie's newest completed sale is newer than the newest
+// sale already baked into our model, kick a FRESH rebuild and AWAIT it — so the caller can immediately
+// recompute + re-index with the new value. Throttled to one probe per collection per minute per instance;
+// best-effort (any failure just returns false and the age-timer refresh still covers it). Returns true only
+// when a genuinely newer sale triggered a refit.
+export async function refreshCompsIfSold(colId: string): Promise<boolean> {
+  if (!colId.startsWith("col1")) return false;
+  const now = Date.now();
+  if (now - (_lastProbe.get(colId) ?? 0) < PROBE_THROTTLE_MS) return false;
+  _lastProbe.set(colId, now);
+  const baseline = _newestSaleAt.get(colId);
+  if (baseline == null) return false; // no model built on this instance yet — getCompsModel will build it first
+  const tip = await fetchCollectionSalesTip(colId);
+  if (!tip || tip.lastSaleAt <= baseline + 1000) return false; // nothing newer than what we already modeled
+  const model = _cache.get(colId)?.model ?? null;
+  await kickBuild(colId, model, true, true); // wait + fresh: fold in the new sale (updates _newestSaleAt) before returning
+  // Stamp the watermark from the RAW tip (max-merge with whatever the build set). This guarantees each distinct
+  // Dexie tip triggers at most ONE refit attempt per instance — even if that sale was filtered out of the model
+  // (bundle / XCH+CAT / rank-unresolvable / detail-fetch miss) or the build lost the platform lock. Without this
+  // a filtered newest sale keeps baseline < tip forever and every view re-runs a full fresh build (rebuild storm).
+  // Degradation is correct: a dirty/filtered tip just surfaces via the Phase 0 age timer instead of instantly.
+  _newestSaleAt.set(colId, Math.max(_newestSaleAt.get(colId) ?? 0, tip.lastSaleAt));
+  return true;
 }
 
 /**
@@ -221,8 +265,14 @@ export async function getCompsModel(colId: string, opts: { wait?: boolean } = {}
         const model = modelFromPersisted(persisted);
         if (model) {
           _cache.set(colId, { model, expiresAt: Date.now() + TTL });
-          // Refresh from the network in the background if the persisted inputs are getting old.
-          if (Date.now() - persisted.builtAt > REFRESH_AGE_MS) void kickBuild(colId, model); // refresh aged (>2h) inputs in the background (was 45min)
+          // Seed cross-instance busyness from the persisted sale timestamps (no network) so adaptiveRefreshAge
+          // and the market fetchers know this collection is hot even on a cold instance.
+          recordSalesActivity(colId, persisted.sales.map((sp) => ({ date: new Date(sp.soldAt).toISOString() })));
+          _newestSaleAt.set(colId, persisted.sales.reduce((m, sp) => Math.max(m, sp.soldAt), 0)); // watermark for the event-driven probe
+          _builtAt.set(colId, persisted.builtAt); // freshness stamp from the persisted inputs
+          // Refresh in the background once inputs age out (sooner for busy collections). fresh=true forces a
+          // real Dexie pull so we fold in new sales instead of re-fitting the same cached blob.
+          if (Date.now() - persisted.builtAt > adaptiveRefreshAge(colId)) void kickBuild(colId, model, false, true);
           return model;
         }
       } catch { /* corrupt blob -> network build */ }

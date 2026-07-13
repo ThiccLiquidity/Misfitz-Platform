@@ -8,7 +8,7 @@ import { getSeed } from "@/lib/data-sources/seed/registry";
 import { seedPctFn, stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock, keepAlive } from "@/lib/db/nftCache";
 import { writeValueIndex } from "@/lib/valuation/valueIndex";
-import { hasNoComps } from "@/lib/valuation/compsService";
+import { hasNoComps, refreshCompsIfSold, compsBuiltAt } from "@/lib/valuation/compsService";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
@@ -181,6 +181,8 @@ export interface FullCollection {
   // True while the comparable-sales model is still building in the background (values/hot-traits will
   // sharpen on the next load). Lets the UI show a "warming up" indicator.
   warming?: boolean;
+  // When the displayed values were last (re)built (ms epoch), or null. Powers the "values as of X ago" badge.
+  valuesAsOf?: number | null;
 }
 
 async function buildBaseCollection(id: string): Promise<BaseCollection> {
@@ -345,7 +347,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
 // Public entry: base cards (cached 10 min) with the comparable-sales blend applied ON READ. The blend is
 // cheap arithmetic over the independently-cached comps model, so the instant that model finishes building
 // in the background it appears on the very next request — it is NOT trapped behind the 10-min card cache.
-export async function getAllCollectionCards(id: string): Promise<FullCollection> {
+export async function getAllCollectionCards(id: string, opts: { forceIndex?: boolean } = {}): Promise<FullCollection> {
   const base = await buildBaseCollection(id);
   const { floorXch, xchUsdRate } = base;
 
@@ -388,8 +390,8 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
 
   const result = (nfts: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) => {
     const w = warming || rarityWarming || !!base.warming;
-    if (!w) keepAlive(writeValueIndex(id, nfts)); // browse writes the value index; the portfolio reads it (Phase 1)
-    return { nfts, total: nfts.length, capped: base.capped, hotTraits, warming: w };
+    if (!w) keepAlive(writeValueIndex(id, nfts, { force: opts.forceIndex })); // browse writes the value index; the portfolio reads it. force: an event-driven refit rewrites immediately (bypasses the 10-min gate).
+    return { nfts, total: nfts.length, capped: base.capped, hotTraits, warming: w, valuesAsOf: compsBuiltAt(id) };
   };
   if (!isCompsEnabled()) return result(cards, [], false);
   const comps = await getCompsModel(id).catch(() => null);
@@ -428,5 +430,14 @@ export async function getAllCollectionCards(id: string): Promise<FullCollection>
       valueTraitTop: cv.traitTop ?? null,
     };
   });
+  // Event-driven freshness (Phase 1): on a real view (not the forced recompute), probe Dexie's newest sale.
+  // If it's newer than our model, refit fresh and rewrite the value index NOW so the next poll/view reflects
+  // the sale within ~one probe instead of waiting for the age timer. Fire-and-forget; never blocks this response.
+  if (!opts.forceIndex) {
+    keepAlive((async () => {
+      const refreshed = await refreshCompsIfSold(id).catch(() => false);
+      if (refreshed) await getAllCollectionCards(id, { forceIndex: true }).catch(() => {}); // recompute + force-write vidx with the fresh model
+    })());
+  }
   return result(nfts, comps.hotTraits(), false);
 }

@@ -8,6 +8,7 @@ import { TierStatsBar } from "@/components/collection/TierStatsBar";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters, type CatFilter } from "@/components/collection/FilterSidebar";
 import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
+import { FreshnessBadge } from "@/components/common/FreshnessBadge";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatXch, formatUsd, formatXchShort, formatUsdShort } from "@/lib/format";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
@@ -38,6 +39,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [enriching, setEnriching] = useState(false);
   const [indexing, setIndexing] = useState(view.totalSupply > view.nfts.length);
   const [warming, setWarming] = useState(false);
+  const [valuesAsOf, setValuesAsOf] = useState<number | null>(null);
   const [capped, setCapped] = useState(false);
   const [visible, setVisible] = useState(PAGE);
   const [tier, setTier] = useState<TierFilter>("all");
@@ -75,7 +77,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
       setIndexing(true);
       fetch(`/api/collection/${view.id}/all`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean } | null) => {
+        .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean; valuesAsOf?: number | null } | null) => {
           if (cancelled) return;
           const nfts = data?.nfts ?? [];
           const reschedule = () => { if (tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); } };
@@ -117,6 +119,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
               setHotTraits((prev) => (hotKey(prev) === hotKey(data.hotTraits!) ? prev : data.hotTraits!));
             }
             setFullLoaded(true);
+            if (data?.valuesAsOf) setValuesAsOf(data.valuesAsOf);
             if (nfts.length > lastTotal) { lastTotal = nfts.length; tries = 0; } // grew -> reset backoff, keep polling
           }
           // Keep polling while the server is warming OR we got nothing yet (roster still scanning / lock-loser empty).
@@ -368,6 +371,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
               {view.totalSupply.toLocaleString()} items
               {fullLoaded && capped && <span style={{ color: statLight ? "#059669" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
             </div>
+            {fullLoaded && !warming && <div className="mt-1.5"><FreshnessBadge asOf={valuesAsOf} light={statLight} /></div>}
           </div>
         </div>
 

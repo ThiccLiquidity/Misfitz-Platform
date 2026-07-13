@@ -16,9 +16,10 @@ export interface ValueIndex { builtAt: number; values: Record<string, ValueEntry
 
 const _lastWrite = new Map<string, number>();
 // Called by the browse pipeline on a COMPLETE (non-warming) build. Fire-and-forget via keepAlive at the call site.
-export async function writeValueIndex(colId: string, nfts: NftData[]): Promise<void> {
+export async function writeValueIndex(colId: string, nfts: NftData[], opts: { force?: boolean } = {}): Promise<void> {
   const now = Date.now();
-  if (now - (_lastWrite.get(colId) ?? 0) < WRITE_GATE_MS) return;
+  if (!opts.force && now - (_lastWrite.get(colId) ?? 0) < WRITE_GATE_MS) return; // force: an event-driven refit rewrites NOW
+
   _lastWrite.set(colId, now);
   const values: Record<string, ValueEntry> = {};
   for (const n of nfts) { const e = entryOf(n); if (e && n.launcherId) values[n.launcherId] = e; }

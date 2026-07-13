@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60; // one resume pass pages within a ~40s budget, then returns
 
 export async function POST(req: Request) {
-  let body: { addresses?: unknown };
+  let body: { addresses?: unknown; refresh?: unknown };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "bad json" }, { status: 400 }); }
   const raw = Array.isArray(body.addresses) ? body.addresses : [];
   const addresses = [
@@ -19,6 +19,6 @@ export async function POST(req: Request) {
     ),
   ].slice(0, 25); // bound: no one pastes 25+ wallets
   if (addresses.length === 0) return NextResponse.json({ error: "no valid addresses" }, { status: 400 });
-  const holdings = await getMyHoldingsFast(addresses, { budgetMs: 30_000 });
+  const holdings = await getMyHoldingsFast(addresses, { budgetMs: 30_000, fresh: body.refresh === true });
   return NextResponse.json(holdings, { headers: { "cache-control": "no-store" } });
 }

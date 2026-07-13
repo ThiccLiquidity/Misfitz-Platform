@@ -88,7 +88,7 @@ async function applySeedOverlay(nfts: NftData[], floorByCol: Map<string, number 
 // no per-NFT detail. Renders in ~1s; YourBinder then calls the enrichment route to fill in traits and
 // our own estimated ranks. Floor is resolved per collection (Dexie ask -> MintGarden -> Dexie sales ->
 // cheapest current listing among holdings) so values are consistent from the first paint.
-export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: number } = {}): Promise<MyHoldings> {
+export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<MyHoldings> {
   if (addresses.length === 0) return EMPTY;
   const t0 = Date.now();
 

@@ -20,6 +20,7 @@ export async function POST(req: Request) {
 
   const values: Record<string, ValueEntry> = {};
   const pending: string[] = [];
+  let asOf = 0; // freshest value-index build time across the held collections (for the "values as of" badge)
   await Promise.all(colIds.map(async (colId) => {
     const idx = await readValueIndex(colId).catch(() => null);
     if (!idx) {
@@ -27,8 +28,9 @@ export async function POST(req: Request) {
       keepAlive(getAllCollectionCards(colId).catch(() => null)); // shared cold build; writes the index for next poll
       return;
     }
+    if (idx.builtAt > asOf) asOf = idx.builtAt;
     const ids = Array.isArray(cols[colId]) ? (cols[colId] as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 600) : [];
     for (const nftId of ids) { const e = idx.values[nftId]; if (e) values[nftId] = e; }
   }));
-  return NextResponse.json({ values, pending }, { headers: { "cache-control": "no-store" } });
+  return NextResponse.json({ values, pending, asOf: asOf || null }, { headers: { "cache-control": "no-store" } });
 }

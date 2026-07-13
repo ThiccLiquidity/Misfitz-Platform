@@ -13,6 +13,7 @@ import { useHiddenCollections } from "@/lib/portfolio/useHiddenCollections";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
 import { stampValueEntry, type ValueEntry } from "@/lib/valuation/valueEntry";
+import { FreshnessBadge } from "@/components/common/FreshnessBadge";
 
 const SHELL: CollectionData = {
   slug: "my-binder", name: "Your Binder", description: null, bannerUrl: null, iconUrl: null,
@@ -59,6 +60,9 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const nftsRef = useRef<NftData[]>(holdings.nfts);
   nftsRef.current = nfts;
   const enrichedRef = useRef<Set<string>>(new Set()); // launcherIds already enriched this session (dedupe on-demand enrichment)
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [valuesAsOf, setValuesAsOf] = useState<number | null>(null);
 
   // Whale wallets can't be fully paged inside one serverless call, so the page SSRs a first batch with
   // warming=true. Poll the resume endpoint until the full roster lands, growing the card set + collections
@@ -171,7 +175,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         try {
           const res = await fetch("/api/values", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cols: byCol }) });
           if (!res.ok) continue;
-          const data = (await res.json()) as { values?: Record<string, ValueEntry> };
+          const data = (await res.json()) as { values?: Record<string, ValueEntry>; asOf?: number | null };
+          if (data.asOf) setValuesAsOf((prev) => (prev == null || data.asOf! > prev ? data.asOf! : prev));
           if (cancelled) return;
           const vals = data.values ?? {};
           const gotIds = Object.keys(vals);
@@ -191,7 +196,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     })();
 
     return () => { cancelled = true; };
-  }, [warming, collectionId, holdings.addresses, holdings.demo, holdings.xchUsdRate]);
+  }, [warming, collectionId, refreshTick, holdings.addresses, holdings.demo, holdings.xchUsdRate]);
 
   const oneCollection = collectionId !== "all";
 
@@ -206,6 +211,29 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   useEffect(() => {
     if (collectionId !== "all" && hidden.has(collectionId)) setCollectionId("all");
   }, [hidden, collectionId]);
+
+  // Force-refresh: re-page the wallet from MintGarden NOW (bypasses the 30-min holdings cache) so a
+  // just-bought NFT shows immediately. Re-runs enrichment on the fresh set via refreshTick.
+  const doRefresh = async () => {
+    if (refreshing || holdings.addresses.length === 0) return;
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/holdings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ addresses: holdings.addresses, refresh: true }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as MyHoldings;
+        if (Array.isArray(data.nfts)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
+        if (Array.isArray(data.collections)) setCollections(data.collections);
+        setTruncated(data.truncated);
+        if (data.warming) setWarming(true); // whale: hand off to the resume poll loop
+        setRefreshTick((t) => t + 1); // re-run enrichment for any newly-added cards
+      }
+    } catch { /* ignore */ }
+    finally { setRefreshing(false); }
+  };
 
   function pickCollection(id: string) {
     setCollectionId(id);
@@ -301,6 +329,14 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <div className="text-subtle mt-1 text-xs">
             {visibleCollections.length} collection{visibleCollections.length === 1 ? "" : "s"}{warming ? " · loading…" : truncated ? " · capped at 25,000" : ""}
           </div>
+          <button type="button" onClick={doRefresh} disabled={refreshing}
+            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/[0.05] px-2.5 py-1 text-[11px] font-semibold text-subtle transition hover:bg-white/[0.1] disabled:opacity-50"
+            title="Re-check your wallet for new NFTs (skips the cache)">
+            {refreshing ? "Refreshing…" : "↻ Refresh"}
+          </button>
+          {!warming && !enriching && valuesAsOf != null && (
+            <div className="mt-1.5 flex justify-center sm:justify-end"><FreshnessBadge asOf={valuesAsOf} /></div>
+          )}
         </div>
       </div>
 

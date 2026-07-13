@@ -81,14 +81,14 @@ async function collectionsFor(items: MgListItem[], existing?: Map<string, MgColl
   return map;
 }
 
-export async function fetchOwnerListings(address: string, opts: { budgetMs?: number } = {}): Promise<OwnerListings> {
+export async function fetchOwnerListings(address: string, opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<OwnerListings> {
   const t0 = Date.now();
   const budgetMs = opts.budgetMs ?? PAGE_BUDGET_MS;
   const short = `${address.slice(0, 8)}...${address.slice(-4)}`;
   const key = address.trim().toLowerCase();
 
-  // 1) Completed roster already cached? Serve it — no paging.
-  try {
+  // 1) Completed roster already cached? Serve it — no paging. (fresh=true skips it: a "Refresh" click re-pages now.)
+  if (!opts.fresh) try {
     const done = await cacheGetLarge(`holdings3:${key}`, HOLDINGS_TTL);
     if (done) {
       const c = JSON.parse(done) as CachedListings;
@@ -103,7 +103,7 @@ export async function fetchOwnerListings(address: string, opts: { budgetMs?: num
   let cursor: string | null | undefined = undefined;
   let truncated = false;
   let colMap = new Map<string, MgCollection>();
-  try {
+  if (!opts.fresh) try {
     const cp = await cacheGetLarge(`holdscan:${key}`, HOLDSCAN_TTL);
     if (cp) {
       const c = JSON.parse(cp) as HoldingsCheckpoint;

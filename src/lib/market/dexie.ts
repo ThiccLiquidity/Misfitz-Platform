@@ -447,11 +447,13 @@ export interface CompletedSale {
   date: string;  // ISO completion date
 }
 
-export async function fetchCollectionCompletedSales(colId: string, maxPages = 30): Promise<CompletedSale[]> {
+export async function fetchCollectionCompletedSales(colId: string, maxPages = 30, opts: { fresh?: boolean } = {}): Promise<CompletedSale[]> {
   if (!colId.startsWith("col1")) return [];
-  return withCache(`colsales_${colId}`, adaptiveTtl(colId, 30 * 60_000), async () => {
-    const dbHit = await cacheGet(`sales:${colId}`, 30 * 60_000);
-    if (dbHit) { try { const r = JSON.parse(dbHit) as CompletedSale[]; recordSalesActivity(colId, r); return r; } catch { /* refetch */ } }
+  const salesTtl = adaptiveTtl(colId, 30 * 60_000); // busy collections re-pull sales sooner than 30m (was fixed 30m)
+
+  // The network scan: dedup latest-XCH-sale per NFT, then persist + record activity. Shared by both the
+  // cached read path and the fresh (comps-refresh) path so a fresh pull also updates the blob for everyone.
+  const doFetch = async (): Promise<CompletedSale[]> => {
     const byNft = new Map<string, CompletedSale>(); // most-recent sale per NFT (date-desc, first wins)
     const fetchPage = async (page: number): Promise<{ offers: DexieOfferRaw[]; count: number }> => {
       const url = new URL(`${DEXIE_BASE}/offers`);
@@ -491,8 +493,55 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
       /* partial is fine */
     }
     const result = [...byNft.values()];
+    if (result.length === 0) {
+      // A failed/empty scan (transient Dexie 429/outage) must NOT overwrite a good blob with [] — that would
+      // poison valuations platform-wide (build() would cache comps-none and drop to baseline). If we still
+      // have a recent non-empty blob, keep serving it instead of persisting the empty result.
+      try {
+        const prev = await cacheGet(`sales:${colId}`, 60 * 60_000);
+        if (prev) { const r = JSON.parse(prev) as CompletedSale[]; if (r.length) { recordSalesActivity(colId, r); return r; } }
+      } catch { /* no prior blob — fall through and persist the (genuinely empty) result */ }
+    }
     recordSalesActivity(colId, result); // free busyness signal — tunes market-data freshness, no extra calls
-    cachePut(`sales:${colId}`, JSON.stringify(result), 60 * 60); // readable 30min; 1h ex
+    cachePut(`sales:${colId}`, JSON.stringify(result), 60 * 60); // readable up to salesTtl; 1h ex
     return result;
+  };
+
+  // fresh=true (a comps refresh) bypasses BOTH caches and re-pulls from Dexie, so we never re-fit stale
+  // cached sales and reset the model clock without new data (the "stale-refit" bug). We keep the in-proc L1
+  // coherent so a later non-fresh read doesn't serve an older list than the one we just fetched.
+  if (opts.fresh) {
+    const result = await doFetch();
+    _cache.set(`colsales_${colId}`, { value: result, expiresAt: Date.now() + salesTtl });
+    return result;
+  }
+
+  return withCache(`colsales_${colId}`, salesTtl, async () => {
+    const dbHit = await cacheGet(`sales:${colId}`, salesTtl);
+    if (dbHit) { try { const r = JSON.parse(dbHit) as CompletedSale[]; recordSalesActivity(colId, r); return r; } catch { /* refetch */ } }
+    return doFetch();
   });
+}
+
+// Ultra-cheap "did anything sell?" probe: a single 1-row page of completed XCH sales, sorted newest-first.
+// Returns the newest sale's timestamp (ms) + Dexie's total completed-offer count. ~6KB, one call, no cache —
+// callers throttle it. This is the watermark the event-driven refresh compares against the current model.
+export interface SalesTip { count: number; lastSaleAt: number }
+export async function fetchCollectionSalesTip(colId: string): Promise<SalesTip | null> {
+  if (!colId.startsWith("col1")) return null;
+  try {
+    const url = new URL(`${DEXIE_BASE}/offers`);
+    url.searchParams.set("status", "4");
+    url.searchParams.set("offered", colId);
+    url.searchParams.set("requested", "xch");
+    url.searchParams.set("sort", "date_completed");
+    url.searchParams.set("page", "1");
+    url.searchParams.set("page_size", "1");
+    const res = await tfetch(url.toString());
+    if (!res.ok) return null;
+    const json = (await res.json()) as { offers?: { date_completed?: string; date_found?: string }[]; count?: number };
+    const o = json?.offers?.[0];
+    const at = o ? new Date(o.date_completed || o.date_found || 0).getTime() : 0;
+    return { count: typeof json?.count === "number" ? json.count : 0, lastSaleAt: Number.isFinite(at) ? at : 0 };
+  } catch { return null; }
 }
