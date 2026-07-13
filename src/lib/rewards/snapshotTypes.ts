@@ -1,6 +1,33 @@
 // MisFitz Rewards — dashboard DTO (CLIENT-SAFE). Plain strings/numbers only, ZERO imports from the money engine,
 // so the client component can `import type` these without pulling any reward logic into the browser bundle. All
 // money is a decimal STRING (base units) — bigint doesn't survive JSON. Serializers live in snapshotSerialize.ts.
+//
+// The PUBLIC snapshot omits the operator ACTION panel (the "move X to the hot wallet" instruction), served by the
+// authed /api/rewards/operator route. NOTE: the royalty totals (reward pot / burn / artist) ARE public dashboard
+// stats, so the move amount is derivable from them — what's operator-only is the phrased instruction, not the
+// on-chain-public royalty figures.
+
+// Resolved public identity for a leaderboard wallet. name/avatarUrl are null for wallets with no MintGarden
+// profile OR wallets that opted out — the UI then shows the truncated address alone.
+export interface LeaderIdentity {
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export interface TraderLeader extends LeaderIdentity {
+  walletTrunc: string;
+  buyer: string;
+  seller: string;
+  bonus: string;
+  total: string;        // total XCH rewards (mojos) this wallet earned — the $CHIA leaderboard sort key
+}
+
+export interface HolderLeader extends LeaderIdentity {
+  walletTrunc: string;
+  nftCount: number;
+  weight: number;
+  tokenUnits: string;   // monthly $TOKEN drip — the $TOKEN leaderboard sort key
+}
 
 export interface TraderDTO {
   saleCount: number;
@@ -9,7 +36,7 @@ export interface TraderDTO {
   burnMojos: string;        // adjusted burn (includes routed unattributed + voided bonuses)
   artistMojos: string;
   payoutCount: number;
-  topPayouts: { walletTrunc: string; buyer: string; seller: string; bonus: string; total: string }[];
+  topPayouts: TraderLeader[];
   bonuses: { paid: number; voided: number };
 }
 
@@ -17,7 +44,7 @@ export interface DripDTO {
   dripUnits: string;
   holderCount: number;
   nftCount: number;
-  topHolders: { walletTrunc: string; nftCount: number; weight: number; tokenUnits: string }[];
+  topHolders: HolderLeader[];
 }
 
 export interface OperatorDTO {
@@ -36,8 +63,17 @@ export interface SnapshotDTO {
   shadow: true;
   trader: TraderDTO;
   drip: DripDTO;
-  operator: OperatorDTO;
   meta: { assumes10pctRoyalty: true; unattributedCount: number; truncated: boolean };
+}
+
+// Operator-only payload (served by the authed /api/rewards/operator route; NEVER part of the public snapshot).
+export interface OperatorSnapshotDTO {
+  v: 1;
+  colId: string;
+  epoch: string;
+  status: "mtd" | "final";
+  computedAt: number;
+  operator: OperatorDTO;
 }
 
 // Per-wallet lookup value (kept OUT of the public snapshot; served by /api/rewards/lookup).

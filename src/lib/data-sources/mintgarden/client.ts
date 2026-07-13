@@ -1,4 +1,4 @@
-import type { MgCollection, MgNftDetail, MgListItem, MgPage } from "./types";
+import type { MgCollection, MgNftDetail, MgListItem, MgPage, MgProfile } from "./types";
 import { decodeChiaAddress } from "@/lib/chia/bech32";
 import { cachedDetailJson, cachedDetailJsonMany, storeDetailJson, cachedCollectionJson, storeCollectionJson } from "@/lib/db/nftCache";
 
@@ -285,6 +285,7 @@ export async function listAddressNfts(
   size = 50,
   type = "owned",
   throwOnError = false,
+  background = false,
 ): Promise<MgPage<MgListItem>> {
   const decoded = decodeChiaAddress(address);
   if (!decoded) return EMPTY_PAGE;
@@ -297,8 +298,16 @@ export async function listAddressNfts(
   // throwOnError: a caller PAGING a whole wallet must tell a transient error (429/5xx/timeout) apart from a
   // genuine empty page — otherwise one blip reads as "end of list" and silently truncates the roster.
   const page = throwOnError
-    ? await getJson<MgPage<MgListItem>>(url)
-    : await getJsonOrNull<MgPage<MgListItem>>(url);
+    ? await getJson<MgPage<MgListItem>>(url, DEFAULT_TIMEOUT_MS, background)
+    : await getJsonOrNull<MgPage<MgListItem>>(url, DEFAULT_TIMEOUT_MS, background);
   if (!page) return EMPTY_PAGE;
   return { items: page.items ?? [], next: page.next ?? null, previous: page.previous ?? null };
+}
+
+// Public DID profile (name + avatar) by DID (did:chia:...) or hex id. Tolerant: returns null on any failure or
+// for a wallet with no profile. Background-paced (used only by the daily rewards cron, never an interactive path).
+export async function getProfile(idOrDid: string): Promise<MgProfile | null> {
+  const id = idOrDid.trim();
+  if (!id) return null;
+  return getJsonOrNull<MgProfile>(`/profile/${encodeURIComponent(id)}`, DEFAULT_TIMEOUT_MS, true);
 }

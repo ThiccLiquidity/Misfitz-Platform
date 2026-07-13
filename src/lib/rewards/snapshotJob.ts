@@ -7,15 +7,16 @@ if (typeof window !== "undefined") throw new Error("snapshotJob is server-only")
 import { fetchDexieEpochSales, attributeCounterparties, resolveFvLookup, fetchActiveListings } from "./detectLive";
 import { buildEpochInputs, type RawSale } from "./detect";
 import { computeEpoch } from "./engine";
-import { settleUnattributed } from "./settle";
+import { settleUnattributed, assertSettlementSolvent } from "./settle";
 import { operatorPlanFromSettlement } from "./operator";
 import { allocateDrip, weighHoldings, type SnapshotNft } from "./allocator";
 import { dripForMonth, MISFITZ_TOKEN } from "./token";
-import { toSnapshotDTO, buildWalletMap } from "./snapshotSerialize";
+import { toSnapshotDTO, toOperatorDTO, leaderboardWallets, buildWalletMap, type ProfileMap } from "./snapshotSerialize";
+import { resolveIdentities } from "./identity";
 import { isRewardsShadowEnabled } from "./flag";
 import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync } from "@/lib/db/nftCache";
 import { getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
-import type { SnapshotDTO, WalletLookupValue } from "./snapshotTypes";
+import type { SnapshotDTO, OperatorSnapshotDTO, WalletLookupValue } from "./snapshotTypes";
 import type { MgListItem } from "@/lib/data-sources/mintgarden/types";
 
 const EX_S = 60 * 24 * 60 * 60;                 // keep snapshot/wallet blobs 60 days
@@ -26,6 +27,7 @@ const SLIMLIST_TTL_MS = 30 * 24 * 60 * 60_000;
 const SNAP_KEY = (c: string, e: string) => `rw:snap:v1:${c}:${e}`;
 const SNAP_PTR = (c: string) => `rw:snap:latest:${c}`;
 const WALLETS_KEY = (c: string, e: string) => `rw:wallets:v1:${c}:${e}`;
+const OPS_KEY = (c: string, e: string) => `rw:ops:v1:${c}:${e}`;   // operator-only blob (served by the authed route)
 const ATTRIB_KEY = (c: string, e: string) => `rw:attrib:${c}:${e}`;
 
 // Incremental attribution: only fetch MintGarden events for offerIds we haven't attributed this epoch. Keeps the
@@ -88,6 +90,7 @@ export async function computeRewardsSnapshot(colId: string, opts: ComputeOpts): 
   const payoutAt = Math.max(Date.now(), opts.epochEnd);
   const epochResult = computeEpoch(sales, signals, opts.epochStart, opts.epochEnd, undefined, payoutAt);
   const settlement = settleUnattributed(epochResult);
+  assertSettlementSolvent(epochResult, settlement); // never publish/act on an insolvent split
   const operator = operatorPlanFromSettlement(epochResult, settlement);
 
   // Holder side (roster from cache)
@@ -98,11 +101,20 @@ export async function computeRewardsSnapshot(colId: string, opts: ComputeOpts): 
   const { drip: dripUnits } = dripForMonth(MISFITZ_TOKEN.dripPoolUnits, opts.dripMonth, MISFITZ_TOKEN.dripRateBps);
   const drip = allocateDrip(weighHoldings(holders), dripUnits);
 
-  // Serialize + persist (public blob + private wallet map; the pointer moves only when updatePointer !== false).
-  const dto = toSnapshotDTO({ colId, epoch: opts.epoch, status: opts.status, computedAt: Date.now(), epochResult, settlement, operator, drip, truncated });
+  // Resolve public identities (name + pfp) for ONLY the leaderboard wallets — a couple dozen, Redis-cached.
+  // Tolerant: a resolver failure just means truncated addresses (never blocks the snapshot).
+  const { traders: leaderTraders, holders: leaderHolders } = leaderboardWallets(settlement, drip);
+  const profiles = await resolveIdentities([...leaderTraders, ...leaderHolders]).catch((): ProfileMap => new Map());
+
+  // Serialize + persist. PUBLIC snapshot (no operator) + private wallet map + operator-only blob. The pointer
+  // moves only when updatePointer !== false.
+  const computedAt = Date.now();
+  const dto = toSnapshotDTO({ colId, epoch: opts.epoch, status: opts.status, computedAt, epochResult, settlement, drip, truncated, profiles });
+  const opsDto = toOperatorDTO({ colId, epoch: opts.epoch, status: opts.status, computedAt, operator });
   const walletMap = buildWalletMap(drip, settlement);
   await cachePutLargeAsync(SNAP_KEY(colId, opts.epoch), JSON.stringify(dto), EX_S);
   await cachePutLargeAsync(WALLETS_KEY(colId, opts.epoch), JSON.stringify(walletMap), EX_S);
+  await cachePut(OPS_KEY(colId, opts.epoch), JSON.stringify(opsDto), EX_S); // small — plain SET
   if (opts.updatePointer !== false) await cachePut(SNAP_PTR(colId), JSON.stringify({ epoch: opts.epoch }), EX_S);
   return { ok: true, status: truncated ? "partial" : opts.status };
 }
@@ -121,6 +133,13 @@ export async function readSnapshot(colId: string): Promise<SnapshotDTO | null> {
   const epoch = await latestEpoch(colId);
   if (!epoch) return null;
   try { const raw = await cacheGetLarge(SNAP_KEY(colId, epoch), READ_TTL); return raw ? (JSON.parse(raw) as SnapshotDTO) : null; } catch { return null; }
+}
+
+// Operator-only read (served by the AUTHED /api/rewards/operator route — never the public snapshot route).
+export async function readOperator(colId: string): Promise<OperatorSnapshotDTO | null> {
+  const epoch = await latestEpoch(colId);
+  if (!epoch) return null;
+  try { const raw = await cacheGet(OPS_KEY(colId, epoch), READ_TTL); return raw ? (JSON.parse(raw) as OperatorSnapshotDTO) : null; } catch { return null; }
 }
 
 export async function readWalletValue(colId: string, wallet: string): Promise<WalletLookupValue | null> {

@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import { isRewardsShadowEnabled } from "@/lib/rewards/flag";
 import { MISFITZ_COLLECTION_ID } from "@/lib/rewards/consts";
 import { RewardsDashboard } from "@/components/rewards/RewardsDashboard";
+import { opsSecretMatches } from "@/lib/rewards/opsAuth";
 
 // Live collection binder — the same binder experience as a wallet, but for a whole collection.
 export const dynamic = "force-dynamic";
@@ -25,9 +26,12 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-export default async function CollectionLivePage({ params }: { params: { id: string } }) {
+export default async function CollectionLivePage({ params, searchParams }: { params: { id: string }; searchParams?: { ops?: string } }) {
   const view = await getCollectionView(params.id);
   if (!view) notFound();
+  // Operator view: only when ?ops=<REWARDS_OPS_SECRET> matches the server secret. The comparison happens on the
+  // server; a non-operator never gets the key (and the operator route 404s without it anyway).
+  const opsKey = opsSecretMatches(searchParams?.ops) ? searchParams!.ops : undefined;
   // JSON-LD structured data so search engines/social understand the collection page.
   const ld = {
     "@context": "https://schema.org",
@@ -48,7 +52,7 @@ export default async function CollectionLivePage({ params }: { params: { id: str
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
-      {isRewardsShadowEnabled() && view.id === MISFITZ_COLLECTION_ID && <RewardsDashboard colId={view.id} />}
+      {isRewardsShadowEnabled() && view.id === MISFITZ_COLLECTION_ID && <RewardsDashboard colId={view.id} opsKey={opsKey} />}
       <CollectionBinder key={view.id} view={view} />
     </>
   );

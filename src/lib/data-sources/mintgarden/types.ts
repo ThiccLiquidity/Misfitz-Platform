@@ -84,6 +84,11 @@ export interface MgListItem {
   collection_id: string; // col1...
   collection_name: string;
   owner_address_encoded_id?: string | null;
+  // Present when the NFT is held under a DID profile (MintGarden returns the owner's public profile inline).
+  // Null for plain-address holders. Used to attach a name+pfp to rewards leaderboard wallets.
+  owner_encoded_id?: string | null;   // did:chia:... of the holder, when held via a DID
+  owner_name?: string | null;
+  owner_avatar_uri?: string | null;
   // Present ONLY when the list is fetched with include_metadata=true — full CHIP-0007 attributes inline,
   // so we can build the whole rarity table from ~100 list pages instead of one detail fetch per NFT.
   metadata?: { attributes?: MgAttribute[]; series_number?: number | null } | null;
@@ -97,4 +102,13 @@ export interface MgPage<T> {
   items: T[];
   next: string | null;
   previous: string | null;
+}
+
+// GET /profile/{did|hex} — a MintGarden public DID profile (name + avatar; the rest we ignore).
+export interface MgProfile {
+  id?: string | null;             // hex
+  encoded_id?: string | null;     // did:chia:...
+  name?: string | null;
+  username?: string | null;
+  avatar_uri?: string | null;
 }

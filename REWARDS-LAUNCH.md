@@ -51,7 +51,17 @@ In Vercel → your project → Settings → Environment Variables, add:
 REWARDS_SHADOW = 1
 CRON_SECRET    = <any long random string>
 REWARDS_LAUNCH = 2026-07        (optional; sets the drip month)
+REWARDS_OPS_SECRET  = <long random string>   (optional; unlocks the operator-only panel)
+REWARDS_PROFILE_OPTOUT = <comma-separated wallets/DIDs>  (optional; hide these from leaderboards)
 ```
+
+Notes on the two new optional vars:
+- `REWARDS_OPS_SECRET` gates the operator actions ("send X to the hot wallet"). Those numbers are NOT in the
+  public payload. To see them, open the collection page with `?ops=<REWARDS_OPS_SECRET>`. Anyone without the
+  secret just sees the public dashboard + leaderboards. Leave unset to disable the operator panel entirely.
+- `REWARDS_PROFILE_OPTOUT` removes a wallet's name/pfp from the public leaderboards (it still shows a truncated
+  address). List BOTH the `xch1…` and `did:chia…` forms if a person uses both. Takes effect on the next cron
+  recompute (identities are baked into the snapshot).
 
 Redeploy, then trigger the compute once:
 
