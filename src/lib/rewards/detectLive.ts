@@ -8,7 +8,8 @@
 //   • Source   — Dexie completed clean-XCH sales (status=4), not deduped: every sale in the window counts.
 //   • Royalty  — TRUSTED from the marketplace record in shadow mode (royalty = 10% of price). On-chain
 //                royalty-coin verification is a REQUIRED gate before any real payout (NOT built here).
-//   • Deal tag — the bonus winner is APPROXIMATED from the current comps model FV at detection time.
+//   • Deal tag — FROZEN at first detection: each sale's fair value is stamped once (offerId-keyed) and never
+//                recomputed, so a green buy stays green even if the floor moves (spec §5). Cron is the SOLE writer.
 //   • Provenance (coin/spend/block) is intentionally NOT set — that's the chain re-verification step required
 //     before real payouts, not shadow mode.
 
@@ -16,6 +17,8 @@ import { getNftDetailsBatch, getNftDetail } from "@/lib/data-sources/mintgarden/
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 import { getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
+import { cacheGetLarge, cachePutLargeAsync } from "@/lib/db/nftCache";
+import { freezeInto, pruneTags, type TagStore } from "./tagStore";
 import { computeEpoch } from "./engine";
 import { buildEpochInputs, FINALITY_MS, type ActiveListing, type RawSale } from "./detect";
 import { DEFAULT_CONFIG, type EpochResult, type RewardConfig } from "./types";
@@ -118,15 +121,13 @@ export async function attributeCounterparties(raws: RawSale[], opts: { fresh?: b
   }
 }
 
-// Build a frozen-FV lookup for the sold NFTs from the current comps model (approximation, per the decision).
-// MisFitz is seeded, so rank comes from the seed by mint number; FV = comps.valueOf(rank). null when we can't
-// value it (no comps / no rank) -> that sale simply earns no deal bonus.
-export async function buildFvLookup(colId: string, raws: RawSale[]): Promise<(r: RawSale) => number | null> {
+// CURRENT comps-derived fair value per NFT — the raw valuation we FREEZE from. Returns the map + whether the
+// comps model was available at all (null model => we couldn't value anything this run).
+async function currentFvByNft(colId: string, ids: string[]): Promise<{ fvByNft: Map<string, number>; compsAvailable: boolean }> {
   const [comps, seed] = await Promise.all([getCompsModel(colId).catch(() => null), getSeed(colId).catch(() => null)]);
-  if (!comps) return () => null;
-  const ids = [...new Set(raws.map((r) => r.nftId))];
+  const fvByNft = new Map<string, number>();
+  if (!comps) return { fvByNft, compsAvailable: false };
   const details = await getNftDetailsBatch(ids, true).catch(() => []); // background-paced (cron path)
-  const fvById = new Map<string, number>();
   for (const d of details) {
     if (!d) continue;
     let rank: number | null = null;
@@ -136,9 +137,36 @@ export async function buildFvLookup(colId: string, raws: RawSale[]): Promise<(r:
     if (rank == null) continue;
     const traits = mapTraits(d).map((t) => ({ k: t.trait_type, v: String(t.value) }));
     const cv = comps.valueOf(rank, traits);
-    if (cv.value != null) fvById.set(d.encoded_id, cv.value);
+    if (cv.value != null) fvByNft.set(d.encoded_id, cv.value);
   }
-  return (r: RawSale) => fvById.get(r.nftId) ?? null;
+  return { fvByNft, compsAvailable: true };
+}
+
+const TAGS_KEY = (colId: string) => `rw:tags:v1:${colId}`;
+const TAGS_TTL_MS = 200 * 24 * 60 * 60_000; // read-fresh generously; the prune in tagStore is the real lifecycle
+const TAGS_EX_S = 180 * 24 * 60 * 60;
+
+// FROZEN deal-tag fair-value lookup (spec §5). Reads the per-sale frozen store, stamps any NEW sale's current
+// fair value ONCE (only when the model resolves it — a cold run can't freeze a wrong tag), and returns the
+// frozen fv per sale. persist=true (the CRON, the SOLE writer) writes the store back when it changed;
+// persist=false (the CLI) is read-only. Also reports whether comps was available so a write-once FINAL run can
+// be DEFERRED when the valuation is down (rather than freezing everyone at "none").
+export async function resolveFvLookup(colId: string, raws: RawSale[], opts: { persist: boolean }): Promise<{ fvOf: (r: RawSale) => number | null; compsAvailable: boolean }> {
+  const now = Date.now();
+  let store: TagStore = {};
+  try { const raw = await cacheGetLarge(TAGS_KEY(colId), TAGS_TTL_MS); if (raw) store = JSON.parse(raw) as TagStore; } catch { store = {}; }
+  // Only value sales NOT already frozen — an all-stamped run needs no comps fetch at all (compsAvailable stays
+  // true, since there's nothing left to value).
+  const ids = [...new Set(raws.filter((r) => !store[r.offerId]).map((r) => r.nftId))];
+  let fvByNft = new Map<string, number>();
+  let compsAvailable = true;
+  if (ids.length) ({ fvByNft, compsAvailable } = await currentFvByNft(colId, ids));
+  const frozen = freezeInto(store, raws, (r) => fvByNft.get(r.nftId) ?? null, now);
+  const pruned = pruneTags(frozen.store, now);
+  if (opts.persist && (frozen.changed || pruned.changed)) {
+    try { await cachePutLargeAsync(TAGS_KEY(colId), JSON.stringify(pruned.store), TAGS_EX_S); } catch { /* best effort */ }
+  }
+  return { fvOf: frozen.fvOf, compsAvailable };
 }
 
 // Fetch active MisFitz Dexie listings as vest signals (listed-cheaper-than-purchase voids the buyer bonus).
@@ -177,8 +205,9 @@ export async function runShadowEpoch(
 ): Promise<EpochResult> {
   const raws = await fetchDexieEpochSales(colId, epochStart, epochEnd);
   await attributeCounterparties(raws);
-  const [fvLookup, listings] = await Promise.all([buildFvLookup(colId, raws), fetchActiveListings(colId)]);
-  const { sales, signals } = buildEpochInputs(raws, epochStart, epochEnd, fvLookup, listings);
+  // Read-only against the frozen store (the CLI must never STAMP against prod Redis — cron is the sole writer).
+  const [fv, listings] = await Promise.all([resolveFvLookup(colId, raws, { persist: false }), fetchActiveListings(colId)]);
+  const { sales, signals } = buildEpochInputs(raws, epochStart, epochEnd, fv.fvOf, listings);
   // payoutAt = now for a retro run (epochEnd in the past), else epochEnd. Otherwise every "listed cheaper"
   // signal (stamped at now) is discarded as after-payout and bonuses wrongly vest in retro shadow reports.
   const payoutAt = Math.max(Date.now(), epochEnd);

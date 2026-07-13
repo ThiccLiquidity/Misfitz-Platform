@@ -4,7 +4,7 @@
 // runtime guard so this can never execute in a browser bundle.
 if (typeof window !== "undefined") throw new Error("snapshotJob is server-only");
 
-import { fetchDexieEpochSales, attributeCounterparties, buildFvLookup, fetchActiveListings } from "./detectLive";
+import { fetchDexieEpochSales, attributeCounterparties, resolveFvLookup, fetchActiveListings } from "./detectLive";
 import { buildEpochInputs, type RawSale } from "./detect";
 import { computeEpoch } from "./engine";
 import { settleUnattributed } from "./settle";
@@ -80,8 +80,11 @@ export async function computeRewardsSnapshot(colId: string, opts: ComputeOpts): 
   // Trader side
   const raws = await fetchDexieEpochSales(colId, opts.epochStart, opts.epochEnd);
   await attributeIncremental(colId, opts.epoch, raws);
-  const [fvLookup, listings] = await Promise.all([buildFvLookup(colId, raws), fetchActiveListings(colId)]);
-  const { sales, signals } = buildEpochInputs(raws, opts.epochStart, opts.epochEnd, fvLookup, listings);
+  const [fv, listings] = await Promise.all([resolveFvLookup(colId, raws, { persist: true }), fetchActiveListings(colId)]);
+  // A FINAL run is write-once. If the valuation model is DOWN and there are sales to tag, don't freeze everyone
+  // as "none" forever — skip and let the next day's attempt (we have two days) retry with a warm model.
+  if (opts.status === "final" && !fv.compsAvailable && raws.some((r) => fv.fvOf(r) == null)) return { ok: false, status: "defer-final-no-comps" };
+  const { sales, signals } = buildEpochInputs(raws, opts.epochStart, opts.epochEnd, fv.fvOf, listings);
   const payoutAt = Math.max(Date.now(), opts.epochEnd);
   const epochResult = computeEpoch(sales, signals, opts.epochStart, opts.epochEnd, undefined, payoutAt);
   const settlement = settleUnattributed(epochResult);

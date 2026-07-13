@@ -82,6 +82,11 @@ deal tag (bonus winner) **approximated from the current comps model FV** at dete
 - **Truncation is now loud**: fetch failure / page-cap logs a warning (never silently reports a partial epoch).
 - Engine fix: only the **buyer** bonus voids; the **seller premium bonus is final** (matches §4; was voidable).
 - Every shadow report is stamped **"assumes 10% royalty — UNVERIFIED"**.
+- **Deal tag FROZEN at first detection** (spec-compliant): each sale's fair value is stamped ONCE, keyed by
+  offerId, in `rw:tags:v1:{colId}` (pure logic `tagStore.ts`, live read/write `resolveFvLookup` in detectLive).
+  A green buy stays green even if the floor later moves. Only a RESOLVED valuation is stamped (a cold run can't
+  freeze a wrong "none" — it retries); the cron is the SOLE writer (CLI is read-only); a write-once FINAL run is
+  DEFERRED if the valuation model is down; entries pruned at 90 days.
 - Ownership change WITH royalty paid in the same spend. No royalty = wallet shuffle = ignored.
 - **XCH-denominated sales only** at launch. Bundles: base rewards only (no bonus).
 - Finality: counts once ~10 min of blocks deep; late-epoch sales roll to next payday.
