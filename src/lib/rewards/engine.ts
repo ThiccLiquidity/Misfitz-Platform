@@ -94,7 +94,9 @@ export function computeEpoch(
 
     if (sale.bonusWinner !== "none" && s.bonus > Z) {
       const winner = sale.bonusWinner === "buyer" ? sale.buyer : sale.seller;
-      const void_ = bonusVoided(sale.nftId, sale.priceMojos, sale.soldAt, payoutAt, signals);
+      // Only the BUYER bonus vests/voids (spec §4). The SELLER premium bonus is final the instant the sale
+      // confirms — never clawed back — so it is paid unconditionally (a buyer relisting cheap can't steal it).
+      const void_ = sale.bonusWinner === "buyer" ? bonusVoided(sale.nftId, sale.priceMojos, sale.soldAt, payoutAt, signals) : null;
       if (void_) {
         burnMojos += s.bonus; // voided bonus feeds the burn
         bonuses.push({

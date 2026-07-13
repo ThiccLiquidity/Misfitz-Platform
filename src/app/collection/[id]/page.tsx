@@ -3,6 +3,9 @@ import { getCollectionView } from "@/lib/collections/liveCollection";
 import { CollectionBinder } from "@/components/collection/CollectionBinder";
 import { getCollection } from "@/lib/data-sources/mintgarden/client";
 import type { Metadata } from "next";
+import { isRewardsShadowEnabled } from "@/lib/rewards/flag";
+import { MISFITZ_COLLECTION_ID } from "@/lib/rewards/consts";
+import { RewardsDashboard } from "@/components/rewards/RewardsDashboard";
 
 // Live collection binder — the same binder experience as a wallet, but for a whole collection.
 export const dynamic = "force-dynamic";
@@ -45,6 +48,7 @@ export default async function CollectionLivePage({ params }: { params: { id: str
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
+      {isRewardsShadowEnabled() && view.id === MISFITZ_COLLECTION_ID && <RewardsDashboard colId={view.id} />}
       <CollectionBinder key={view.id} view={view} />
     </>
   );
