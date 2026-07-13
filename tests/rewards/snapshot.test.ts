@@ -27,26 +27,18 @@ function fixture() {
 test("toSnapshotDTO: money fields are STRINGS that round-trip; uses settled figures; NO operator block", () => {
   const f = fixture();
   const dto = toSnapshotDTO({ colId: "col1x", epoch: "2026-07", status: "mtd", computedAt: 123, truncated: false, ...f });
-  // operator is NOT in the public snapshot (it moved to the authed operator route)
   assert.equal("operator" in dto, false);
-  // all public money is a string
   for (const v of [dto.trader.totalRoyaltyMojos, dto.trader.rewardPotMojos, dto.trader.burnMojos, dto.drip.dripUnits]) {
     assert.equal(typeof v, "string");
-    assert.equal(BigInt(v).toString(), v); // parses back exactly
+    assert.equal(BigInt(v).toString(), v);
   }
-  // settled figures: verified reward pot + adjusted burn (unattributed routed in)
   assert.equal(dto.trader.rewardPotMojos, f.settlement.verifiedRewardPotMojos.toString());
   assert.equal(dto.trader.burnMojos, f.settlement.adjustedBurnMojos.toString());
   assert.equal(dto.meta.unattributedCount, f.settlement.droppedRecipients);
   assert.ok(dto.meta.unattributedCount >= 1);
-  // solvency visible in the DTO: royalty == artist + burn + rewardPot
-  assert.equal(
-    BigInt(dto.trader.artistMojos) + BigInt(dto.trader.burnMojos) + BigInt(dto.trader.rewardPotMojos),
-    BigInt(dto.trader.totalRoyaltyMojos),
-  );
-  // no unattributed placeholder leaks into the public leaderboard
+  // artist cut is no longer public; reward pot + burn must still be within the royalty (artist is the remainder)
+  assert.ok(BigInt(dto.trader.burnMojos) + BigInt(dto.trader.rewardPotMojos) < BigInt(dto.trader.totalRoyaltyMojos));
   assert.ok(dto.trader.topPayouts.every((p) => !p.walletTrunc.startsWith("unknown-")));
-  // survives JSON
   assert.deepEqual(JSON.parse(JSON.stringify(dto)).trader.rewardPotMojos, dto.trader.rewardPotMojos);
 });
 
@@ -57,7 +49,6 @@ test("toOperatorDTO: operator actions serialize as strings; solvent split", () =
     assert.equal(typeof v, "string");
     assert.equal(BigInt(v).toString(), v);
   }
-  // hot-wallet move = reward + burn (artist stays behind)
   assert.equal(
     BigInt(ops.operator.moveToHotWalletMojos),
     BigInt(ops.operator.forRewardMojos) + BigInt(ops.operator.forBurnMojos),
@@ -70,7 +61,6 @@ test("leaderboardWallets: returns the top wallets the DTO will show (traders by 
   assert.ok(traders.includes(A("a")), "verified trader A(a) is on the trader board");
   assert.ok(traders.every((w) => !w.startsWith("unknown-")), "no placeholder wallets");
   assert.ok(holders.includes(A("a")), "top holder A(a) present");
-  // holders sorted by token drip desc: A(a) (rank 2) drips more than A(z) (rank 900)
   assert.equal(holders[0], A("a"));
 });
 
@@ -81,7 +71,6 @@ test("toSnapshotDTO: attaches resolved name+avatar to leaderboard entries by ful
   const aliceHolder = dto.drip.topHolders.find((h) => h.name === "Alice");
   assert.ok(aliceHolder, "A(a) resolved to Alice on the holder board");
   assert.equal(aliceHolder.avatarUrl, "https://x/a.webp");
-  // an unresolved wallet has null identity (UI falls back to the truncated address)
   const other = dto.drip.topHolders.find((h) => h.name !== "Alice");
   assert.ok(other && other.name === null && other.avatarUrl === null);
 });

@@ -1,11 +1,11 @@
-// MisFitz Rewards — leaderboard IDENTITY resolver (SERVER-ONLY, network + Redis-cached). Turns a handful of
+// MisFitz Rewards - leaderboard IDENTITY resolver (SERVER-ONLY, network + Redis-cached). Turns a handful of
 // leaderboard wallets into a public name + avatar via MintGarden. Two tolerant paths, both fall back to null
 // (the UI then shows just the truncated address):
-//   • did:chia:…  -> GET /profile/{did}
-//   • xch1…       -> read one NFT the address holds; MintGarden inlines the owner's public profile when the NFT
-//                    is held under a DID (plain-address holders have no profile -> null).
+//   - did:chia:...  -> GET /profile/{did}
+//   - xch1...       -> read one NFT the address holds; MintGarden inlines the owner's public profile when the NFT
+//                      is held under a DID (plain-address holders have no profile -> null).
 // Results are cached per-wallet (positives 7d, "no profile" 1d so a newly-created profile shows up soon). Only
-// the ~2 dozen leaderboard wallets are ever resolved — never the whole holder set — so cron cost is trivial.
+// the ~2 dozen leaderboard wallets are ever resolved - never the whole holder set - so cron cost is trivial.
 if (typeof window !== "undefined") throw new Error("rewards/identity is server-only");
 
 import { getProfile, listAddressNfts } from "@/lib/data-sources/mintgarden/client";
@@ -19,10 +19,10 @@ export { parseOptOut, identityOrOptOut } from "./identityCore";
 const IDENT_KEY = (w: string) => `rw:ident:v1:${w}`;
 const IDENT_TTL_MS = 7 * 24 * 60 * 60_000; // read-fresh window
 const IDENT_EX_S = 7 * 24 * 60 * 60;       // positive cache: 7 days
-const NEG_EX_S = 24 * 60 * 60;             // negative ("no profile"): 1 day — retry sooner
+const NEG_EX_S = 24 * 60 * 60;             // negative ("no profile"): 1 day - retry sooner
 const MAX_RESOLVE = 60;                     // hard safety cap on wallets resolved per run
 
-// ── Network resolution (per wallet) ─────────────────────────────────────────────
+// Network resolution (per wallet).
 async function resolveOne(wallet: string): Promise<LeaderIdentity> {
   if (/^did:chia:/i.test(wallet)) {
     const p = await getProfile(wallet).catch(() => null);

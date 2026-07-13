@@ -136,11 +136,10 @@ export function RewardsDashboard({ colId, opsKey }: { colId: string; opsKey?: st
 
           {/* Trader rewards */}
           <div className="text-subtle mb-2 text-[11px] font-bold uppercase tracking-widest">Traders — {snap.trader.saleCount} sale{snap.trader.saleCount === 1 ? "" : "s"}</div>
-          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Stat label="Royalties in" value={xch(snap.trader.totalRoyaltyMojos)} />
             <Stat label="Reward pot → $CHIA" value={xch(snap.trader.rewardPotMojos)} sub={`${snap.trader.payoutCount} wallets`} />
             <Stat label="Burn pot → $TOKEN" value={xch(snap.trader.burnMojos)} sub={`${snap.trader.bonuses.voided} voided → burn`} />
-            <Stat label="Artist (1%)" value={xch(snap.trader.artistMojos)} />
           </div>
 
           {/* Holder drip */}

@@ -1,4 +1,4 @@
-// MisFitz Rewards — pure serializers: engine results -> client-safe DTO (base-unit STRINGS). No I/O, no network;
+// MisFitz Rewards - pure serializers: engine results -> client-safe DTO (base-unit STRINGS). No I/O, no network;
 // unit-tested. Uses the SETTLED figures (verified reward pot, adjusted burn) so the dashboard shows what actually
 // pays out vs burns. Truncated leaderboard only; the full per-wallet map is built separately for the lookup API.
 //
@@ -20,7 +20,7 @@ const identityFor = (profiles: ProfileMap | undefined, wallet: string): LeaderId
 const byTotalDesc = <T extends { total: bigint }>(a: T, b: T) => (b.total > a.total ? 1 : b.total < a.total ? -1 : 0);
 const byTokensDesc = <T extends { tokenUnits: bigint }>(a: T, b: T) => (b.tokenUnits > a.tokenUnits ? 1 : b.tokenUnits < a.tokenUnits ? -1 : 0);
 
-// PURE selection of the wallets that will appear on each leaderboard — so the job can resolve identities for
+// PURE selection of the wallets that will appear on each leaderboard - so the job can resolve identities for
 // exactly those (a couple dozen), never the whole holder set. Same ordering the DTO uses.
 export function leaderboardWallets(settlement: Settlement, drip: DripResult, n: number = LEADER_N): { traders: string[]; holders: string[] } {
   const traders = [...settlement.payable].sort(byTotalDesc).slice(0, n).map((p) => p.wallet);
@@ -54,7 +54,6 @@ export function toSnapshotDTO(args: {
       totalRoyaltyMojos: e.totalRoyaltyMojos.toString(),
       rewardPotMojos: s.verifiedRewardPotMojos.toString(),
       burnMojos: s.adjustedBurnMojos.toString(),
-      artistMojos: e.artistMojos.toString(),
       payoutCount: s.payable.length,
       topPayouts: payouts.map((p) => ({
         walletTrunc: truncWallet(p.wallet),
@@ -85,7 +84,7 @@ export function toSnapshotDTO(args: {
   };
 }
 
-// Operator-only serializer — the counterpart the authed operator route serves. Kept out of the public snapshot.
+// Operator-only serializer - the counterpart the authed operator route serves. Kept out of the public snapshot.
 export function toOperatorDTO(args: {
   colId: string;
   epoch: string;
