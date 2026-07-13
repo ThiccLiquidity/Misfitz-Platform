@@ -199,6 +199,14 @@ Fixed supply **1,000,000,000 $TOKEN** (Chia CAT, 3 decimals). Single-issuance TA
 - `settle.ts` — routes unattributed (`unknown-*`) rewards to the burn before the $CHIA buy (solvency preserved).
 - `manifest.ts` — canonical, sha256 hash-verified payout manifests (reward $CHIA + drip $TOKEN) + dry-run format.
 - `manifestGuard.ts` — verify guard (integrity + whitelist + caps + no-unattributed) and the idempotency ledger.
+- `chainProvider.ts` / `chainVerify.ts` — on-chain royalty gate (operator provider + pure verifier): verified
+  sales' actual royalty/price/buyer/seller/coin/spend/block REPLACE the shadow assumptions; only verified sales
+  fund a `chain-verified` reward manifest. `tagStore.ts` — frozen-deal-tag store (per-sale, first-seen).
+- `finalize.ts` (pure) / `pipeline.ts` (live) — the REAL monthly flow: `prepareRewardEpoch` (detect->freeze->
+  verify->settle->operator plan) then `finalizeRewardManifest`/`finalizeDripManifest` (sign after the buy).
+- `botDeps.ts` / `bot.ts` — the keyless bot orchestrator (see BOT-CONTRACT.md).
+- Fable fix (B1): the operator plan is derived from the SETTLEMENT (`operatorPlanFromSettlement`) so unattributed
+  XCH is BURNED, never converted to $CHIA and paid out. Applied to the pipeline, dashboard panel, and CLI report.
 - `mock.ts` / `demo.ts` — sample data + runnable shadow demo (`npx tsx src/lib/rewards/demo.ts`).
 `tests/rewards/` — 42 tests: slice/solvency math, the Alice/Bob/Carol example, vest pay/void/equal/other-nft/
 window/resale, drip curve numbers, 500-epoch solvency property, wash-trade net-negative property, and detection

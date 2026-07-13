@@ -91,3 +91,8 @@ test("assertVerifiedSales: passes reconciled sales, throws on a shadow (unverifi
   assert.doesNotThrow(() => assertVerifiedSales([verified]));
   assert.throws(() => assertVerifiedSales([sale]), /not chain-verified/); // shadow sale has no spendId
 });
+
+test("verifyRoyalty: empty provenance ids -> malformed-spend (per-sale reject, not a whole-epoch throw)", () => {
+  assert.equal(verifyRoyalty(goodSpend({ spendId: "" }), sale, cfg).reason, "malformed-spend");
+  assert.equal(verifyRoyalty(goodSpend({ coinId: "" }), sale, cfg).reason, "malformed-spend");
+});

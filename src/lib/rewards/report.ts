@@ -2,7 +2,8 @@
 // dashboard. No I/O.
 import { type EpochResult } from "./types";
 import { xchStr } from "./format";
-import { operatorPlan } from "./operator";
+import { operatorPlanFromSettlement } from "./operator";
+import { settleUnattributed } from "./settle";
 import { type DripResult } from "./allocator";
 import { type TokenConfig, circulating, cumulativeDrip, dripForMonth, tokenStr } from "./token";
 
@@ -17,7 +18,7 @@ export function formatEpochReport(r: EpochResult): string {
   L.push(`  Burn pot:      ${xchStr(r.burnMojos)} XCH  -> buy & burn $TOKEN`);
   L.push(`Solvent:         ${r.solvent ? "YES (allocated === received)" : "NO — BUG"}`);
   L.push(``);
-  const plan = operatorPlan(r);
+  const plan = operatorPlanFromSettlement(r, settleUnattributed(r));
   L.push(`=== Operator actions (do BEFORE distribution — nothing is auto-sent) ===`);
   L.push(`SEND TO HOT WALLET:  ${xchStr(plan.moveToHotWalletMojos)} XCH   (from the royalty wallet, then swap)`);
   L.push(`  -> ${xchStr(plan.forRewardMojos)} XCH  swap to $CHIA  -> distribute to the wallets below`);

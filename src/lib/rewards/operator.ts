@@ -7,6 +7,7 @@
 // Invariant: moveToHotWalletMojos + keepArtistMojos === totalRoyaltyMojos (every mojo accounted for).
 
 import { type EpochResult } from "./types";
+import { type Settlement } from "./settle";
 
 export interface OperatorPlan {
   moveToHotWalletMojos: bigint; // reward pot + burn pot — transfer this to the hot wallet, then swap
@@ -21,6 +22,19 @@ export function operatorPlan(r: EpochResult): OperatorPlan {
     moveToHotWalletMojos: r.rewardPotMojos + r.burnMojos,
     forRewardMojos: r.rewardPotMojos,
     forBurnMojos: r.burnMojos,
+    keepArtistMojos: r.artistMojos,
+    totalRoyaltyMojos: r.totalRoyaltyMojos,
+  };
+}
+
+// The SETTLED operator plan: after unattributed rewards are routed to burn, the $CHIA buy covers only the
+// VERIFIED reward pot and the burn grows by the routed amount. Same total moved to the hot wallet, correct split.
+// Invariant: moveToHotWallet + keepArtist === totalRoyalty (solvent).
+export function operatorPlanFromSettlement(r: EpochResult, s: Settlement): OperatorPlan {
+  return {
+    moveToHotWalletMojos: s.verifiedRewardPotMojos + s.adjustedBurnMojos,
+    forRewardMojos: s.verifiedRewardPotMojos,
+    forBurnMojos: s.adjustedBurnMojos,
     keepArtistMojos: r.artistMojos,
     totalRoyaltyMojos: r.totalRoyaltyMojos,
   };

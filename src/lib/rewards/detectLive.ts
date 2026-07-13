@@ -164,7 +164,14 @@ export async function resolveFvLookup(colId: string, raws: RawSale[], opts: { pe
   const frozen = freezeInto(store, raws, (r) => fvByNft.get(r.nftId) ?? null, now);
   const pruned = pruneTags(frozen.store, now);
   if (opts.persist && (frozen.changed || pruned.changed)) {
-    try { await cachePutLargeAsync(TAGS_KEY(colId), JSON.stringify(pruned.store), TAGS_EX_S); } catch { /* best effort */ }
+    try {
+      // Merge-on-write: re-read in case another writer stamped concurrently, then UNION (existing wins on any
+      // conflict) so a concurrent stamp is never lost — the freeze-once guarantee holds across overlapping runs.
+      let current: TagStore = {};
+      try { const raw2 = await cacheGetLarge(TAGS_KEY(colId), TAGS_TTL_MS); if (raw2) current = JSON.parse(raw2) as TagStore; } catch { current = {}; }
+      const merged = pruneTags({ ...pruned.store, ...current }, now);
+      await cachePutLargeAsync(TAGS_KEY(colId), JSON.stringify(merged.store), TAGS_EX_S);
+    } catch { /* best effort */ }
   }
   return { fvOf: frozen.fvOf, compsAvailable };
 }
@@ -204,7 +211,7 @@ export async function runShadowEpoch(
   cfg: RewardConfig = DEFAULT_CONFIG,
 ): Promise<EpochResult> {
   const raws = await fetchDexieEpochSales(colId, epochStart, epochEnd);
-  await attributeCounterparties(raws);
+  await attributeCounterparties(raws, { fresh: true }); // fresh so a just-made buy resolves to the real wallet, not a placeholder
   // Read-only against the frozen store (the CLI must never STAMP against prod Redis — cron is the sole writer).
   const [fv, listings] = await Promise.all([resolveFvLookup(colId, raws, { persist: false }), fetchActiveListings(colId)]);
   const { sales, signals } = buildEpochInputs(raws, epochStart, epochEnd, fv.fvOf, listings);

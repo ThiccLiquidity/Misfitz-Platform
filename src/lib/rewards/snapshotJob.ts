@@ -8,7 +8,7 @@ import { fetchDexieEpochSales, attributeCounterparties, resolveFvLookup, fetchAc
 import { buildEpochInputs, type RawSale } from "./detect";
 import { computeEpoch } from "./engine";
 import { settleUnattributed } from "./settle";
-import { operatorPlan } from "./operator";
+import { operatorPlanFromSettlement } from "./operator";
 import { allocateDrip, weighHoldings, type SnapshotNft } from "./allocator";
 import { dripForMonth, MISFITZ_TOKEN } from "./token";
 import { toSnapshotDTO, buildWalletMap } from "./snapshotSerialize";
@@ -88,7 +88,7 @@ export async function computeRewardsSnapshot(colId: string, opts: ComputeOpts): 
   const payoutAt = Math.max(Date.now(), opts.epochEnd);
   const epochResult = computeEpoch(sales, signals, opts.epochStart, opts.epochEnd, undefined, payoutAt);
   const settlement = settleUnattributed(epochResult);
-  const operator = operatorPlan(epochResult);
+  const operator = operatorPlanFromSettlement(epochResult, settlement);
 
   // Holder side (roster from cache)
   const { holders, truncated } = await rosterFromCache(colId);

@@ -25,3 +25,20 @@ test("operatorPlan: hot-wallet transfer = reward pot + burn pot; artist stays; s
   assert.equal(p.keepArtistMojos, XCH(1.4));
   assert.equal(p.moveToHotWalletMojos, XCH(12.6));
 });
+
+import { operatorPlanFromSettlement } from "../../src/lib/rewards/operator";
+import { settleUnattributed } from "../../src/lib/rewards/settle";
+
+test("operatorPlanFromSettlement: unattributed rewards go to BURN, not the $CHIA buy (B1)", () => {
+  const epochResult = computeEpoch([
+    toSale(raw({ offerId: "s1", nftId: "n1", priceXch: 100, soldAt: 1, buyer: "alice", seller: "bob" }), null),
+    toSale(raw({ offerId: "s2", nftId: "n2", priceXch: 60, soldAt: 2 }), null), // unattributed -> routed to burn
+  ], [], 0, 10);
+  const s = settleUnattributed(epochResult);
+  const plan = operatorPlanFromSettlement(epochResult, s);
+  assert.ok(s.routedToBurnMojos > BigInt(0), "there IS an unattributed slice");
+  assert.equal(plan.forRewardMojos, s.verifiedRewardPotMojos);           // $CHIA buy covers only verified
+  assert.equal(plan.forBurnMojos, s.adjustedBurnMojos);                  // routed slice joins the burn
+  assert.ok(plan.forRewardMojos < epochResult.rewardPotMojos, "reward buy is LESS than the raw pot");
+  assert.equal(plan.moveToHotWalletMojos + plan.keepArtistMojos, plan.totalRoyaltyMojos); // solvent
+});

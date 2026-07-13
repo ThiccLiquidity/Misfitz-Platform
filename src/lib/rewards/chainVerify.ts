@@ -46,6 +46,8 @@ function structurallyValid(spend: ChainSaleSpend): boolean {
     && Number.isSafeInteger(spend.nftCountInSpend)
     && Number.isSafeInteger(spend.blockIndex)
     && Number.isSafeInteger(spend.blockDepth)
+    && typeof spend.coinId === "string" && spend.coinId.length > 0
+    && typeof spend.spendId === "string" && spend.spendId.length > 0
     && Array.isArray(spend.payments)
     && spend.payments.every((pmt) => pmt && typeof pmt.toAddress === "string" && typeof pmt.amountMojos === "bigint");
 }
@@ -89,10 +91,12 @@ export function verifyRoyalty(spend: ChainSaleSpend | null, sale: Sale, cfg: Cha
 // deal tag (bonusWinner) stays FROZEN from shadow tag time (spec §5); the bonus is paid to the verified buyer/
 // seller. If a side didn't resolve on chain, it keeps its placeholder → settlement burns that slice.
 export function reconcileSale(shadow: Sale, v: RoyaltyVerification): Sale {
+  // Validate chain-derived wallets: a garbage (non-empty, non-address) buyer/seller would otherwise pass settle
+  // and fail the WHOLE manifest at the bot's allowlist. Fall back to the placeholder -> that slice burns.
   return {
     ...shadow,
-    buyer: v.buyer || shadow.buyer,
-    seller: v.seller || shadow.seller,
+    buyer: WALLET_RE.test(v.buyer) ? v.buyer : shadow.buyer,
+    seller: WALLET_RE.test(v.seller) ? v.seller : shadow.seller,
     priceMojos: v.priceMojos,
     royaltyMojos: v.royaltyMojos,
     coinId: v.coinId,
