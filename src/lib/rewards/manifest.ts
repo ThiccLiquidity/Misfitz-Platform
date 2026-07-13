@@ -25,6 +25,7 @@ export interface PayoutManifest {
   totalUnits: string;
   routedToBurnUnits?: string; // reward manifests: unattributed XCH diverted to burn (informational)
   notes: string[];
+  provenance: "shadow" | "chain-verified"; // reward manifests need "chain-verified" before the bot will send
   hash: string;        // sha256 hex of the canonical serialization (all fields EXCEPT hash + signature)
   signature?: string;  // operator signature over `hash` (set by signManifest). REQUIRED before real payouts (see guard).
 }
@@ -73,7 +74,7 @@ export function buildDripManifest(
   const recipients: ManifestRecipient[] = r.wallets
     .filter((w) => w.tokenUnits > BigInt(0))
     .map((w) => ({ wallet: w.wallet, assetId: asset.id, amountUnits: w.tokenUnits.toString(), reason: `drip:${w.nftCount}nft` }));
-  return finalize({ version: 1, kind: "drip", epochId, generatedAt, asset, recipients, notes: [
+  return finalize({ version: 1, kind: "drip", epochId, generatedAt, asset, recipients, provenance: "shadow", notes: [
     "Monthly $TOKEN drip. Deterministic (no conversion). Verify hash + guards, dry-run, confirm, then send.",
   ] });
 }
@@ -87,6 +88,7 @@ export function buildRewardManifest(
   generatedAt: number,
   routedToBurnMojos: bigint = BigInt(0),
   chiaAssetId: string = CHIA_ASSET_ID,
+  provenance: "shadow" | "chain-verified" = "shadow",
 ): PayoutManifest {
   const asset = { id: chiaAssetId, symbol: "$CHIA", decimals: 3 };
   // Guard against mis-wiring: every $CHIA key must be a SETTLED, verified wallet. Passing the unsettled epoch
@@ -100,7 +102,7 @@ export function buildRewardManifest(
   const recipients: ManifestRecipient[] = payable
     .filter((p) => !isUnattributed(p.wallet) && (chiaPerWallet.get(p.wallet) ?? BigInt(0)) > BigInt(0))
     .map((p) => ({ wallet: p.wallet, assetId: asset.id, amountUnits: (chiaPerWallet.get(p.wallet) as bigint).toString(), reason: `reward:owed ${p.total.toString()} mojos XCH` }));
-  return finalize({ version: 1, kind: "reward", epochId, generatedAt, asset, recipients,
+  return finalize({ version: 1, kind: "reward", epochId, generatedAt, asset, recipients, provenance,
     routedToBurnUnits: routedToBurnMojos.toString(),
     notes: [
       "$CHIA reward payout. Buy $CHIA with the reward pot FIRST, then this manifest splits the ACTUAL received.",

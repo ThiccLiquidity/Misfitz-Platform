@@ -101,8 +101,11 @@ deal tag (bonus winner) **approximated from the current comps model FV** at dete
 - Sale detection & attribution: **shadow path BUILT** (Dexie sales -> engine, buyer/seller via MintGarden
   events matched by price, 10-min finality, approx FV tags). STILL OPEN before real money: on-chain royalty +
   coin/spend/block provenance re-verification, bundles/auctions/multi-NFT offers, MintGarden-vs-chain reconciliation.
-  - **Pre-money gates fable flagged (NOT yet built):** (a) on-chain royalty-coin + spend/coin/block provenance
-    verification — one spend lookup fixes attribution, price base, and actual royalty at once; (b) timestamped
+  - **On-chain royalty verification: BUILT (keyless gate).** `chainVerify.ts` (pure, tested) + `chainProvider.ts`
+    (operator implements against their node/indexer): confirms the royalty coin actually paid the creator wallet,
+    takes the ACTUAL royalty/price/buyer/seller/coin/spend/block from chain, requires min block depth, and only
+    `verified` sales build a `provenance:"chain-verified"` reward manifest (rejects excluded from every pot).
+  - **Remaining pre-money gates fable flagged (NOT yet built):** (b) timestamped
     attribution (add MintGarden event timestamps, match on time+price, else leave unpayable); (c) treat
     `unknown-*` placeholders as UNPAYABLE at the payout layer (route to holdback/burn, never a wallet);
     (d) void-signal feed from chain events (a cheaper resale via CAT / bundle / off-Dexie currently escapes the
@@ -122,8 +125,9 @@ deal tag (bonus winner) **approximated from the current comps model FV** at dete
   cap + max-recipient-share, `manifestGuard.ts`), the idempotency ledger (per-payment keys so a re-run never
   double-pays), and the dry-run formatter. Decision: **unattributed rewards route to BURN** (`settle.ts`), and
   the guard applies **sensible default caps** (payouts can't exceed funding; no single recipient > 25%).
-  STILL OPERATOR-SIDE (not built here, needs keys): the local bot's wallet-RPC sends, API auth (token + IP
-  allowlist), persistent ledger storage, and the operator confirm/execute step.
+  STILL OPERATOR-SIDE (needs keys): the wallet-RPC sends, persistent ledger storage, the operator confirm UI, and
+  the RoyaltyChainProvider (node/indexer). The keyless BOT ORCHESTRATOR is BUILT + tested: `bot.ts` (`runBotPayout`:
+  verify→recover→conflict-halt→confirm→sequential write-ahead sends) + `botDeps.ts` interfaces + `BOT-CONTRACT.md`.
   Hardened per fable security pass: manifest gained a SIGNATURE seam (`signManifest` + guard `verifySignature`
   option — the hash is integrity, the signature is authenticity, REQUIRED before real sends; operator wires the
   key); the ledger is now AMOUNT-AWARE (a re-run with a changed amount is a conflict, not a silent under/double
