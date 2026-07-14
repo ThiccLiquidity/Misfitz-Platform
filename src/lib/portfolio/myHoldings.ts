@@ -8,6 +8,7 @@ import { getSeed } from "@/lib/data-sources/seed/registry";
 import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { stampCardsFromIndex, noteWarmset } from "@/lib/valuation/valueIndex";
 import { stampCardsFromArtifacts } from "./artifactStamp";
+import { PWALLET_ENABLED, readWalletSnapshot, writeWalletSnapshot, probeWalletUnchanged, refreshUsd, SNAP_TRUST_MS, SNAP_REVALIDATE_MS } from "./walletSnapshot";
 import { keepAlive } from "@/lib/db/nftCache";
 
 // Aggregates a collector's holdings across one or more addresses into a single flat binder feed.
@@ -104,6 +105,27 @@ async function getMyHoldingsFastInner(addresses: string[], opts: { budgetMs?: nu
   if (addresses.length === 0) return EMPTY;
   const t0 = Date.now();
 
+  // Persistent wallet memory (free, account-free): serve a recent/unchanged snapshot instantly instead of
+  // re-paging + re-stamping. A cheap page-1 probe confirms nothing changed; a stale-but-unchanged snapshot
+  // is served now and rebuilt in the background. `fresh` (the Refresh button) bypasses this entirely.
+  if (PWALLET_ENABLED && !opts.fresh) {
+    const snap = await readWalletSnapshot(addresses).catch(() => null);
+    if (snap && snap.cards.length > 0) {
+      const age = Date.now() - snap.writtenAt;
+      let serve = age < SNAP_TRUST_MS;
+      if (!serve) {
+        const unchanged = await probeWalletUnchanged(addresses, snap).catch(() => null);
+        serve = unchanged !== false; // unchanged OR probe-failed -> serve (a stale snapshot beats re-paging churn)
+        if (serve && age > SNAP_REVALIDATE_MS) keepAlive(getMyHoldingsFast(addresses, { fresh: true }));
+      }
+      if (serve) {
+        const r = (await fetchXchUsdRate().catch(() => null)) ?? XCH_USD_FALLBACK;
+        refreshUsd(snap.cards, r);
+        return summarize(snap.cards, r, addresses, snap.truncated, false, false);
+      }
+    }
+  }
+
   const [rate, ...owners] = await Promise.all([
     fetchXchUsdRate(),
     ...addresses.map((a) => fetchOwnerListings(a, opts).catch(() => null)),
@@ -172,7 +194,9 @@ async function getMyHoldingsFastInner(addresses: string[], opts: { budgetMs?: nu
   // Roster-first enrichment: stamp traits + our ranks + browse-identical values straight from each held
   // collection's CACHED artifacts (slimlist2 roster + vidx) — so warm collections show FULL detail on the
   // first paint with ZERO per-NFT MintGarden fetches. Defensive: never blocks the binder if a read hiccups.
-  try { await stampCardsFromArtifacts(nfts, collections, xchUsdRate, { budgetMs: 3500, maxCols: 40 }); }
+  let stampAsOf: number | null = null;
+  let coldCols: string[] = [];
+  try { const r = await stampCardsFromArtifacts(nfts, collections, xchUsdRate, { budgetMs: 3500, maxCols: 40 }); stampAsOf = r.asOf; coldCols = r.coldCols; }
   catch (e) { console.error("[binder] artifact stamp skipped:", e); }
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
   // NOTE: the eager top-6 getAllCollectionCards pre-warm was REMOVED — it fired full roster scans + comps
@@ -183,5 +207,7 @@ async function getMyHoldingsFastInner(addresses: string[], opts: { budgetMs?: nu
   for (const n of nfts) if (n.collectionSlug.startsWith("col1")) colCount.set(n.collectionSlug, (colCount.get(n.collectionSlug) ?? 0) + 1);
   keepAlive(noteWarmset([...colCount.keys()])); // remember this wallet's collections so the nightly cron pre-warms them
 
+  // Remember this fully-stamped binder for instant future loads (off the critical path; write-gated).
+  if (PWALLET_ENABLED && !warming) keepAlive(writeWalletSnapshot(addresses, nfts, { coldCols, truncated, asOf: stampAsOf }));
   return summarize(nfts, xchUsdRate, addresses, truncated, warming, false);
 }
