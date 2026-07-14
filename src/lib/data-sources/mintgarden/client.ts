@@ -301,9 +301,13 @@ export async function listAddressNfts(
   const url = `/${endpoint}/${decoded.hex}/nfts?${q}`;
   // throwOnError: a caller PAGING a whole wallet must tell a transient error (429/5xx/timeout) apart from a
   // genuine empty page — otherwise one blip reads as "end of list" and silently truncates the roster.
+  // include_metadata makes /profile pages several-fold larger; 6s trips on big pages under load and reads
+  // as "MintGarden failed". Give /profile 15s (matches listCollectionNfts metadata pages); /address ignores
+  // include_metadata (small pages) so it keeps the fast default.
+  const timeoutMs = endpoint === "profile" ? 15_000 : DEFAULT_TIMEOUT_MS;
   const page = throwOnError
-    ? await getJson<MgPage<MgListItem>>(url, DEFAULT_TIMEOUT_MS, background)
-    : await getJsonOrNull<MgPage<MgListItem>>(url, DEFAULT_TIMEOUT_MS, background);
+    ? await getJson<MgPage<MgListItem>>(url, timeoutMs, background)
+    : await getJsonOrNull<MgPage<MgListItem>>(url, timeoutMs, background);
   if (!page) return EMPTY_PAGE;
   return { items: page.items ?? [], next: page.next ?? null, previous: page.previous ?? null };
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
 import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
+import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 
 // Poll endpoint for big (whale) wallets. The binder page SSRs a first batch fast; if the wallet is still
 // `warming`, the client polls here to RESUME paging until the full roster is loaded. Each call runs one
@@ -19,6 +20,14 @@ export async function POST(req: Request) {
     ),
   ].slice(0, 25); // bound: no one pastes 25+ wallets
   if (addresses.length === 0) return NextResponse.json({ error: "no valid addresses" }, { status: 400 });
-  const holdings = await getMyHoldingsFast(addresses, { budgetMs: 30_000, fresh: body.refresh === true });
-  return NextResponse.json(holdings, { headers: { "cache-control": "no-store" } });
+  try {
+    const holdings = await getMyHoldingsFast(addresses, { budgetMs: 30_000, fresh: body.refresh === true });
+    return NextResponse.json(holdings, { headers: { "cache-control": "no-store" } });
+  } catch {
+    // Degrade, never 500: report warming so the client keeps polling and the checkpointed scan resumes.
+    return NextResponse.json(
+      { nfts: [], totalEstimateXch: 0, totalEstimateUsd: 0, xchUsdRate: XCH_USD_FALLBACK, collections: [], addresses, truncated: false, warming: true, demo: false },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
 }

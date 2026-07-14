@@ -91,7 +91,9 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           fails = 0;
           const data = (await res.json()) as MyHoldings;
           if (cancelled) return;
-          if (Array.isArray(data.nfts)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
+          // While warming, the roster only grows; a degraded/lock-loser pass can return fewer (even zero)
+          // items — never let it shrink what's on screen. A final (!warming) complete roster replaces as-is.
+          if (Array.isArray(data.nfts) && (!data.warming || data.nfts.length > nftsRef.current.length)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
           if (Array.isArray(data.collections)) setCollections(data.collections);
           setTruncated(data.truncated);
           if (!data.warming) { setWarming(false); return; }
@@ -115,7 +117,9 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     // fetches (and wakes the heavy comps build) for no gain. Skip them: a Misfitz-only wallet needs ZERO
     // enrichment and never shows the spinner. Only cards still missing real traits/ranks get enriched.
     const oneCol = collectionId !== "all";
-    let pending = all.filter((n) => !(n.rankEstimated === false && (n.traits?.length ?? 0) > 0) && !enrichedRef.current.has(n.launcherId));
+    // include_metadata gives DID cards inline traits with rankEstimated=false even when rarityRank is null
+    // (unranked collection) — those still need enrichment for OUR estimated rank, or they'd sit tierless.
+    let pending = all.filter((n) => !(n.rankEstimated === false && n.rarityRank != null && (n.traits?.length ?? 0) > 0) && !enrichedRef.current.has(n.launcherId));
     // Bound the work: enrich the SELECTED collection's cards, else (in "all") the most valuable first — capped.
     // A 20k whale never fires 20k detail fetches on open; we enrich what's viewed, and each collection enriches
     // on demand (deduped via enrichedRef). Normal wallets (< cap) still fully enrich, unchanged.

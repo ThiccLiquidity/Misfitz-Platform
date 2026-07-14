@@ -93,7 +93,8 @@ function traitRarityPercent(
 }
 
 export function mapTraits(detail: MgNftDetail): Trait[] {
-  const attrs = detail.data?.metadata_json?.attributes ?? [];
+  const _raw = detail.data?.metadata_json?.attributes;
+  const attrs = Array.isArray(_raw) ? _raw : []; // some mints stuff an object/string here — never .map() blind
   return attrs
     .map((a): Trait | null => {
       if (!a) return null;
@@ -113,7 +114,8 @@ export function mapTraits(detail: MgNftDetail): Trait[] {
 // Traits from a LIST item's inline metadata (present only with include_metadata=true). Same tolerant
 // key handling as mapTraits; rarityPercent is filled later by the freq table / seed overlay.
 export function mapListItemTraits(item: MgListItem): Trait[] {
-  const attrs = item.metadata?.attributes ?? [];
+  const _raw = item.metadata?.attributes;
+  const attrs = Array.isArray(_raw) ? _raw : []; // inline CHIP-0007 metadata is untrusted — never .map() blind
   return attrs
     .map((a): Trait | null => {
       if (!a) return null;
@@ -288,7 +290,7 @@ export function mapListItemToCard(
     id: item.id,
     launcherId: item.encoded_id,
     collectionSlug: item.collection_id,
-    name: item.name,
+    name: item.name ?? item.encoded_id, // live items can miss name; downstream .match(...) must never NPE
     imageUrl: item.thumbnail_uri ?? "",
     traits: mapListItemTraits(item),
     rarityRank,

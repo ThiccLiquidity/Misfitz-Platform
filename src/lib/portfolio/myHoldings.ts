@@ -7,7 +7,6 @@ import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { getSeed } from "@/lib/data-sources/seed/registry";
 import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { stampCardsFromIndex, noteWarmset } from "@/lib/valuation/valueIndex";
-import { getAllCollectionCards } from "@/lib/collections/liveCollection";
 import { keepAlive } from "@/lib/db/nftCache";
 
 // Aggregates a collector's holdings across one or more addresses into a single flat binder feed.
@@ -88,7 +87,19 @@ async function applySeedOverlay(nfts: NftData[], floorByCol: Map<string, number 
 // no per-NFT detail. Renders in ~1s; YourBinder then calls the enrichment route to fill in traits and
 // our own estimated ranks. Floor is resolved per collection (Dexie ask -> MintGarden -> Dexie sales ->
 // cheapest current listing among holdings) so values are consistent from the first paint.
+// NEVER throws: on any unexpected upstream/mapping error, degrade to an empty WARMING binder so the page
+// still renders and the /api/holdings poll resumes from the Redis checkpoint. error.tsx is for bugs, not
+// for MintGarden having a bad minute.
 export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<MyHoldings> {
+  try {
+    return await getMyHoldingsFastInner(addresses, opts);
+  } catch (err) {
+    console.error("[binder] getMyHoldingsFast degraded to warming:", err);
+    return { ...EMPTY, addresses, warming: true };
+  }
+}
+
+async function getMyHoldingsFastInner(addresses: string[], opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<MyHoldings> {
   if (addresses.length === 0) return EMPTY;
   const t0 = Date.now();
 
@@ -144,23 +155,26 @@ export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: 
     );
   });
 
-  const nfts: NftData[] = items.map((it) => {
-    const m = mapListItemToCard(it, collections.get(it.collection_id), floorByCol.get(it.collection_id) ?? null, xchUsdRate);
-    return { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
-  });
+  const nfts: NftData[] = [];
+  for (const it of items) {
+    // One malformed roster item (junk inline metadata, missing fields) must never take down the whole binder.
+    try {
+      const m = mapListItemToCard(it, collections.get(it.collection_id), floorByCol.get(it.collection_id) ?? null, xchUsdRate);
+      nfts.push({ ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName });
+    } catch { /* skip malformed item */ }
+  }
 
   await applySeedOverlay(nfts, floorByCol, xchUsdRate);
   // Stamp browse-computed values from the per-collection value index so held cards show the SAME number as
   // the collection page on the FIRST paint — no per-NFT recompute. Misses keep the floor baseline.
   await stampCardsFromIndex(nfts, xchUsdRate);
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
-  // Pre-warm the comps model for the collections this wallet holds — most-held first, capped — so the
-  // client's enrichment finds a WARM model instead of each 24-id chunk triggering its own cold build. Runs
-  // in the background (keepAlive survives the serverless freeze); the build lock dedupes across instances.
+  // NOTE: the eager top-6 getAllCollectionCards pre-warm was REMOVED — it fired full roster scans + comps
+  // builds concurrently with interactive paging/enrichment, and MintGarden's rate limit is shared upstream,
+  // so it 429-starved the very requests the user waits on. /api/values converge + getCompsModel already warm
+  // exactly the needed collections after first paint; the nightly warmset cron handles the rest.
   const colCount = new Map<string, number>();
   for (const n of nfts) if (n.collectionSlug.startsWith("col1")) colCount.set(n.collectionSlug, (colCount.get(n.collectionSlug) ?? 0) + 1);
-  const heldCols = [...colCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c]) => c);
-  if (heldCols.length) keepAlive((async () => { for (const c of heldCols) await getAllCollectionCards(c).catch(() => null); })());
   keepAlive(noteWarmset([...colCount.keys()])); // remember this wallet's collections so the nightly cron pre-warms them
 
   return summarize(nfts, xchUsdRate, addresses, truncated, warming, false);
