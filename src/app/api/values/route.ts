@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readValueIndex } from "@/lib/valuation/valueIndex";
+import { readValueIndex, vidxIsFresh } from "@/lib/valuation/valueIndex";
 import { getAllCollectionCards } from "@/lib/collections/liveCollection";
 import { keepAlive } from "@/lib/db/nftCache";
 import type { ValueEntry } from "@/lib/valuation/valueEntry";
@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       return;
     }
     if (idx.builtAt > asOf) asOf = idx.builtAt;
+    if (!vidxIsFresh(idx)) keepAlive(getAllCollectionCards(colId).catch(() => null)); // serve stale NOW, rebuild for the next poll
     const ids = Array.isArray(cols[colId]) ? (cols[colId] as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 600) : [];
     for (const nftId of ids) { const e = idx.values[nftId]; if (e) values[nftId] = e; }
   }));

@@ -7,12 +7,14 @@ import type { NftData } from "@/types";
 import { cacheGetLarge, cachePutLargeAsync, cacheGet, cachePut } from "@/lib/db/nftCache";
 import { entryOf, stampValueEntry, type ValueEntry } from "./valueEntry";
 
-const VIDX_TTL_MS = 30 * 60_000;   // read-fresh 30 min
+const VIDX_FRESH_MS = 30 * 60_000;      // "fresh": older than this, callers kick a background rebuild
+const VIDX_READ_MS = 24 * 60 * 60_000;  // serve-stale window (= persist window): a stale comps value >> a floor baseline
 const VIDX_EX_S = 24 * 60 * 60;    // persist 24h
 const WRITE_GATE_MS = 10 * 60_000; // rewrite a collection's index at most once per 10 min per instance
 const READ_MEMO_MS = 5 * 60_000;   // one blob read per collection per ~5 min per instance
 
 export interface ValueIndex { builtAt: number; values: Record<string, ValueEntry> }
+export function vidxIsFresh(idx: ValueIndex): boolean { return Date.now() - idx.builtAt < VIDX_FRESH_MS; }
 
 const _lastWrite = new Map<string, number>();
 // Called by the browse pipeline on a COMPLETE (non-warming) build. Fire-and-forget via keepAlive at the call site.
@@ -34,9 +36,9 @@ export async function writeValueIndex(colId: string, nfts: NftData[], opts: { fo
 const _readMemo = new Map<string, { idx: ValueIndex | null; at: number }>();
 export async function readValueIndex(colId: string): Promise<ValueIndex | null> {
   const hit = _readMemo.get(colId);
-  if (hit && Date.now() - hit.at < READ_MEMO_MS) return hit.idx;
+  if (hit && Date.now() - hit.at < (hit.idx ? READ_MEMO_MS : 30_000)) return hit.idx;
   let idx: ValueIndex | null = null;
-  try { const raw = await cacheGetLarge(`vidx:${colId}`, VIDX_TTL_MS); if (raw) idx = JSON.parse(raw) as ValueIndex; } catch { idx = null; }
+  try { const raw = await cacheGetLarge(`vidx:${colId}`, VIDX_READ_MS); if (raw) idx = JSON.parse(raw) as ValueIndex; } catch { idx = null; }
   _readMemo.set(colId, { idx, at: Date.now() });
   return idx;
 }

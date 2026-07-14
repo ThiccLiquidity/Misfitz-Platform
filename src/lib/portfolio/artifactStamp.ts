@@ -8,6 +8,7 @@ import { stampValueEntry } from "@/lib/valuation/valueEntry";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { getCollection } from "@/lib/data-sources/mintgarden/client";
 import { isSeeded } from "@/lib/data-sources/seed/registry";
+import { collectibleNumber } from "@/lib/rarity/collectibleNumbers";
 
 // ── Portfolio = a projection of the per-collection cached artifacts the collection page already builds ──
 // For each collection the wallet holds, read its cached roster (slimlist2: traits + MintGarden rank) and
@@ -101,16 +102,27 @@ export async function stampCardsFromArtifacts(
         const scaled = scaledRankOf(freq, it.id, supply);
         if (scaled != null) { rank = scaled; rankEst = true; }
       }
+      const prevRank = card.rarityRank; // the rank the card's EXISTING value was computed with
       if (rank != null) {
         card.rarityRank = rank;
         card.rankEstimated = rankEst;
         card.rarityScore = supply > 0 ? Math.round((100 - (rank / supply) * 100) * 10) / 10 : card.rarityScore;
-        if (floor != null) card.fairValue = estimateFairValue({ floorXch: floor, rarityRank: rank, totalSupply: supply, xchUsdRate }) ?? card.fairValue;
       }
 
-      // Browse-identical value overrides the floor baseline (never touches listing/deal/dexie).
+      // VALUE PRECEDENCE — must never disagree with /collection/[id], never downgrade, never use supply 0:
+      //   1) vidx entry (browse's own computed value) — authoritative.
+      //   2) the value the card already carries (index stamp or fast-pass baseline) — keep it.
+      //   3) a floor+rarity baseline, recomputed ONLY when this rank is NEW info for a card with no browse
+      //      value, a real floor AND real supply — with the collector-number premium preserved so it matches
+      //      mapListItemToCard exactly. This never clobbers a comps value and never collapses to bare floor.
       const e = vidx?.values?.[card.launcherId];
-      if (e) stampValueEntry(card, e, xchUsdRate);
+      if (e) {
+        stampValueEntry(card, e, xchUsdRate);
+      } else if (card.valueBasis == null && rank != null && rank !== prevRank && floor != null && supply > 0) {
+        const nameNum = (it.name ?? "").match(/#?(\d+)\s*$/);
+        const collectible = collectibleNumber(nameNum ? parseInt(nameNum[1], 10) : null, supply);
+        card.fairValue = estimateFairValue({ floorXch: floor, rarityRank: rank, totalSupply: supply, desirabilityWeight: collectible?.weight ?? 0, xchUsdRate }) ?? card.fairValue;
+      }
     }
   }));
 
