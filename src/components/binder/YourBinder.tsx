@@ -196,7 +196,10 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
                 stampValueEntry(c, e, holdings.xchUsdRate);
                 return c;
               }));
-              for (const id of gotIds) { needsValue.delete(id); enrichedRef.current.add(id); }
+              // A value is NOT traits: stampValueEntry never fills card.traits, so marking these ids
+              // "enriched" here would make the trait-pending filter skip them forever. Only applyChunk
+              // (proof the /api/binder detail round-trip succeeded) may add to enrichedRef.
+              for (const id of gotIds) needsValue.delete(id);
             }
           } catch { /* transient — poll again */ }
         }
