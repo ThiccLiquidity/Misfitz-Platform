@@ -3,11 +3,11 @@
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 import type { HeldCollection } from "@/lib/portfolio/myHoldings";
 
-// Right-side collection picker for Your Binder — mirrors the collection page's switcher, but filters
+// Right-side collection picker for Your Binder â mirrors the collection page's switcher, but filters
 // the binder in place instead of navigating. "All" shows everything; picking one scopes the binder
 // (and reveals trait filters). Each collection has an eye toggle to hide it from the binder; hidden
 // collections drop into a muted section at the bottom and can be restored from there.
-const ACCENTS = ["#8b5cf6", "#ff6eb4", "#00d4ff", "#5fce7a", "#f59e0b", "#a855f7", "#f87171", "#38bdf8"];
+// Vault styling: one gold language (no per-collection rainbow) on a .tf-panel surface.
 
 function EyeIcon({ off, color }: { off: boolean; color: string }) {
   return (
@@ -46,43 +46,37 @@ export function BinderCollectionPicker({
   const { mode } = useThemeMode();
   const isLight = mode === "light";
 
-  // Keep each collection's colour stable regardless of how the visible/hidden split shuffles rows.
-  const accentFor = (id: string) => {
-    const idx = collections.findIndex((c) => c.id === id);
-    return ACCENTS[(idx + 1) % ACCENTS.length];
-  };
-
   const visible = collections.filter((c) => !hiddenIds.has(c.id));
   const hidden = collections.filter((c) => hiddenIds.has(c.id));
 
-  const row = (id: string, name: string, count: number, accent: string, canHide: boolean) => {
+  const row = (id: string, name: string, count: number, canHide: boolean) => {
     const active = selectedId === id;
     return (
       <div key={id} className="group relative min-w-0">
         <button
           type="button"
           onClick={() => onSelect(id)}
-          className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-all"
+          className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--gold)_7%,transparent)]"
           style={{
-            background: active
-              ? `linear-gradient(135deg, ${accent}20, ${accent}10)`
-              : isLight ? `linear-gradient(135deg, ${accent}16, transparent)` : "transparent",
-            border: `1px solid ${active ? `${accent}88` : isLight ? `${accent}55` : "transparent"}`,
-            boxShadow: active ? `0 0 12px ${accent}33` : "none",
+            background: active ? "color-mix(in srgb, var(--gold) 12%, transparent)" : undefined,
+            border: active ? "1px solid color-mix(in srgb, var(--gold) 55%, transparent)" : "1px solid transparent",
+            boxShadow: active ? "0 0 12px color-mix(in srgb, var(--gold) 20%, transparent)" : "none",
           }}
         >
           <div
             className="flex-shrink-0 rounded-sm"
-            style={{ width: 6, height: 38, flexShrink: 0, background: `linear-gradient(180deg, ${accent}ee 0%, ${accent}99 100%)` }}
+            style={{
+              width: 6, height: 38, flexShrink: 0,
+              background: active
+                ? "linear-gradient(180deg, var(--gold), color-mix(in srgb, var(--gold) 55%, transparent))"
+                : "color-mix(in srgb, var(--gold) 30%, transparent)",
+            }}
           />
           <div className="min-w-0">
-            <div
-              className="truncate pr-4 text-[11px] font-bold leading-tight"
-              style={{ color: active ? accent : isLight ? "#2a3a55" : "rgba(255,255,255,0.65)" }}
-            >
+            <div className="truncate pr-4 text-[11px] font-bold leading-tight" style={{ color: active ? "var(--title)" : "var(--subtle)" }}>
               {name}
             </div>
-            <div className="mt-0.5 truncate text-[9px] font-semibold" style={{ color: isLight ? "#6b8db0" : "rgba(255,255,255,0.4)" }}>
+            <div className="text-subtle mt-0.5 truncate text-[9px] font-semibold" style={{ opacity: 0.7 }}>
               {count.toLocaleString()} NFTs
             </div>
           </div>
@@ -104,40 +98,25 @@ export function BinderCollectionPicker({
   };
 
   return (
-    <div
-      className="sticky top-4 flex flex-shrink-0 flex-col gap-1 rounded-xl p-3"
-      style={{
-        width: 248,
-        background: isLight ? "rgba(255,255,255,0.72)" : "linear-gradient(175deg, #1e1e22 0%, #121214 100%)",
-        border: isLight ? "1px solid rgba(100, 180, 255, 0.35)" : "1px solid rgba(255,255,255,0.08)",
-        boxShadow: isLight ? "0 4px 24px rgba(0, 80, 160, 0.12), inset 0 1px 0 rgba(255,255,255,0.8)" : "0 4px 24px rgba(0,0,0,0.4)",
-        backdropFilter: isLight ? "blur(12px)" : undefined,
-      }}
-    >
-      <div
-        className="mb-2 border-b pb-2 text-[10px] font-semibold uppercase tracking-widest text-subtle"
-        style={{ borderColor: isLight ? "rgba(100,180,255,0.25)" : "rgba(255,255,255,0.05)" }}
-      >
-        Collections
-      </div>
+    <div className="tf-panel sticky top-4 flex flex-shrink-0 flex-col gap-1 rounded-xl p-3" style={{ width: 248 }}>
+      <div className="text-subtle mb-1 text-[10px] font-semibold uppercase tracking-widest">Collections</div>
+      <div className="tf-hairline mb-2" aria-hidden />
       <div className="grid grid-cols-2 gap-1.5 overflow-y-auto" style={{ maxHeight: 470 }}>
-        {row("all", "All collections", totalCount, "#8b5cf6", false)}
-        {visible.map((c) => row(c.id, c.name, c.count, accentFor(c.id), true))}
+        {row("all", "All collections", totalCount, false)}
+        {visible.map((c) => row(c.id, c.name, c.count, true))}
       </div>
 
       {hidden.length > 0 && (
-        <div className="mt-2 border-t pt-2" style={{ borderColor: isLight ? "rgba(100,180,255,0.25)" : "rgba(255,255,255,0.06)" }}>
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-subtle">
+        <div className="mt-2 border-t pt-2" style={{ borderColor: isLight ? "rgba(41,128,200,0.25)" : "rgba(201,162,39,0.18)" }}>
+          <div className="text-subtle mb-1.5 text-[10px] font-semibold uppercase tracking-widest">
             Hidden · {hidden.length}
           </div>
           <div className="flex flex-col gap-1">
             {hidden.map((c) => (
               <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5" style={{ opacity: 0.55 }}>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[11px] font-bold leading-tight" style={{ color: isLight ? "#2a3a55" : "rgba(255,255,255,0.6)" }}>
-                    {c.name}
-                  </div>
-                  <div className="mt-0.5 truncate text-[9px] font-semibold" style={{ color: isLight ? "#6b8db0" : "rgba(255,255,255,0.4)" }}>
+                  <div className="text-subtle truncate text-[11px] font-bold leading-tight">{c.name}</div>
+                  <div className="text-subtle mt-0.5 truncate text-[9px] font-semibold" style={{ opacity: 0.7 }}>
                     {c.count.toLocaleString()} NFTs · hidden
                   </div>
                 </div>
@@ -147,7 +126,7 @@ export function BinderCollectionPicker({
                   title="Show in binder"
                   aria-label={`Show ${c.name} in binder`}
                   className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/10"
-                  style={{ border: isLight ? "1px solid rgba(100,180,255,0.3)" : "1px solid rgba(255,255,255,0.12)" }}
+                  style={{ border: isLight ? "1px solid rgba(41,128,200,0.3)" : "1px solid rgba(201,162,39,0.25)" }}
                 >
                   <EyeIcon off color={isLight ? "#6b8db0" : "rgba(255,255,255,0.55)"} />
                 </button>

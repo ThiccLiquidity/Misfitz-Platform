@@ -31,21 +31,25 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
 
   return (
     <div className="py-2">
-      <div className="mb-3 px-2">
-        <h1 className="text-title text-xl font-bold">Your Binder</h1>
-      </div>
+      {!showBinder && (
+        <div className="mb-4 px-2">
+          <span className="tf-eyebrow inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]">Portfolio · no login</span>
+          <h1 className="text-title mt-2 text-2xl font-black tracking-tight sm:text-3xl">Your <span className="tf-foil">Binder</span></h1>
+          <div className="tf-hairline mt-4" aria-hidden />
+        </div>
+      )}
 
       <WalletProfileBar loaded={addresses} />
 
       {invalid && (
-        <div className="mx-2 mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+        <div className="mx-2 mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm" style={{ color: "var(--fair)" }}>
           That doesn&apos;t look like a Chia id. Paste an <span className="font-semibold">xch1…</span> address or a{" "}
           <span className="font-semibold">did:chia…</span> profile id.
         </div>
       )}
 
       {noResults && (
-        <div className="mx-2 mb-4 rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+        <div className="mx-2 mb-4 rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm" style={{ color: "var(--subtle)" }}>
           No NFTs found for the wallet(s) you entered. If a collector holds through a
           DID profile, paste their <span className="font-semibold">did:chia…</span> id instead — an address only shows
           what sits at that one puzzle hash.

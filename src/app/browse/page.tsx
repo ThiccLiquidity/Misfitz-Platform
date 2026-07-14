@@ -3,7 +3,8 @@ import { BrowseCollections } from "@/components/browse/BrowseCollections";
 import type { Metadata } from "next";
 
 // Browse — discover every NFT collection on Chia. Trending (by volume) up front, live search, and
-// each tile opens the collection as a binder (same view as a wallet).
+// each tile opens the collection as a binder (same view as a wallet). "Vault Floor" header carries the
+// landing's gold-vault language: eyebrow pill, a foil accent word, a thin gold hairline, faint texture.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -16,11 +17,19 @@ export default async function BrowsePage() {
 
   return (
     <div className="py-2">
-      <div className="mb-4 px-2">
-        <h1 className="text-title text-2xl font-black">Browse Collections</h1>
-        <p className="text-subtle mt-1 text-sm">
-          Every NFT collection on Chia. Tap one to open it as a binder — sorted by rarity, with live values.
-        </p>
+      <div className="relative mb-4 px-2">
+        <div className="tf-browse-tex" aria-hidden />
+        <div className="relative">
+          <span className="tf-eyebrow inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]">
+            The Vault Floor · Every Chia collection
+          </span>
+          <h1 className="text-title mt-2 text-2xl font-black tracking-tight sm:text-3xl">
+            Browse <span className="tf-foil">Collections</span>
+          </h1>
+          <p className="text-subtle mt-1 max-w-2xl text-sm">
+            Every NFT collection on Chia. Tap one to open it as a binder — sorted by rarity, with live values.
+          </p>
+        </div>
       </div>
       <BrowseCollections trending={trending} />
     </div>

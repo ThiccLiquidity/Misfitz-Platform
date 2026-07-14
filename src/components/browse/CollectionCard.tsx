@@ -3,26 +3,20 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { CollectionSummary } from "@/types";
-import { formatXch } from "@/lib/format";
+import { formatXch, formatXchShort } from "@/lib/format";
 import { memo } from "react";
-import { useThemeMode } from "@/components/theme/ThemeProvider";
+import { TangBadge } from "@/components/tang/TangBadge";
 
 // One collection tile on the /browse discovery grid. Tapping it opens the live collection binder.
-// Light mode gets a solid white card + sky-blue border (the old white/3 glass vanished on the light
-// page); dark mode keeps the glassy look.
-function CollectionCardImpl({ c }: { c: CollectionSummary }) {
-  const { mode } = useThemeMode();
-  const isLight = mode === "light";
+// "Vault tile" styling lives in .tf-tile / .tf-tile-foot (globals.css) and themes itself (warm gold
+// vault in dark, clean white + sky border in light), so this component carries no isLight branching.
+// `hot` marks the hottest trending tiles with a flame chip (top-right; TangBadge owns top-left).
+function CollectionCardImpl({ c, hot = false }: { c: CollectionSummary; hot?: boolean }) {
   return (
-    <Link
-      href={`/collection/${c.id}`}
-      className={`group flex flex-col overflow-hidden rounded-xl border transition ${
-        isLight
-          ? "border-sky-600/35 bg-white shadow-sm hover:border-sky-600/60 hover:shadow-md"
-          : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"
-      }`}
-    >
-      <div className={`relative aspect-square overflow-hidden ${isLight ? "bg-sky-50" : "bg-white/5"}`}>
+    <Link href={`/collection/${c.id}`} className="tf-tile group flex flex-col overflow-hidden">
+      <div className="relative aspect-square overflow-hidden" style={{ background: "var(--art-bg)" }}>
+        <TangBadge colId={c.id} variant="corner" />
+        {hot && <span className="tf-heat" role="img" aria-label="Hot — trending by volume" title="Hot — trending by volume">🔥</span>}
         {c.imageUrl ? (
           <Image
             src={c.imageUrl}
@@ -33,21 +27,27 @@ function CollectionCardImpl({ c }: { c: CollectionSummary }) {
             unoptimized
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-3xl opacity-30">◈</div>
+          <div className="flex h-full items-center justify-center text-3xl" style={{ color: "#7a6038" }}>◈</div>
         )}
       </div>
-      <div className="flex flex-col gap-1 p-3">
+      <div className="tf-tile-foot flex flex-col gap-1 p-3">
         <div className="flex items-center gap-1">
-          <span className="text-title truncate text-sm font-bold">{c.name}</span>
-          {c.verified && <span className={isLight ? "text-sky-600" : "text-sky-400"} title="Verified creator">✔</span>}
+          <span className="text-title truncate text-[13px] font-extrabold tracking-tight">{c.name}</span>
+          {c.verified && <span className="shrink-0" style={{ color: "var(--gold)" }} title="Verified creator">✔</span>}
         </div>
-        <div className="text-subtle text-[11px]">{c.totalSupply.toLocaleString()} items</div>
-        <div className="mt-1 flex items-center justify-between text-[11px]">
-          <span className="text-subtle">
-            Floor <span className="text-title font-semibold">{c.floorXch != null ? formatXch(c.floorXch) : "—"}</span>
+        <div className="text-subtle text-[10.5px] uppercase tracking-wide opacity-80">{c.totalSupply.toLocaleString()} items</div>
+        <div className="mt-1.5 flex items-end justify-between">
+          <span className="flex flex-col leading-none">
+            <span className="text-subtle text-[9px] font-bold uppercase tracking-widest">Floor</span>
+            <span className="mt-1 text-[13px] font-black tabular-nums" style={{ color: "var(--gold)" }}>
+              {c.floorXch != null ? formatXch(c.floorXch) : "—"}
+            </span>
           </span>
-          <span className="text-subtle">
-            Vol <span className="text-title font-semibold">{c.volumeXch != null ? formatXch(Math.round(c.volumeXch)) : "—"}</span>
+          <span className="flex flex-col items-end leading-none">
+            <span className="text-subtle text-[9px] font-bold uppercase tracking-widest">Vol</span>
+            <span className="text-subtle mt-1 text-[11px] tabular-nums">
+              {c.volumeXch != null ? formatXchShort(c.volumeXch) : "—"}
+            </span>
           </span>
         </div>
       </div>

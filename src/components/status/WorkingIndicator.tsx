@@ -56,7 +56,6 @@ export function WorkingIndicator({
           background: isLight ? "rgba(255,255,255,0.97)" : "rgba(20,16,10,0.97)",
           border: `1.5px solid ${isLight ? "rgba(41,128,200,0.5)" : "rgba(240,192,64,0.5)"}`,
           color: isLight ? "#0a1e38" : "#f0d9a0",
-          backdropFilter: "blur(8px)",
         }}
       >
         <div className="flex items-center justify-between gap-3">

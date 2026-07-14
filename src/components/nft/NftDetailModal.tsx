@@ -105,12 +105,13 @@ export function NftDetailModal({
       : fullPageHref;
 
   const accentColor = resolveAccent(tier.accent, isLight);
-  const panelBg     = isLight ? "rgba(255,255,255,0.97)" : "rgba(18,18,24,0.97)";
-  const panelBorder = isLight ? `1px solid ${accentColor}55` : "1px solid rgba(255,255,255,0.08)";
-  const divider     = isLight ? `${accentColor}55`        : "rgba(255,255,255,0.07)";
-  const lblColor    = isLight ? `${accentColor}cc`        : "rgba(255,255,255,0.42)";  // 80%
-  const valColor    = accentColor;                                                       // 100%
-  const subColor    = isLight ? `${accentColor}99`        : "rgba(255,255,255,0.32)";  // 60%
+  const panelBg     = isLight ? "rgba(255,255,255,0.97)" : "rgba(26,20,12,0.97)";
+  // Vault chrome: --card-border is gold (dark) / sky (light), so these are theme-correct as-is.
+  const panelBorder = `1px solid color-mix(in srgb, var(--card-border) ${isLight ? "40%" : "16%"}, transparent)`;
+  const divider     = `color-mix(in srgb, var(--card-border) ${isLight ? "35%" : "22%"}, transparent)`;
+  const lblColor    = "var(--subtle)";
+  const valColor    = "var(--title)";
+  const subColor    = "color-mix(in srgb, var(--subtle) 72%, transparent)";
 
   // When an NFT is listed on MintGarden's own book (not Dexie), the MintGarden link IS the buy path.
   const mgIsBuy = !!nft.listing && !nft.dexieOfferId;
@@ -184,7 +185,6 @@ export function NftDetailModal({
           style={{
             background: panelBg,
             border: panelBorder,
-            backdropFilter: "blur(16px)",
             boxShadow: isLight
               ? "0 4px 20px rgba(0,60,140,0.10), inset 0 1px 0 rgba(255,255,255,0.8)"
               : "0 4px 20px rgba(0,0,0,0.5)",
@@ -284,7 +284,7 @@ export function NftDetailModal({
               <div className="mt-1.5 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1">
                 {nft.listingRequested!.map((r) => (
                   <span key={r.code} className="inline-flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black leading-none" style={{ color: valColor }}>{r.amount}</span>
+                    <span className="text-2xl font-black leading-none" style={{ color: "var(--gold)" }}>{r.amount}</span>
                     <span className="text-xs font-semibold" style={{ color: subColor }}>{r.code}</span>
                   </span>
                 ))}
@@ -292,7 +292,7 @@ export function NftDetailModal({
               {(nft.listingAssets ?? []).some((a) => a !== "XCH") && (
                 <div
                   className="mt-3 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold leading-snug"
-                  style={{ border: "1.5px solid rgba(240,140,40,0.7)", background: "rgba(240,140,40,0.12)", color: "#f4a940" }}
+                  style={{ border: "1.5px solid rgba(240,140,40,0.7)", background: "rgba(240,140,40,0.12)", color: isLight ? "#b45309" : "#f4a940" }}
                 >
                   <div className="mb-1 text-[13px] font-black uppercase tracking-wide">⚠ This offer includes CAT tokens</div>
                   This offer costs <span className="font-bold">at least {formatXch(nft.listing.priceXch)} XCH</span> —
@@ -325,7 +325,7 @@ export function NftDetailModal({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-                style={{ background: "rgba(45,110,225,0.16)", border: "1px solid rgba(95,150,240,0.5)", color: "#6aa0ff" }}
+                style={{ background: "rgba(45,110,225,0.16)", border: "1px solid rgba(95,150,240,0.5)", color: isLight ? "#1a56c4" : "#6aa0ff" }}
               >
                 View &amp; take offer on Dexie ↗
               </a>
@@ -346,7 +346,7 @@ export function NftDetailModal({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-                style={{ background: "rgba(40,180,90,0.16)", border: "1px solid rgba(80,200,120,0.5)", color: "#5fce7a" }}
+                style={{ background: "rgba(40,180,90,0.16)", border: "1px solid rgba(80,200,120,0.5)", color: isLight ? "#15803d" : "#5fce7a" }}
               >
                 {mgBuyLabel}
               </a>
@@ -363,7 +363,7 @@ export function NftDetailModal({
                 <div className="flex flex-wrap gap-1.5">
                   {nft.recentSales.map((s, i) => (
                     <span key={i} className="rounded-md px-2 py-0.5 text-xs font-bold tabular-nums"
-                      style={{ background: isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.06)", color: valColor }}>
+                      style={{ background: "color-mix(in srgb, var(--gold) 10%, transparent)", color: "var(--title)" }}>
                       {formatXch(s.priceXch)} XCH
                     </span>
                   ))}
@@ -385,17 +385,17 @@ export function NftDetailModal({
               {!confirmLeave ? (
                 <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmLeave(true); }}
                   className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
-                  style={{ background: isLight ? `${accentColor}14` : `${accentColor}18`, border: `1px solid ${accentColor}55`, color: valColor }}>
+                  style={{ background: "color-mix(in srgb, var(--gold) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--card-border) 45%, transparent)", color: "var(--gold)" }}>
                   Browse this whole collection ↗
                 </button>
               ) : (
-                <div className="rounded-lg px-3 py-2 text-center" style={{ border: `1px solid ${accentColor}55`, background: isLight ? "rgba(10,30,80,0.04)" : "rgba(255,255,255,0.03)" }}>
+                <div className="rounded-lg px-3 py-2 text-center" style={{ border: `1px solid ${divider}`, background: isLight ? "rgba(10,30,80,0.04)" : "rgba(255,255,255,0.03)" }}>
                   <div className="mb-1.5 text-[11px] font-semibold" style={{ color: lblColor }}>
                     You&apos;re leaving your portfolio for the collection browser.
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={(e) => { e.stopPropagation(); router.push(collectionHref); }}
-                      className="flex-1 rounded-md py-1.5 text-xs font-bold text-white" style={{ background: accentColor }}>
+                      className="flex-1 rounded-md py-1.5 text-xs font-bold" style={{ background: "var(--gold)", color: "#1a1200" }}>
                       Continue
                     </button>
                     <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmLeave(false); }}
@@ -416,9 +416,9 @@ export function NftDetailModal({
                 onClick={onClose}
                 className="flex items-center justify-center gap-2 w-full rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-80"
                 style={{
-                  background: isLight ? `${accentColor}14` : `${accentColor}18`,
-                  border: `1px solid ${accentColor}44`,
-                  color: accentColor,
+                  background: "color-mix(in srgb, var(--gold) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--card-border) 45%, transparent)",
+                  color: "var(--gold)",
                 }}
               >
                 View Full Page →
@@ -467,18 +467,18 @@ export function NftDetailModal({
                       >
                         Trait demand{hotTraitLabel(nft.valueTraitTop) ? ` · 🔥 ${hotTraitLabel(nft.valueTraitTop)}` : ""}
                       </button>
-                      <span className="shrink-0 text-xs font-semibold" style={{ color: "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
+                      <span className="shrink-0 text-xs font-semibold" style={{ color: isLight ? "#15803d" : "#5fce7a" }}>+{traitEffect.toFixed(2)} XCH</span>
                     </div>
                   )}
                   {nft.collectible && numberPremium > 0.005 && (
                     <div className="flex items-baseline justify-between py-1" style={{ borderBottom: `1px solid ${divider}` }}>
                       <span className="text-xs" style={{ color: subColor }}>Collector number{nft.collectible.label ? ` · ${nft.collectible.label}` : ""}</span>
-                      <span className="text-xs font-semibold" style={{ color: "#5fce7a" }}>+{numberPremium.toFixed(2)} XCH</span>
+                      <span className="text-xs font-semibold" style={{ color: isLight ? "#15803d" : "#5fce7a" }}>+{numberPremium.toFixed(2)} XCH</span>
                     </div>
                   )}
                   <div className="flex items-baseline justify-between pt-2">
                     <span className="text-xs font-black uppercase tracking-wide" style={{ color: lblColor }}>Estimated value</span>
-                    <span className="text-sm font-black" style={{ color: valColor }}>{nft.fairValue.totalEstimate.toFixed(2)} XCH</span>
+                    <span className="text-sm font-black" style={{ color: "var(--gold)" }}>{nft.fairValue.totalEstimate.toFixed(2)} XCH</span>
                   </div>
                 </>
               ) : (
@@ -496,7 +496,7 @@ export function NftDetailModal({
                   })}
                   <div className="flex items-baseline justify-between pt-2">
                     <span className="text-xs font-black uppercase tracking-wide" style={{ color: lblColor }}>Estimated value</span>
-                    <span className="text-sm font-black" style={{ color: valColor }}>{nft.fairValue.totalEstimate.toFixed(2)} XCH</span>
+                    <span className="text-sm font-black" style={{ color: "var(--gold)" }}>{nft.fairValue.totalEstimate.toFixed(2)} XCH</span>
                   </div>
                 </>
               )}
@@ -511,13 +511,13 @@ export function NftDetailModal({
                     <div className="flex items-center justify-between">
                       <span>{nft.rarityRank == null ? "Unranked — floor estimate" : "Sales confidence"}</span>
                       {level && nft.rarityRank != null && (
-                        <span style={{ color: level === "Low" ? "#f4a940" : lblColor, fontWeight: 700 }}>
+                        <span style={{ color: level === "Low" ? (isLight ? "#b45309" : "#f4a940") : lblColor, fontWeight: 700 }}>
                           {level}{n != null ? ` · ${n} sale${n === 1 ? "" : "s"}` : ""}
                         </span>
                       )}
                     </div>
                     {thin && (
-                      <div className="mt-1" style={{ color: "#f4a940" }}>
+                      <div className="mt-1" style={{ color: isLight ? "#b45309" : "#f4a940" }}>
                         Thinly traded &mdash; estimate is a rough guide, not a firm price.
                       </div>
                     )}

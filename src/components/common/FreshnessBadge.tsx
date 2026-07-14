@@ -39,7 +39,7 @@ export function FreshnessBadge({ asOf, light = false }: { asOf?: number | null; 
       style={{ background: bg, color: text, border: `1px solid ${border}` }}
     >
       <span className="relative flex h-1.5 w-1.5">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70" style={{ background: dot }} />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70 motion-reduce:animate-none" style={{ background: dot }} />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
       </span>
       <span className="tabular-nums">Live · {label}</span>

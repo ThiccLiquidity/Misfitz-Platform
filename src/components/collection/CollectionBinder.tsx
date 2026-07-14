@@ -14,6 +14,8 @@ import { formatXch, formatUsd, formatXchShort, formatUsdShort } from "@/lib/form
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import type { CollectionView } from "@/lib/collections/liveCollection";
+import { tangFor, TANG_DISCORD_URL } from "@/lib/tang/tang";
+import { PpLogo } from "@/components/tang/PpLogo";
 
 const PAGE = 120; // how many cards we render at a time (the rest stay out of the DOM)
 
@@ -58,7 +60,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const SHELL: CollectionData = useMemo(() => ({
     slug: view.id, name: view.name, description: view.description, bannerUrl: view.bannerUrl,
     iconUrl: view.imageUrl, nftCount: nfts.length, totalSupply: view.totalSupply,
-    theme: { accent: "#8b5cf6" }, dexieCollectionId: view.id,
+    theme: { accent: "" }, dexieCollectionId: view.id,
   }), [view, nfts.length]);
 
   // Pull the entire collection (cached server-side), sorted rarest-first. The FIRST load sets the list;
@@ -325,7 +327,6 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   };
   const bestDealsPill = (
     <div className="mb-3 flex justify-center">
-      <style>{`@keyframes bd-glow{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,0.35)}50%{box-shadow:0 0 24px 5px rgba(34,197,94,0.6),0 4px 14px rgba(0,0,0,0.35)}}`}</style>
       <button
         type="button"
         onClick={toggleBestDeals}
@@ -335,7 +336,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           background: bestDealsOn
             ? "linear-gradient(90deg,#16a34a,#22c55e 55%,#f0c040)"
             : "linear-gradient(90deg,#1f8f47,#2fae5e 55%,#c99a2e)",
-          animation: "bd-glow 2.2s ease-in-out infinite",
+          boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
         }}
       >
         <span className="text-lg leading-none">{bestDealsOn ? "✅" : "🔥"}</span>
@@ -348,6 +349,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   );
 
 
+  const tang = tangFor(view.id);
   return (
     <div className="py-2">
       <WorkingIndicator
@@ -355,7 +357,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         label={indexing ? "Loading collection…" : enriching ? "Refining rarity & sales…" : "Building sales model…"}
       />
       {/* Collection header */}
-      <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
+      <div className="relative mb-4 overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-card-bg px-5 py-4">
         <div className="flex items-center gap-4">
           {view.imageUrl && (
             <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl">
@@ -365,11 +367,18 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <h1 className="text-title truncate text-2xl font-black">{view.name}</h1>
-              {view.verified && <span className="text-sky-400" title="Verified creator">✔</span>}
+              {view.verified && <span className="shrink-0" style={{ color: "var(--gold)" }} title="Verified creator">✔</span>}
+              {tang && (
+                <a href={TANG_DISCORD_URL} target="_blank" rel="noopener noreferrer"
+                  title={`Tang Gang collection · rated ${tang.pp.toLocaleString()} peel points. Tap for the Tang Gang Discord.`}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-orange-600/50 bg-orange-500 px-2 py-0.5 text-[11px] font-bold text-white transition hover:bg-orange-600">
+                  <PpLogo size={13} /> Tang · {tang.pp.toLocaleString()} PP
+                </a>
+              )}
             </div>
             <div className="text-subtle mt-0.5 text-xs">
               {view.totalSupply.toLocaleString()} items
-              {fullLoaded && capped && <span style={{ color: statLight ? "#059669" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
+              {fullLoaded && capped && <span style={{ color: statLight ? "#047857" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
             </div>
             {fullLoaded && !warming && <div className="mt-1.5"><FreshnessBadge asOf={valuesAsOf} light={statLight} /></div>}
           </div>
@@ -378,23 +387,25 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         {/* Big, clear stat strip — XCH headline + USD subline. */}
         <div className="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           {([
-            { label: "Floor", xch: view.floorXch != null ? formatXch(view.floorXch) : "—",
-              usd: view.floorXch != null ? formatUsd(Math.round(view.floorXch * view.xchUsdRate * 100) / 100) : null, accent: undefined },
-            { label: "Market cap", xch: marketCap != null ? formatXchShort(marketCap) : "—",
-              usd: marketCap != null ? formatUsdShort(marketCap * view.xchUsdRate) : null, accent: undefined },
             { label: "Traitfolio cap", xch: traitfolioCap != null ? formatXchShort(traitfolioCap) : "—",
-              usd: traitfolioCap != null ? formatUsdShort(traitfolioCap * view.xchUsdRate) : null, accent: "var(--gold)" },
+              usd: traitfolioCap != null ? formatUsdShort(traitfolioCap * view.xchUsdRate) : null, hero: true },
+            { label: "Floor", xch: view.floorXch != null ? formatXch(view.floorXch) : "—",
+              usd: view.floorXch != null ? formatUsd(Math.round(view.floorXch * view.xchUsdRate * 100) / 100) : null, hero: false },
+            { label: "Market cap", xch: marketCap != null ? formatXchShort(marketCap) : "—",
+              usd: marketCap != null ? formatUsdShort(marketCap * view.xchUsdRate) : null, hero: false },
             { label: "Volume", xch: view.volumeXch != null ? formatXchShort(view.volumeXch) : "—",
-              usd: view.volumeXch != null ? formatUsdShort(view.volumeXch * view.xchUsdRate) : null, accent: undefined },
+              usd: view.volumeXch != null ? formatUsdShort(view.volumeXch * view.xchUsdRate) : null, hero: false },
           ] as const).map((st) => (
             <div
               key={st.label}
               className="rounded-xl px-4 py-2.5"
-              style={{ background: "rgba(201,162,39,0.06)", border: "1px solid rgba(201,162,39,0.22)" }}
+              style={st.hero
+                ? { background: "color-mix(in srgb, var(--gold) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--gold) 35%, transparent)", boxShadow: statLight ? undefined : "inset 0 0 24px rgba(255,224,106,0.07)" }
+                : { background: "color-mix(in srgb, var(--card-border) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--card-border) 25%, transparent)" }}
             >
-              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: statLight ? "#7a5510" : "#e8cf94" }}>{st.label}</div>
-              <div className="text-xl font-black leading-tight sm:text-2xl" style={{ color: st.accent ?? "var(--title)" }}>{st.xch}</div>
-              {st.usd && <div className="mt-0.5 text-[13px] font-semibold" style={{ color: statLight ? "#6a4d0e" : "#d9c896" }}>{st.usd}</div>}
+              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: st.hero ? (statLight ? "#047857" : "var(--gold)") : (statLight ? "#33566e" : "#e8cf94") }}>{st.label}</div>
+              <div className={`font-black leading-tight ${st.hero ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"} tabular-nums`} style={{ color: st.hero ? "var(--gold)" : "var(--title)" }}>{st.xch}</div>
+              {st.usd && <div className="mt-0.5 text-[13px] font-semibold" style={{ color: statLight ? "#4a6a8a" : "#d9c896" }}>{st.usd}</div>}
             </div>
           ))}
         </div>
@@ -411,7 +422,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           {displayed.length < filtered.length && (
             <div className="mt-5 hidden justify-center xl:flex">
               <button type="button" onClick={() => setVisible((v) => v + PAGE)}
-                className="text-title rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold transition hover:bg-white/[0.08]">
+                className="text-title rounded-lg border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-[color-mix(in_srgb,var(--card-border)_6%,transparent)] px-6 py-2.5 text-sm font-semibold transition hover:bg-[color-mix(in_srgb,var(--card-border)_12%,transparent)]">
                 Show {moreCount} more · {displayed.length.toLocaleString()} of {filtered.length.toLocaleString()}
               </button>
             </div>
@@ -429,7 +440,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         {displayed.length < filtered.length && (
           <div className="mt-4 hidden">
             <button type="button" onClick={() => setVisible((v) => v + PAGE)}
-              className="text-title rounded-lg border border-white/15 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold">
+              className="text-title rounded-lg border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-[color-mix(in_srgb,var(--card-border)_6%,transparent)] px-6 py-2.5 text-sm font-semibold">
               Show more
             </button>
           </div>

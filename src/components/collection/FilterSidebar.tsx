@@ -79,12 +79,12 @@ const TIER_CHIP_STYLES: Record<string, {
   textLight:    string;
 }> = {
   all: {
-    bgDark:    "linear-gradient(135deg, #0a1428 0%, #060e1e 100%)",
-    bgLight:   "linear-gradient(135deg, rgba(100,150,240,0.09) 0%, rgba(60,100,200,0.04) 100%)",
-    border:    "linear-gradient(135deg, #aaccff 0%, #ffffff 50%, #aaccff 100%)",
-    glow:      "rgba(160,200,255,0.4)",
-    textDark:  "linear-gradient(90deg, #c0d8ff, #ffffff, #c0d8ff)",
-    textLight: "#1144aa",
+    bgDark:    "linear-gradient(135deg, #2a1e10 0%, #1a1208 100%)",
+    bgLight:   "linear-gradient(135deg, rgba(201,162,39,0.10) 0%, rgba(180,130,0,0.04) 100%)",
+    border:    "linear-gradient(135deg, #c9a227 0%, #ffe577 50%, #c9a227 100%)",
+    glow:      "rgba(240,180,0,0.4)",
+    textDark:  "linear-gradient(90deg, #ffe06a, #fff3c4, #ffe06a)",
+    textLight: "#8a6000",
   },
   mythic: {
     bgDark:    "linear-gradient(135deg, #1a0035 0%, #0e001e 100%)",
@@ -137,7 +137,7 @@ const TIER_CHIP_STYLES: Record<string, {
 };
 
 const TIER_SOLID_DARK: Record<string, string> = {
-  all:       "#d6e4ff",
+  all:       "#ffe06a",
   mythic:    "#e6a8ff",
   legendary: "#ffd86b",
   epic:      "#a8cdff",
@@ -156,15 +156,15 @@ function selectStyle(isLight: boolean): React.CSSProperties {
     cursor: "pointer",
     outline: "none",
     appearance: "auto" as React.CSSProperties["appearance"],
-    background: isLight ? "rgba(10,30,80,0.07)" : "rgba(18,16,28,0.97)",
-    border: isLight ? "1.5px solid rgba(60,120,220,0.45)" : "1.5px solid rgba(255,255,255,0.18)",
-    color: isLight ? "#0a1e50" : "rgba(255,255,255,0.88)",
-    boxShadow: isLight ? "inset 0 1px 3px rgba(0,40,120,0.08)" : "inset 0 1px 3px rgba(0,0,0,0.3)",
+    background: isLight ? "#ffffff" : "rgba(46,32,20,0.55)",
+    border: isLight ? "1.5px solid rgba(41,128,200,0.35)" : "1.5px solid rgba(201,162,39,0.30)",
+    color: isLight ? "#0a1e40" : "rgba(240,224,170,0.95)",
+    boxShadow: isLight ? "inset 0 1px 3px rgba(0,40,120,0.06)" : "inset 0 1px 3px rgba(0,0,0,0.3)",
   };
 }
 
 function labelColor(isLight: boolean): string {
-  return isLight ? "#1a3a7a" : "rgba(255,255,255,0.72)";
+  return isLight ? "#33566e" : "rgba(184,153,104,0.92)";
 }
 
 function SectionLabel({ children, isLight, color }: { children: React.ReactNode; isLight: boolean; color?: string }) {
@@ -226,18 +226,12 @@ export function FilterSidebar({
     <div
       className={sheet
         ? "flex flex-col gap-5 p-4 pb-8"
-        : "flex flex-col gap-5 flex-shrink-0 rounded-xl p-4 sticky top-4"
+        : "tf-panel flex flex-col gap-5 flex-shrink-0 rounded-xl p-4 sticky top-4"
       }
       style={sheet ? {} : {
         width: 260,
         maxHeight: "calc(100vh - 2rem)",
         overflowY: "auto",
-        background: isLight ? "rgba(255,255,255,0.72)" : "linear-gradient(175deg, #1e1e22 0%, #121214 100%)",
-        border: isLight ? "1px solid rgba(100, 180, 255, 0.35)" : "1px solid rgba(255,255,255,0.08)",
-        boxShadow: isLight
-          ? "0 4px 24px rgba(0, 80, 160, 0.12), inset 0 1px 0 rgba(255,255,255,0.8)"
-          : "0 4px 24px rgba(0,0,0,0.4)",
-        backdropFilter: isLight ? "blur(12px)" : undefined,
       }}
     >
       {/* Search */}
@@ -269,7 +263,7 @@ export function FilterSidebar({
 
       {/* Sort */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-[11px] font-black uppercase tracking-widest" style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.82)" }}>
+        <label className="text-[11px] font-black uppercase tracking-widest" style={{ color: isLight ? "#33566e" : "var(--title)" }}>
           Sort by
         </label>
         <select
@@ -280,7 +274,7 @@ export function FilterSidebar({
             padding: "9px 10px",
             fontSize: 13,
             fontWeight: 700,
-            border: isLight ? "1.5px solid rgba(60,120,220,0.65)" : "1.5px solid rgba(140,160,255,0.5)",
+            border: isLight ? "1.5px solid rgba(41,128,200,0.55)" : "1.5px solid rgba(201,162,39,0.5)",
           }}
         >
           {(sortOptions ?? SORT_OPTIONS).map((o) => (
@@ -315,9 +309,9 @@ export function FilterSidebar({
           <button type="button" onClick={() => onForSaleOnly(!forSaleOnly)}
             className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
             style={{
-              border: forSaleOnly ? "1.5px solid rgba(80,200,120,0.65)" : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
+              border: forSaleOnly ? "1.5px solid rgba(80,200,120,0.65)" : isLight ? "1.5px solid rgba(41,128,200,0.3)" : "1.5px solid rgba(201,162,39,0.22)",
               background: forSaleOnly ? "rgba(40,180,90,0.14)" : "transparent",
-              color: forSaleOnly ? "#5fce7a" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
+              color: forSaleOnly ? (isLight ? "#1a7f3c" : "#5fce7a") : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
             }}>
             <span>&#128722; For sale only</span>
             <span>{forSaleOnly ? `ON · ${(listedCount ?? 0).toLocaleString()}` : "OFF"}</span>
@@ -334,7 +328,7 @@ export function FilterSidebar({
 
           {onCatFilter && (
             <div className="mt-1 flex flex-col gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}>
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#33566e" : "rgba(184,153,104,0.72)" }}>
                 CAT-token offers{typeof catCount === "number" ? ` · ${catCount.toLocaleString()}` : ""}
               </span>
               <div className="grid grid-cols-3 gap-1">
@@ -348,9 +342,9 @@ export function FilterSidebar({
                     <button key={seg.key} type="button" onClick={() => onCatFilter(seg.key)}
                       className="rounded-md px-2 py-1.5 text-[11px] font-bold transition"
                       style={{
-                        border: active ? "1.5px solid rgba(140,160,255,0.6)" : isLight ? "1px solid rgba(60,120,220,0.28)" : "1px solid rgba(255,255,255,0.12)",
-                        background: active ? (isLight ? "rgba(40,100,220,0.12)" : "rgba(120,140,255,0.16)") : "transparent",
-                        color: active ? (isLight ? "#1144cc" : "#a0b4ff") : (isLight ? "#0a1e50" : "rgba(255,255,255,0.62)"),
+                        border: active ? "1.5px solid rgba(201,162,39,0.6)" : isLight ? "1px solid rgba(41,128,200,0.28)" : "1px solid rgba(201,162,39,0.18)",
+                        background: active ? (isLight ? "rgba(201,162,39,0.12)" : "rgba(201,162,39,0.16)") : "transparent",
+                        color: active ? (isLight ? "#8a6000" : "var(--gold)") : (isLight ? "#33566e" : "rgba(240,224,170,0.62)"),
                       }}>
                       {seg.label}
                     </button>
@@ -361,8 +355,8 @@ export function FilterSidebar({
           )}
 
           <div className="mt-2 flex flex-col gap-1.5 rounded-lg px-2.5 py-2"
-            style={{ border: isLight ? "1px solid rgba(60,120,220,0.2)" : "1px solid rgba(255,255,255,0.08)", background: isLight ? "rgba(10,30,80,0.03)" : "rgba(255,255,255,0.02)" }}>
-            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}>
+            style={{ border: isLight ? "1px solid rgba(41,128,200,0.2)" : "1px solid rgba(201,162,39,0.18)", background: isLight ? "rgba(10,30,80,0.03)" : "rgba(201,162,39,0.03)" }}>
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#33566e" : "rgba(184,153,104,0.72)" }}>
               Sale tag legend
             </span>
             {DEAL_LEGEND.map((d) => (
@@ -371,7 +365,7 @@ export function FilterSidebar({
                   style={{ background: d.color, minWidth: 30, padding: "1px 6px", border: "1px solid rgba(255,255,255,0.35)" }}>
                   {d.mark}
                 </span>
-                <span className="text-[11px]" style={{ color: isLight ? "#334a72" : "rgba(255,255,255,0.72)" }}>{d.label}</span>
+                <span className="text-[11px]" style={{ color: isLight ? "#334a72" : "rgba(184,153,104,0.85)" }}>{d.label}</span>
               </div>
             ))}
           </div>
@@ -393,8 +387,8 @@ export function FilterSidebar({
                   title={`${t.traitType}: ${t.value} — selling about ${t.ratio.toFixed(1)}x as often as its share of the collection`}
                   className="rounded-full px-2.5 py-1 text-[11px] font-semibold transition hover:opacity-90"
                   style={{
-                    background: active ? (isLight ? "rgba(180,83,9,0.16)" : "rgba(244,169,64,0.20)") : (isLight ? "rgba(180,83,9,0.07)" : "rgba(255,255,255,0.05)"),
-                    border: `1px solid ${active ? (isLight ? "#b45309" : "#f4a940") : (isLight ? "rgba(180,83,9,0.30)" : "rgba(255,255,255,0.12)")}`,
+                    background: active ? (isLight ? "rgba(180,83,9,0.16)" : "rgba(244,169,64,0.20)") : (isLight ? "rgba(180,83,9,0.07)" : "rgba(201,162,39,0.06)"),
+                    border: `1px solid ${active ? (isLight ? "#b45309" : "#f4a940") : (isLight ? "rgba(180,83,9,0.30)" : "rgba(201,162,39,0.22)")}`,
                     color: isLight ? "#7a3d00" : "#ffddab",
                   }}
                 >
@@ -409,13 +403,13 @@ export function FilterSidebar({
 
       {/* Collector numbers */}
       {onCollectorOnly && (
-        <Collapsible title="Collector numbers" isLight={isLight} defaultOpen={false} color={isLight ? "#7a5500" : "rgba(255,255,255,0.7)"}>
+        <Collapsible title="Collector numbers" isLight={isLight} defaultOpen={false} color={isLight ? "#7a5500" : undefined}>
           <button type="button" onClick={() => onCollectorOnly(!collectorOnly)}
             className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold transition"
             style={{
-              border: collectorOnly ? "1.5px solid rgba(240,192,0,0.65)" : isLight ? "1.5px solid rgba(60,120,220,0.3)" : "1.5px solid rgba(255,255,255,0.14)",
+              border: collectorOnly ? "1.5px solid rgba(240,192,0,0.65)" : isLight ? "1.5px solid rgba(41,128,200,0.3)" : "1.5px solid rgba(201,162,39,0.22)",
               background: collectorOnly ? "rgba(240,192,0,0.14)" : "transparent",
-              color: collectorOnly ? "#f0c000" : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
+              color: collectorOnly ? (isLight ? "#8a6000" : "#f0c000") : isLight ? "#0a1e50" : "rgba(255,255,255,0.72)",
             }}>
             <span>&#9733; Collector #s only</span>
             <span>{collectorOnly ? `ON · ${(collectorCount ?? 0).toLocaleString()}` : "OFF"}</span>
@@ -440,13 +434,13 @@ export function FilterSidebar({
               const active = (traitFilters[traitType] ?? "") !== "";
               return (
                 <div key={traitType} className="flex min-w-0 flex-col gap-1">
-                  <label className="truncate text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#2255aa" : "rgba(180,200,255,0.65)" }}>
+                  <label className="truncate text-[10px] font-bold uppercase tracking-wider" style={{ color: isLight ? "#33566e" : "rgba(184,153,104,0.72)" }}>
                     {traitType}
                   </label>
                   <select
                     value={traitFilters[traitType] ?? ""}
                     onChange={(e) => onTraitFilter(traitType, e.target.value)}
-                    style={{ ...selectStyle(isLight), ...(active ? { borderColor: isLight ? "rgba(60,120,220,0.7)" : "rgba(140,160,255,0.6)" } : {}) }}
+                    style={{ ...selectStyle(isLight), ...(active ? { borderColor: isLight ? "rgba(41,128,200,0.7)" : "rgba(201,162,39,0.6)" } : {}) }}
                   >
                     <option value="">Any</option>
                     {values.map((v) => (
@@ -463,7 +457,7 @@ export function FilterSidebar({
       )}
 
       {/* Footer */}
-      <div className="mt-auto flex flex-col gap-2 pt-2 border-t" style={{ borderColor: isLight ? "rgba(100,180,255,0.25)" : "rgba(255,255,255,0.05)" }}>
+      <div className="mt-auto flex flex-col gap-2 pt-2 border-t" style={{ borderColor: isLight ? "rgba(41,128,200,0.25)" : "rgba(201,162,39,0.18)" }}>
         <span className="text-[11px] text-subtle">
           {forSaleOnly && sort === "deal-desc" && tierLabel
             ? `Best ${tierLabel} deals · ${resultCount.toLocaleString()} of ${totalCount.toLocaleString()}`
@@ -528,7 +522,6 @@ function TierChip({
           display: "flex",
           alignItems: "center",
           gap: 7,
-          backdropFilter: isLight ? "blur(4px)" : undefined,
         }}
       >
         <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{emoji}</span>

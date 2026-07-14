@@ -36,24 +36,24 @@ export function MobileFilterSheet({
         style={{
           maxHeight: "85vh",
           paddingBottom: "env(safe-area-inset-bottom)",
-          background: isLight ? "rgba(255,255,255,0.98)" : "rgba(22,20,30,0.98)",
-          border: isLight ? "1px solid rgba(100,180,255,0.30)" : "1px solid rgba(255,255,255,0.08)",
+          background: isLight ? "rgba(255,255,255,0.98)" : "rgba(36,26,16,0.98)",
+          border: isLight ? "1px solid rgba(41,128,200,0.30)" : "1px solid rgba(201,162,39,0.30)",
           borderBottom: "none",
           boxShadow: isLight ? "0 -8px 40px rgba(0,80,160,0.14)" : "0 -8px 40px rgba(0,0,0,0.7)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full" style={{ background: isLight ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.22)" }} />
+          <div className="h-1 w-10 rounded-full" style={{ background: isLight ? "rgba(0,0,0,0.18)" : "rgba(201,162,39,0.35)" }} />
         </div>
         <div
           className="sticky top-0 flex items-center justify-between px-4 py-2"
           style={{
-            background: isLight ? "rgba(255,255,255,0.98)" : "rgba(22,20,30,0.98)",
-            borderBottom: isLight ? "1px solid rgba(100,180,255,0.18)" : "1px solid rgba(255,255,255,0.07)",
+            background: isLight ? "rgba(255,255,255,0.98)" : "rgba(36,26,16,0.98)",
+            borderBottom: isLight ? "1px solid rgba(41,128,200,0.18)" : "1px solid rgba(201,162,39,0.18)",
           }}
         >
-          <span className="text-sm font-black uppercase tracking-widest" style={{ color: isLight ? "#1a3a7a" : "rgba(255,255,255,0.80)" }}>
+          <span className="text-sm font-black uppercase tracking-widest" style={{ color: isLight ? "#33566e" : "var(--title)" }}>
             {title}
           </span>
           <button
@@ -86,12 +86,12 @@ export function MobileFilterButton({ onClick, activeCount = 0 }: { onClick: () =
       style={{
         minHeight: 40,
         border: on
-          ? isLight ? "1.5px solid rgba(60,120,220,0.6)" : "1.5px solid rgba(140,160,255,0.5)"
-          : isLight ? "1.5px solid rgba(60,120,220,0.25)" : "1.5px solid rgba(255,255,255,0.14)",
+          ? isLight ? "1.5px solid rgba(41,128,200,0.6)" : "1.5px solid rgba(201,162,39,0.6)"
+          : isLight ? "1.5px solid rgba(41,128,200,0.25)" : "1.5px solid rgba(201,162,39,0.25)",
         background: on
-          ? isLight ? "rgba(40,100,220,0.12)" : "rgba(120,140,255,0.15)"
-          : isLight ? "rgba(10,30,80,0.06)" : "rgba(18,16,28,0.97)",
-        color: on ? (isLight ? "#1144cc" : "#a0b4ff") : (isLight ? "#0a1e50" : "rgba(255,255,255,0.70)"),
+          ? isLight ? "rgba(41,128,200,0.12)" : "rgba(201,162,39,0.14)"
+          : isLight ? "rgba(10,30,80,0.06)" : "rgba(46,32,20,0.55)",
+        color: on ? (isLight ? "#1144cc" : "var(--gold)") : (isLight ? "#0a1e50" : "var(--subtle)"),
       }}
     >
       {on ? `Filters (${activeCount})` : "Filters"}

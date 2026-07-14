@@ -12,12 +12,14 @@ import type { MyHoldings } from "@/lib/portfolio/myHoldings";
 import { useHiddenCollections } from "@/lib/portfolio/useHiddenCollections";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
+import { PpLogo } from "@/components/tang/PpLogo";
+import { isTangEnabled, walletPeelPoints, TANG_DISCORD_URL } from "@/lib/tang/tang";
 import { stampValueEntry, type ValueEntry } from "@/lib/valuation/valueEntry";
 import { FreshnessBadge } from "@/components/common/FreshnessBadge";
 
 const SHELL: CollectionData = {
   slug: "my-binder", name: "Your Binder", description: null, bannerUrl: null, iconUrl: null,
-  nftCount: 0, totalSupply: 0, theme: { accent: "#8b5cf6" }, dexieCollectionId: null,
+  nftCount: 0, totalSupply: 0, theme: { accent: "" }, dexieCollectionId: null,
 };
 
 function pct(n: NftData): number {
@@ -55,6 +57,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [enriching, setEnriching] = useState(!holdings.demo && holdings.addresses.length > 0);
   const [progress, setProgress] = useState(0);
   const [warming, setWarming] = useState<boolean>(!!holdings.warming);
+  const [stoppedEarly, setStoppedEarly] = useState(false);
+  useEffect(() => { if (warming) setStoppedEarly(false); }, [warming]);
   const [collections, setCollections] = useState(holdings.collections);
   const [truncated, setTruncated] = useState(holdings.truncated);
   const nftsRef = useRef<NftData[]>(holdings.nfts);
@@ -100,7 +104,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   }, [warming, holdings.addresses]);
 
   useEffect(() => {
-    if (holdings.demo || holdings.addresses.length === 0 || warming) return;
+    if (holdings.demo || holdings.addresses.length === 0 || warming || stoppedEarly) return;
     let cancelled = false;
     const all = nftsRef.current;
 
@@ -196,7 +200,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     })();
 
     return () => { cancelled = true; };
-  }, [warming, collectionId, refreshTick, holdings.addresses, holdings.demo, holdings.xchUsdRate]);
+  }, [warming, collectionId, refreshTick, holdings.addresses, holdings.demo, holdings.xchUsdRate, stoppedEarly]);
 
   const oneCollection = collectionId !== "all";
 
@@ -206,6 +210,8 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     () => collections.filter((c) => !hidden.has(c.id)),
     [collections, hidden],
   );
+  // Weekly peel-point estimate for the whole wallet (per-NFT, Tang Gang collections + special NFTs).
+  const peel = useMemo(() => walletPeelPoints(nfts), [nfts]);
 
   // If the collection in focus gets hidden, fall back to the All view.
   useEffect(() => {
@@ -216,6 +222,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   // just-bought NFT shows immediately. Re-runs enrichment on the fresh set via refreshTick.
   const doRefresh = async () => {
     if (refreshing || holdings.addresses.length === 0) return;
+    setStoppedEarly(false); // a manual refresh re-enables loading after an early stop
     setRefreshing(true);
     try {
       const res = await fetch("/api/holdings", {
@@ -297,6 +304,12 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const activeFilterCount = (tier !== "all" ? 1 : 0) + Object.values(traitFilters).filter((v) => v !== "").length;
   const binderKey = `${collectionId}|${tier}|${sort}|${JSON.stringify(traitFilters)}`;
 
+  const peelPill = isTangEnabled() && peel.total > 0 ? (
+    <a href={TANG_DISCORD_URL} target="_blank" rel="noopener noreferrer" title={`Peel Points — tap to open the Tang Gang Discord. Estimated for the weekly snapshot — ${peel.tangNftCount} Tang Gang NFT${peel.tangNftCount === 1 ? "" : "s"}, counted per NFT. Excludes token/CAT balances.`}
+      className="inline-flex items-center gap-2 rounded-full border border-orange-600/50 bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-[0_0_18px_rgba(249,115,22,0.35)] transition hover:bg-orange-600">
+      <PpLogo size={24} /> {peel.total.toLocaleString()} Peel Points
+    </a>
+  ) : null;
   return (
     <div>
       <WorkingIndicator active={warming || enriching} label={warming ? `Loading your collection… ${nfts.length.toLocaleString()} so far` : "Reading wallet & refining rarity"} progress={warming ? undefined : progress} />
@@ -306,36 +319,73 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         </p>
       )}
 
-      {/* Full-width value header */}
-      <div className="mb-4 flex flex-col items-center gap-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] px-6 py-6 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-start sm:gap-x-10 sm:gap-y-4">
-          {/* Floor value — what it'd fetch at each collection's floor */}
-          <div>
-            <div className="text-subtle text-xs uppercase tracking-widest">Floor value</div>
-            <div className="text-title mt-1 text-3xl font-black">{formatXch(floorValue)}</div>
-            <div className="text-subtle text-sm">≈ {formatUsd(Math.round(floorValue * holdings.xchUsdRate * 100) / 100)}</div>
+      {/* Value header — one hero card */}
+      <div className="relative mb-4 overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-card-bg px-5 py-4 sm:px-6 sm:py-5">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.07] via-transparent to-transparent" />
+        <div className="relative">
+          {/* top row: eyebrow · refresh. Peel pill sits in the cluster on desktop, centers below on mobile. */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-subtle text-[11px] font-bold uppercase tracking-[0.2em]">Your Binder</h1>
+              {holdings.addresses.length > 0 && (
+                <span className="text-subtle text-[11px]">{holdings.addresses.length} wallet{holdings.addresses.length === 1 ? "" : "s"}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {peelPill && <span className="hidden sm:inline-flex">{peelPill}</span>}
+              <button type="button" onClick={doRefresh} disabled={refreshing}
+                className="inline-flex items-center gap-1 rounded-lg border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-[color-mix(in_srgb,var(--card-border)_6%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-subtle transition hover:bg-[color-mix(in_srgb,var(--card-border)_12%,transparent)] disabled:opacity-50 sm:px-3 sm:py-1.5 sm:text-xs"
+                title="Re-check your wallet for new NFTs (skips the cache)">
+                {refreshing ? "Refreshing…" : "↻ Refresh"}
+              </button>
+            </div>
           </div>
-          {/* Traitfolio value — our trait-aware estimate (the headline number) */}
-          <div>
-            <div className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--gold)" }}>Traitfolio value</div>
-            <div className="mt-1 text-4xl font-black" style={{ color: "var(--gold)" }}>{formatXch(shownValue)}</div>
-            <div className="text-subtle text-sm">≈ {formatUsd(Math.round(shownValue * holdings.xchUsdRate * 100) / 100)}</div>
-            <div className="text-subtle mt-0.5 text-[10px]">Estimate — not a guaranteed price</div>
+          {peelPill && <div className="mt-3 flex justify-center sm:hidden">{peelPill}</div>}
+
+          {/* main row: hero value + floor + stat rail */}
+          <div className="mt-4 flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end sm:gap-6">
+              {/* Traitfolio value — the hero */}
+              <div className="relative">
+                <div className="pointer-events-none absolute -inset-6 -z-10 rounded-full blur-2xl" style={{ background: "radial-gradient(closest-side, color-mix(in srgb, var(--gold) 14%, transparent), transparent)" }} />
+                <div className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--gold)" }}>Traitfolio value</div>
+                <div className="mt-1 text-5xl font-black leading-none tabular-nums sm:text-6xl" style={{ color: "var(--gold)" }}>{formatXch(shownValue)}</div>
+                <div className="text-subtle mt-1 text-sm">≈ {formatUsd(Math.round(shownValue * holdings.xchUsdRate * 100) / 100)} <span className="text-[11px]">· Estimate, not a guaranteed price</span></div>
+              </div>
+              {/* Floor value — subordinate */}
+              <div className="border-[color-mix(in_srgb,var(--card-border)_15%,transparent)] pt-3 sm:border-l sm:pt-0 sm:pl-6">
+                <div className="text-subtle text-[11px] font-bold uppercase tracking-widest">Floor value</div>
+                <div className="text-title mt-1 text-xl font-bold tabular-nums sm:text-2xl">{formatXch(floorValue)}</div>
+                <div className="text-subtle text-xs">≈ {formatUsd(Math.round(floorValue * holdings.xchUsdRate * 100) / 100)}</div>
+              </div>
+            </div>
+            {/* stat rail */}
+            <div className="flex flex-col items-center sm:items-end">
+              <div className="flex divide-x divide-[color-mix(in_srgb,var(--card-border)_15%,transparent)]">
+                <div className="px-4 text-center"><div className="text-title text-2xl font-black tabular-nums">{filtered.length.toLocaleString()}</div><div className="text-subtle text-[10px] uppercase tracking-widest">NFTs</div></div>
+                <div className="px-4 text-center"><div className="text-title text-2xl font-black tabular-nums">{visibleCollections.length}</div><div className="text-subtle text-[10px] uppercase tracking-widest">Collections</div></div>
+              </div>
+              {(truncated || stoppedEarly) && (
+                <div className="text-subtle mt-1 text-[10px]">{stoppedEarly ? "partial — stopped early" : "capped at 25,000"}</div>
+              )}
+              {!warming && !enriching && valuesAsOf != null && (
+                <div className="mt-1 flex justify-center sm:justify-end"><FreshnessBadge asOf={valuesAsOf} /></div>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="text-center sm:text-right">
-          <div className="text-title text-2xl font-bold">{filtered.length}</div>
-          <div className="text-subtle text-xs uppercase tracking-widest">NFTs</div>
-          <div className="text-subtle mt-1 text-xs">
-            {visibleCollections.length} collection{visibleCollections.length === 1 ? "" : "s"}{warming ? " · loading…" : truncated ? " · capped at 25,000" : ""}
-          </div>
-          <button type="button" onClick={doRefresh} disabled={refreshing}
-            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/[0.05] px-2.5 py-1 text-[11px] font-semibold text-subtle transition hover:bg-white/[0.1] disabled:opacity-50"
-            title="Re-check your wallet for new NFTs (skips the cache)">
-            {refreshing ? "Refreshing…" : "↻ Refresh"}
-          </button>
-          {!warming && !enriching && valuesAsOf != null && (
-            <div className="mt-1.5 flex justify-center sm:justify-end"><FreshnessBadge asOf={valuesAsOf} /></div>
+
+          {/* sync pill — only while the wallet is still loading */}
+          {warming && (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-black/20 px-3 py-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-title">
+                <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--gold)" }} />
+                Syncing wallet · {nfts.length.toLocaleString()} NFTs found…
+              </div>
+              <button type="button" onClick={() => { setWarming(false); setEnriching(false); setStoppedEarly(true); }} title="Stop syncing — keep what's loaded so far and browse now"
+                className="shrink-0 rounded-md border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-subtle transition hover:bg-[color-mix(in_srgb,var(--card-border)_12%,transparent)]">
+                Stop
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -366,7 +416,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <select
             value={collectionId}
             onChange={(e) => pickCollection(e.target.value)}
-            className="text-title min-w-0 flex-1 rounded-lg border border-white/15 bg-card-bg px-3 text-xs font-semibold outline-none"
+            className="tf-select min-w-0 flex-1 rounded-lg px-3 text-xs font-semibold outline-none"
             style={{ minHeight: 40 }}
           >
             <option value="all">All collections ({visibleNfts.length})</option>
@@ -380,7 +430,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           <button
             type="button"
             onClick={clearHidden}
-            className="self-start text-[11px] font-semibold text-violet-300/90 underline"
+            className="self-start text-[11px] font-semibold text-subtle underline transition hover:text-title"
           >
             {hidden.size} hidden — show all
           </button>

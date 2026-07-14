@@ -4,7 +4,7 @@ export function BinderEmptyState() {
   return (
     <div
       className="mx-2 mt-2 flex flex-col items-center justify-center rounded-2xl px-6 py-16 text-center"
-      style={{ background: "var(--card-bg)", border: "1px dashed var(--card-border)" }}
+      style={{ background: "var(--card-bg)", border: "1px dashed color-mix(in srgb, var(--card-border) 55%, transparent)" }}
     >
       <div className="text-4xl" aria-hidden>📒</div>
       <h2 className="text-title mt-3 text-lg font-bold">Your binder is empty</h2>

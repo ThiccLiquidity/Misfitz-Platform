@@ -229,7 +229,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
                   "inset 4px 0 12px rgba(0,20,60,0.5), inset -4px 0 12px rgba(0,20,60,0.5), " +
                   "3px 0 14px rgba(0,20,60,0.3), -3px 0 14px rgba(0,20,60,0.3)",
               } : {
-                background: "linear-gradient(90deg, #0e0e11 0%, #25252d 25%, #1e1e26 50%, #25252d 75%, #0e0e11 100%)",
+                background: "linear-gradient(90deg, #171009 0%, #332417 25%, #281c10 50%, #332417 75%, #171009 100%)",
                 boxShadow:
                   "inset 4px 0 12px rgba(0,0,0,0.6), inset -4px 0 12px rgba(0,0,0,0.6), " +
                   "3px 0 14px rgba(0,0,0,0.5), -3px 0 14px rgba(0,0,0,0.5)",
@@ -252,8 +252,8 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
                   } : {
                     width: 30, height: 30,
                     borderRadius: "50%",
-                    background: "radial-gradient(circle at 32% 28%, #72727e 0%, #38383f 40%, #1a1a20 100%)",
-                    border: "1.5px solid rgba(255,255,255,0.18)",
+                    background: "radial-gradient(circle at 32% 28%, #b89860 0%, #6a5228 40%, #241a0e 100%)",
+                    border: "1.5px solid rgba(255,224,106,0.22)",
                     boxShadow:
                       "0 3px 10px rgba(0,0,0,0.8), " +
                       "0 1px 0 rgba(255,255,255,0.12), " +

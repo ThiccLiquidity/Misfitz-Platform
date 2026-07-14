@@ -37,7 +37,7 @@ function ArrowButton({
   // Cloud-white pillowy style for light mode; deep sky-blue for dark mode
   const activeBg = isLight
     ? "linear-gradient(160deg, #ffffff 0%, #e2f0ff 40%, #b8d8ff 100%)"
-    : "linear-gradient(160deg, #3366ee 0%, #1a44d4 45%, #0d28a6 100%)";
+    : "linear-gradient(160deg, #ffe577 0%, #f0c000 45%, #c89000 100%)";
 
   const activeShadow = isLight
     ? [
@@ -47,10 +47,10 @@ function ArrowButton({
         "inset 0 -4px 8px rgba(80,140,255,0.32)",
       ].join(", ")
     : [
-        "0 10px 28px rgba(30,80,255,0.55)",
+        "0 10px 28px rgba(201,162,39,0.5)",
         "0 4px 10px rgba(0,0,0,0.45)",
-        "inset 0 3px 8px rgba(140,190,255,0.45)",
-        "inset 0 -3px 7px rgba(0,20,120,0.55)",
+        "inset 0 3px 8px rgba(255,224,106,0.4)",
+        "inset 0 -3px 7px rgba(120,80,0,0.5)",
       ].join(", ");
 
   const hoverShadow = isLight
@@ -61,10 +61,10 @@ function ArrowButton({
         "inset 0 -4px 8px rgba(80,140,255,0.38)",
       ].join(", ")
     : [
-        "0 16px 38px rgba(30,80,255,0.7)",
+        "0 16px 38px rgba(201,162,39,0.6)",
         "0 6px 14px rgba(0,0,0,0.5)",
-        "inset 0 3px 8px rgba(140,190,255,0.5)",
-        "inset 0 -3px 7px rgba(0,20,120,0.6)",
+        "inset 0 3px 8px rgba(255,224,106,0.45)",
+        "inset 0 -3px 7px rgba(120,80,0,0.55)",
       ].join(", ");
 
   const pressShadow = isLight
@@ -74,13 +74,13 @@ function ArrowButton({
         "inset 0 -2px 5px rgba(80,140,255,0.28)",
       ].join(", ")
     : [
-        "0 4px 12px rgba(30,80,255,0.4)",
-        "inset 0 2px 5px rgba(140,190,255,0.35)",
-        "inset 0 -2px 5px rgba(0,20,120,0.5)",
+        "0 4px 12px rgba(201,162,39,0.4)",
+        "inset 0 2px 5px rgba(255,224,106,0.3)",
+        "inset 0 -2px 5px rgba(120,80,0,0.45)",
       ].join(", ");
 
   const arrowColor = enabled
-    ? isLight ? "#1133bb" : "#ffffff"
+    ? isLight ? "#1133bb" : "#1a1200"
     : isLight ? "rgba(60,80,140,0.25)" : "rgba(255,255,255,0.18)";
 
   function onEnter(e: React.MouseEvent<HTMLButtonElement>) {

@@ -384,8 +384,6 @@ body {
 .tcg-panel {
   position: relative;
   z-index: 10;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   overflow: hidden;
   border-top: 1px solid;
 }
@@ -1388,9 +1386,9 @@ body {
 /* Without this, browsers flash a white box before React sets colorScheme: "dark" inline.       */
 [data-theme="dark"] select {
   color-scheme: dark;
-  background: rgba(18,16,28,0.97) !important;
-  color: rgba(255,255,255,0.88) !important;
-  border-color: rgba(255,255,255,0.18) !important;
+  background: #2e2014;
+  color: rgba(240,224,170,0.95);
+  border-color: rgba(201,162,39,0.30);
 }
 
 /* ── Library title — dark mode: extruded 3D gold ───────────────────────────── */
@@ -1532,6 +1530,354 @@ body {
 @keyframes tf-loadsweep {
   0%   { transform: translateX(-120%); }
   100% { transform: translateX(330%); }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TRAITFOLIO LANDING — "Gold Standard" vault + floating card fan
+   Theme-aware (dark = gold vault, light = emerald/sky). All motion is
+   compositor-only (transform/opacity/background-position) and disabled
+   under prefers-reduced-motion (block at the very bottom of this file).
+   ═══════════════════════════════════════════════════════════════════════ */
+.tf-land-bg {
+  --title: #e8c878; --subtle: #b89968; --card-bg: #2e2014; --card-border: #c9a227;
+  background:
+    radial-gradient(120% 55% at 50% -6%, rgba(201,162,39,0.17), transparent 60%),
+    radial-gradient(85% 55% at 8% 112%, rgba(201,162,39,0.09), transparent 60%),
+    var(--vault-bg);
+}
+[data-theme="light"] .tf-land-bg {
+  --title: #0a2a44; --subtle: #33566e; --card-bg: rgba(255,255,255,0.85); --card-border: rgba(41,128,200,0.35);
+  background:
+    radial-gradient(ellipse at 22% -4%, rgba(100,180,255,0.32) 0%, transparent 55%),
+    radial-gradient(ellipse at 82% 108%, rgba(41,128,200,0.16) 0%, transparent 55%),
+    linear-gradient(180deg, #c8e8f8 0%, #dcf1ff 50%, #c2e6f6 100%);
+}
+
+/* Engraved security-paper texture over the top of the hero (kills the empty void). */
+.tf-land-paper {
+  position: absolute; inset: 0 0 auto 0; height: 62vh; z-index: 0; pointer-events: none; opacity: .55;
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(201,162,39,0.05) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(-45deg, rgba(201,162,39,0.045) 0 2px, transparent 2px 10px),
+    repeating-linear-gradient(90deg,  rgba(201,162,39,0.03) 0 1px, transparent 1px 6px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
+}
+[data-theme="light"] .tf-land-paper {
+  opacity: .5;
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(5,150,105,0.06) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(-45deg, rgba(41,128,200,0.05) 0 2px, transparent 2px 10px);
+}
+
+/* Gold-foil animated headline (replaces the off-brand rainbow on line 2). */
+.tf-foil {
+  background: linear-gradient(105deg, #8a6a1c 0%, #ffe577 24%, #f0c000 44%, #fff3c4 58%, #c9a227 78%, #ffe577 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: tf-foil-pan 6.5s ease-in-out infinite;
+}
+[data-theme="light"] .tf-foil {
+  background: linear-gradient(105deg, #065f46 0%, #059669 30%, #10b981 50%, #047857 74%, #059669 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+@keyframes tf-foil-pan { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+/* Minted, beveled CTA with a hover sheen sweep + soft breathing glow. */
+.tf-mint {
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, #ffe577 0%, #f0c000 46%, #c89000 100%);
+  border: 1px solid rgba(150,110,0,0.55); color: #1a1200;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 4px rgba(120,80,0,0.30), 0 8px 30px rgba(201,162,39,0.24);
+  animation: tf-mint-breathe 7s ease-in-out infinite;
+  transition: transform .15s ease;
+}
+.tf-mint:hover { transform: translateY(-1px); }
+.tf-mint::after {
+  content: ""; position: absolute; top: 0; left: -60%; width: 42%; height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255,255,255,0.7), transparent);
+  transform: skewX(-18deg); opacity: 0;
+}
+.tf-mint:hover::after { animation: tf-mint-sheen .85s ease; }
+[data-theme="light"] .tf-mint {
+  background: linear-gradient(180deg, #34d399 0%, #059669 46%, #047857 100%);
+  border-color: rgba(4,120,87,0.6); color: #04241a;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 8px 30px rgba(5,150,105,0.3);
+  animation: none;
+}
+@keyframes tf-mint-breathe {
+  0%,100% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 4px rgba(120,80,0,0.30), 0 8px 30px rgba(201,162,39,0.20); }
+  50%     { box-shadow: inset 0 1px 0 rgba(255,255,255,0.62), inset 0 -2px 4px rgba(120,80,0,0.30), 0 9px 34px rgba(201,162,39,0.34); }
+}
+@keyframes tf-mint-sheen { 0% { left:-60%; opacity:0; } 22% { opacity:1; } 100% { left:130%; opacity:0; } }
+
+/* Drifting gold-dust motes (positions/sizes/delays set inline per particle). */
+.tf-dust {
+  position: absolute; border-radius: 50%; pointer-events: none; z-index: 1; opacity: 0;
+  background: radial-gradient(circle, #ffe89a 0%, rgba(255,224,106,0.25) 70%, transparent 100%);
+  box-shadow: 0 0 6px rgba(255,224,120,0.7);
+  animation: tf-dust-rise linear infinite;
+}
+[data-theme="light"] .tf-dust {
+  background: radial-gradient(circle, #059669 0%, rgba(4,120,87,0.28) 70%, transparent 100%);
+  box-shadow: 0 0 6px rgba(4,120,87,0.5);
+}
+@keyframes tf-dust-rise {
+  0%   { transform: translateY(24px) scale(.8); opacity: 0; }
+  14%  { opacity: .85; }
+  85%  { opacity: .45; }
+  100% { transform: translateY(-150px) scale(1.12); opacity: 0; }
+}
+
+/* ── Floating NFT card fan ─────────────────────────────────────────────── */
+.tf-fan { position: relative; width: 340px; height: 360px; }
+.tf-fan-slot {
+  position: absolute; left: 50%; top: 50%; width: 176px; height: 232px;
+  margin: -116px 0 0 -88px; transform-origin: bottom center;
+  transition: transform .4s cubic-bezier(.2,.7,.2,1);
+}
+.tf-fan-slot--l { transform: translate(-96px, 8px) rotate(-13deg); z-index: 1; }
+.tf-fan-slot--r { transform: translate(96px, 8px)  rotate(13deg);  z-index: 2; }
+.tf-fan-slot--c { transform: translate(0, -14px)   rotate(0deg);   z-index: 3; }
+@media (hover: hover) {
+  .tf-fan:hover .tf-fan-slot--l { transform: translate(-126px, 4px) rotate(-18deg); }
+  .tf-fan:hover .tf-fan-slot--r { transform: translate(126px, 4px)  rotate(18deg); }
+  .tf-fan:hover .tf-fan-slot--c { transform: translate(0, -22px) rotate(0deg) scale(1.03); }
+}
+.tf-fan-bob { width: 100%; height: 100%; animation: tf-bob 7.5s ease-in-out infinite; }
+.tf-fan-slot--l .tf-fan-bob { animation-duration: 8.5s; animation-delay: .5s; }
+.tf-fan-slot--c .tf-fan-bob { animation-duration: 7s;   animation-delay: .2s; }
+.tf-fan-slot--r .tf-fan-bob { animation-duration: 8s;   animation-delay: 1.1s; }
+@keyframes tf-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+
+.tf-fan-card {
+  width: 100%; height: 100%; border-radius: 13px; overflow: hidden; position: relative;
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column;
+}
+[data-theme="light"] .tf-fan-card { box-shadow: 0 16px 34px rgba(20,60,110,0.28); }
+.tf-fan-art { flex: 1; position: relative; }
+.tf-fan-glyph {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 54px; opacity: .9; filter: drop-shadow(0 3px 6px rgba(0,0,0,.4));
+}
+.tf-fan-foot {
+  padding: 8px 9px; font-size: 11px; font-weight: 800; letter-spacing: .04em;
+  color: var(--title); background: rgba(0,0,0,0.22); border-top: 1px solid rgba(201,162,39,0.25);
+  display: flex; align-items: center; justify-content: space-between;
+}
+[data-theme="light"] .tf-fan-foot { background: rgba(255,255,255,0.5); border-top-color: rgba(41,128,200,0.25); color: #0a2a44; }
+.tf-fan-rank {
+  font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 999px;
+  background: rgba(0,0,0,0.35); color: var(--gold); border: 1px solid rgba(201,162,39,0.4);
+}
+/* Animated holo border for the hero card (reuses --angle + border-spin). */
+.tf-holo-frame {
+  width: 100%; height: 100%; padding: 2px; border-radius: 15px;
+  background: conic-gradient(from var(--angle), #ffe566, #c89000, #ffe566, #ffd700, #fff4a0, #b87d00, #ffe566);
+  animation: border-spin 7s linear infinite;
+  box-shadow: 0 20px 46px rgba(0,0,0,0.5);
+}
+[data-theme="light"] .tf-holo-frame {
+  background: conic-gradient(from var(--angle), #34d399, #059669, #34d399, #10b981, #a7f3d0, #047857, #34d399);
+  box-shadow: 0 18px 40px rgba(20,90,70,0.3);
+}
+.tf-holo-frame .tf-fan-card { box-shadow: none; border: none; }
+.tf-deal-chip {
+  position: absolute; top: -8px; right: -10px; z-index: 4;
+  font-size: 10px; font-weight: 900; letter-spacing: .03em; padding: 3px 8px; border-radius: 999px;
+  background: var(--good); color: #0a2a06; border: 1px solid rgba(255,255,255,0.5); box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+}
+
+/* Vault-plaque feature cards. */
+.tf-plaque {
+  border-radius: 15px; padding: 16px 18px; background: var(--card-bg);
+  border: 1px solid rgba(201,162,39,0.35);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.tf-plaque:hover { transform: translateY(-3px); box-shadow: var(--card-glow); border-color: rgba(201,162,39,0.6); }
+[data-theme="light"] .tf-plaque {
+  background: rgba(255,255,255,0.85); border-color: rgba(41,128,200,0.28);
+}
+[data-theme="light"] .tf-plaque:hover { box-shadow: 0 8px 22px rgba(41,128,200,0.18); border-color: rgba(41,128,200,0.5); }
+
+
+/* Landing helper classes (migrated off inline gold styles so light mode themes cleanly). */
+.tf-eyebrow { background: rgba(201,162,39,0.10); color: var(--title); border: 1px solid rgba(201,162,39,0.30); }
+[data-theme="light"] .tf-eyebrow { background: rgba(5,150,105,0.10); border-color: rgba(5,150,105,0.35); }
+.tf-plaque-chip { background: rgba(201,162,39,0.12); border: 1px solid rgba(201,162,39,0.25); color: var(--dot, var(--gold)); }
+[data-theme="light"] .tf-plaque-chip { background: rgba(5,150,105,0.10); border-color: rgba(5,150,105,0.30); color: #04603f; }
+.tf-band { background: var(--card-bg); border: 1px solid rgba(201,162,39,0.28); }
+[data-theme="light"] .tf-band { border-color: rgba(41,128,200,0.30); }
+.tf-band-edge { background: linear-gradient(180deg,#ffe577,#c89000); }
+[data-theme="light"] .tf-band-edge { background: linear-gradient(180deg,#34d399,#047857); }
+.tf-band-btn { color: var(--title); border: 1px solid var(--card-border); transition: background .15s ease; }
+.tf-band-btn:hover { background: rgba(201,162,39,0.12); }
+[data-theme="light"] .tf-band-btn:hover { background: rgba(5,150,105,0.12); }
+.tf-foot { border-top: 1px solid rgba(201,162,39,0.15); }
+[data-theme="light"] .tf-foot { border-top-color: rgba(41,128,200,0.22); }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TRAITFOLIO BROWSE — "Vault Floor" (carries the landing's gold-vault
+   language into the discovery grid). Density-tuned; exactly ONE animated
+   element on the page (the .tf-foil word in the header). Theme-aware.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Slim, capped security-paper strip behind the page header only. */
+.tf-browse-tex {
+  position: absolute; inset: 0 0 auto 0; height: 120px; z-index: 0; pointer-events: none; opacity: .32;
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(201,162,39,0.05) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(-45deg, rgba(201,162,39,0.04) 0 2px, transparent 2px 10px);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+          mask-image: linear-gradient(to bottom, #000, transparent);
+}
+[data-theme="light"] .tf-browse-tex {
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(41,128,200,0.10) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(-45deg, rgba(5,150,105,0.10) 0 2px, transparent 2px 10px);
+}
+
+/* Thin engraved gold hairline. */
+.tf-hairline { height: 1px; background: linear-gradient(90deg, transparent, rgba(201,162,39,0.45), transparent); }
+[data-theme="light"] .tf-hairline { background: linear-gradient(90deg, transparent, rgba(41,128,200,0.4), transparent); }
+
+/* Designed search pill (replaces the inline-styled input). */
+.tf-search {
+  background: rgba(46,32,20,0.55); border: 1px solid rgba(201,162,39,0.30); color: var(--title);
+  caret-color: var(--gold); transition: border-color .15s ease, box-shadow .15s ease;
+}
+.tf-search::placeholder { color: var(--subtle); opacity: .7; }
+.tf-search:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 18%, transparent), 0 0 14px color-mix(in srgb, var(--gold) 15%, transparent);
+}
+[data-theme="light"] .tf-search { background: #ffffff; border-color: rgba(41,128,200,0.35); }
+
+/* Binder index tabs — file-folder tabs that sit on a hairline; active merges up. */
+.tf-tabbar { border-bottom: 1px solid rgba(201,162,39,0.30); }
+[data-theme="light"] .tf-tabbar { border-bottom-color: rgba(41,128,200,0.30); }
+.tf-tab {
+  position: relative; margin-bottom: -1px; border-radius: 10px 10px 0 0;
+  padding: 10px 16px; font-size: 12px; font-weight: 800; letter-spacing: .01em;
+  border: 1px solid transparent; border-bottom: none; color: var(--subtle); background: transparent;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.tf-tab:hover { color: var(--title); background: rgba(201,162,39,0.08); }
+.tf-tab--active { color: var(--title); background: var(--page-bg); border-color: rgba(201,162,39,0.5); }
+.tf-tab--active.tf-tab--tang { border-color: rgba(249,115,22,0.55); color: #fb923c; }
+[data-theme="light"] .tf-tab:hover { background: rgba(41,128,200,0.08); }
+[data-theme="light"] .tf-tab--active { border-color: rgba(41,128,200,0.4); }
+[data-theme="light"] .tf-tab--active.tf-tab--tang { border-color: rgba(234,88,12,0.5); color: #c2410c; }
+
+.tf-tab-panel {
+  background: var(--page-bg); border: 1px solid rgba(201,162,39,0.30); border-top: none;
+  border-radius: 0 0 14px 14px; padding: 14px 12px 16px;
+}
+[data-theme="light"] .tf-tab-panel { border-color: rgba(41,128,200,0.30); }
+
+/* Vault tile (collection card). Density-tuned: -2px lift, gold glow, warm surface. */
+.tf-tile {
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(58,42,24,0.75), rgba(46,32,20,0.92));
+  border: 1px solid rgba(201,162,39,0.28);
+  box-shadow: inset 0 1px 0 rgba(255,229,119,0.07);
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.tf-tile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(201,162,39,0.6);
+  box-shadow: var(--card-glow), 0 6px 18px rgba(0,0,0,0.35);
+}
+[data-theme="light"] .tf-tile {
+  background: #ffffff; border-color: rgba(41,128,200,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
+[data-theme="light"] .tf-tile:hover { border-color: rgba(41,128,200,0.5); box-shadow: 0 8px 22px rgba(41,128,200,0.16); }
+.tf-tile-foot { border-top: 1px solid rgba(201,162,39,0.18); }
+[data-theme="light"] .tf-tile-foot { border-top-color: rgba(41,128,200,0.18); }
+
+/* Heat marker for the hottest trending tiles (top-right; Tang badge owns top-left). */
+.tf-heat {
+  position: absolute; top: 6px; right: 6px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px; border-radius: 999px;
+  font-size: 12px; font-weight: 900; line-height: 1;
+  background: rgba(0,0,0,0.45); color: #ffb26b; border: 1px solid rgba(249,115,22,0.45);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+}
+
+/* Tang-flavored eyebrow + discord chip + sort pills. */
+.tf-eyebrow--tang { background: rgba(249,115,22,0.12); color: #fdba74; border-color: rgba(249,115,22,0.35); }
+[data-theme="light"] .tf-eyebrow--tang { color: #c2410c; }
+.tf-discord-chip { border: 1px solid rgba(249,115,22,0.4); color: #fdba74; transition: background .15s ease; }
+.tf-discord-chip:hover { background: rgba(249,115,22,0.10); }
+[data-theme="light"] .tf-discord-chip { border-color: rgba(234,88,12,0.4); color: #c2410c; }
+.tf-pill {
+  border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 800;
+  border: 1px solid rgba(201,162,39,0.25); background: rgba(201,162,39,0.06); color: var(--subtle);
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.tf-pill:hover { color: var(--title); background: rgba(201,162,39,0.12); }
+.tf-pill--tang-active {
+  color: #fff; border-color: rgba(154,52,18,0.6);
+  background: linear-gradient(180deg, #ffb26b, #f97316 50%, #c2410c);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+}
+[data-theme="light"] .tf-pill { border-color: rgba(41,128,200,0.30); background: rgba(41,128,200,0.06); }
+[data-theme="light"] .tf-pill:hover { background: rgba(41,128,200,0.10); }
+
+/* Minted tangerine "coin" for the Tang badge (same bevel language as the gold CTA). */
+.tf-tang-coin {
+  background: linear-gradient(180deg, #ffb26b, #f97316 55%, #c2410c);
+  border: 1px solid rgba(120,40,0,0.5);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 6px rgba(0,0,0,0.35);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TRAITFOLIO PORTFOLIO / SHARED CHROME — vault surfaces for functional UI
+   (wallet bar, filter sidebar, collection picker, mobile sheet). Reused on
+   the collection page. Static (no hover bounce), theme-aware, no blur.
+   ═══════════════════════════════════════════════════════════════════════ */
+.tf-panel {
+  background: linear-gradient(175deg, rgba(58,42,24,0.55), rgba(36,26,16,0.92));
+  border: 1px solid rgba(201,162,39,0.28);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,229,119,0.06);
+}
+[data-theme="light"] .tf-panel {
+  background: rgba(255,255,255,0.72);
+  border-color: rgba(41,128,200,0.35);
+  box-shadow: 0 4px 24px rgba(0,80,160,0.12), inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+/* Search-pill skin for <select>/small inputs (keeps native appearance). */
+.tf-select {
+  background: rgba(46,32,20,0.55); border: 1px solid rgba(201,162,39,0.30); color: var(--title);
+  caret-color: var(--gold); transition: border-color .15s ease, box-shadow .15s ease;
+}
+.tf-select::placeholder { color: var(--subtle); opacity: .7; }
+.tf-select:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 18%, transparent), 0 0 12px color-mix(in srgb, var(--gold) 14%, transparent);
+}
+[data-theme="light"] .tf-select { background: #ffffff; border-color: rgba(41,128,200,0.35); color: #0a1e40; }
+
+/* Minted CTA at control scale (no perpetual breathe; disabled + light handled). */
+.tf-mint--sm { animation: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 14px rgba(201,162,39,0.20); }
+.tf-mint:disabled, .tf-mint--sm:disabled {
+  filter: grayscale(.4) brightness(.85); box-shadow: none; transform: none; cursor: not-allowed;
+}
+
+/* Landing motion off for reduced-motion users. */
+@media (prefers-reduced-motion: reduce) {
+  .tf-foil, .tf-mint, .tf-mint::after, .tf-fan-bob, .tf-holo-frame { animation: none !important; }
+  .tf-dust { display: none !important; }
+  .tf-fan-slot, .tf-fan:hover .tf-fan-slot--l, .tf-fan:hover .tf-fan-slot--r, .tf-fan:hover .tf-fan-slot--c { transition: none; }
 }
 
 /* Accessibility: visible keyboard-focus ring (only shows for keyboard nav, not mouse clicks). */

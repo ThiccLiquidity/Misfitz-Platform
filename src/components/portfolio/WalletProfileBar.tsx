@@ -43,6 +43,10 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
     }
   }, [hydrated, loaded.length, saved, router]);
 
+  // The auto-load redirect above sets `redirecting` true; clear it once the target set has actually
+  // loaded (URL/props now reflect it) so the paste box comes back instead of a permanent "Loading…".
+  useEffect(() => { if (loaded.length > 0 && redirecting) setRedirecting(false); }, [loaded.length, redirecting]);
+
   // Auto-remember: whenever a non-empty set is loaded, persist it (unless the user just hit Forget).
   useEffect(() => {
     if (!hydrated) return;
@@ -74,24 +78,19 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
     go([]); // navigate to empty so nothing is auto-remembered again
   }
 
-  const cardBg = isLight ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.03)";
-  const cardBorder = isLight ? "1px solid rgba(41,128,200,0.35)" : "1px solid rgba(255,255,255,0.08)";
-  const chipBg = isLight ? "rgba(41,128,200,0.10)" : "rgba(255,255,255,0.06)";
-  const chipText = isLight ? "#0a1e38" : "rgba(255,255,255,0.8)";
-
   if (redirecting || navigating) {
     return (
-      <div className="mx-2 mb-4 flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: cardBg, border: cardBorder }}>
-        <div className="h-5 w-5 shrink-0 animate-spin rounded-full" style={{ border: "2px solid var(--card-border)", borderTopColor: "transparent" }} />
+      <div className="tf-panel mx-2 mb-4 flex items-center gap-3 rounded-xl px-4 py-3">
+        <div className="h-5 w-5 shrink-0 animate-spin rounded-full" style={{ border: "2px solid color-mix(in srgb, var(--gold) 30%, transparent)", borderTopColor: "var(--gold)" }} />
         <span className="text-sm text-subtle">Loading your binder…</span>
       </div>
     );
   }
 
   return (
-    <div className="mx-2 mb-4 rounded-xl px-4 py-3" style={{ background: cardBg, border: cardBorder }}>
+    <div className="tf-panel mx-2 mb-4 rounded-xl px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-subtle">
+        <span className="tf-eyebrow inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.18em]">
           Your wallets{loaded.length > 0 ? ` · ${loaded.length}` : ""}
         </span>
         {loaded.length > 0 && (
@@ -114,15 +113,13 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDraft(); } }}
           placeholder="Paste a Chia address (xch1…) or DID (did:chia…) — add as many as you like"
           spellCheck={false}
-          className="text-title flex-1 rounded-lg px-4 py-2.5 font-mono text-sm outline-none"
-          style={{ background: isLight ? "#ffffff" : "rgba(255,255,255,0.04)", border: cardBorder }}
+          className="tf-search flex-1 rounded-full px-4 py-2.5 font-mono text-base outline-none sm:text-sm"
         />
         <button
           type="button"
           onClick={addDraft}
           disabled={draft.trim().length === 0}
-          className="rounded-lg px-5 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-40"
-          style={{ background: isLight ? "#2980c8" : "rgba(56,189,248,0.95)" }}
+          className="tf-mint tf-mint--sm rounded-full px-6 py-2.5 text-sm font-black"
         >
           Add
         </button>
@@ -140,10 +137,10 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
           {loaded.map((id) => (
             <span
               key={id}
-              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px]"
-              style={{ background: chipBg, color: chipText }}
+              className="tf-pill inline-flex items-center gap-1.5 font-mono text-[11px]"
               title={id}
             >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--gold)" }} />
               {shortId(id)}
               <button
                 type="button"

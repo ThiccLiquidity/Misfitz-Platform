@@ -121,12 +121,12 @@ export function TierStatsBar({ collection, nfts }: TierStatsBarProps) {
     <div
       className="rounded-2xl mb-4 overflow-hidden"
       style={{
-        background: isLight ? "rgba(255,255,255,0.72)" : "rgba(12,12,18,0.85)",
-        border: isLight ? "1px solid rgba(100,180,255,0.35)" : "1px solid rgba(255,255,255,0.07)",
+        background: isLight ? "rgba(255,255,255,0.72)" : "rgba(21,15,9,0.88)",
+        border: isLight ? "1px solid rgba(100,180,255,0.35)" : "1px solid rgba(201,162,39,0.18)",
         boxShadow: isLight
           ? "0 6px 28px rgba(0,80,160,0.14), inset 0 1px 0 rgba(255,255,255,0.9)"
           : "0 6px 28px rgba(0,0,0,0.5)",
-        backdropFilter: "blur(12px)",
+        backdropFilter: isLight ? "blur(12px)" : undefined,
       }}
     >
       {/* Mobile: 3x2 grid so long tier labels have room; desktop: single flex row */}
