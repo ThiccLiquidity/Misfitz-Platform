@@ -21,7 +21,7 @@ function round(value: number, decimals = 1): number {
   return Math.round(value * f) / f;
 }
 
-function parseRank(rank: string | number | null | undefined): number | null {
+export function parseRank(rank: string | number | null | undefined): number | null {
   if (rank === null || rank === undefined) return null;
   const n = typeof rank === "string" ? parseInt(rank, 10) : rank;
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -77,19 +77,27 @@ function bestImage(detail: MgNftDetail): string {
 
 // % of the collection that shares a given trait value, from the collection's frequency counts.
 // MintGarden lowercases both the trait type and value keys.
-function traitRarityPercent(
-  collection: MgCollection,
+// Per-trait rarity % from an injectable counts table (MintGarden's attributes_frequency_counts OR our own
+// computed frequency table). Exported so the portfolio artifact-stamper reuses the identical math.
+export function traitRarityPct(
+  counts: Record<string, Record<string, number>> | null | undefined,
+  total: number,
   traitType: string,
   value: string | number,
 ): number | undefined {
-  const counts = collection.attributes_frequency_counts;
-  const total = collection.nft_count ?? 0;
   if (!counts || total <= 0) return undefined;
   const group = counts[traitType.toLowerCase()];
   if (!group) return undefined;
   const count = group[String(value).toLowerCase()];
   if (typeof count !== "number") return undefined;
   return round((count / total) * 100, 1);
+}
+function traitRarityPercent(
+  collection: MgCollection,
+  traitType: string,
+  value: string | number,
+): number | undefined {
+  return traitRarityPct(collection.attributes_frequency_counts, collection.nft_count ?? 0, traitType, value);
 }
 
 export function mapTraits(detail: MgNftDetail): Trait[] {

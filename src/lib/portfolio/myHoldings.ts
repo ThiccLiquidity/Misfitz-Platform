@@ -7,6 +7,7 @@ import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { getSeed } from "@/lib/data-sources/seed/registry";
 import { stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { stampCardsFromIndex, noteWarmset } from "@/lib/valuation/valueIndex";
+import { stampCardsFromArtifacts } from "./artifactStamp";
 import { keepAlive } from "@/lib/db/nftCache";
 
 // Aggregates a collector's holdings across one or more addresses into a single flat binder feed.
@@ -168,6 +169,11 @@ async function getMyHoldingsFastInner(addresses: string[], opts: { budgetMs?: nu
   // Stamp browse-computed values from the per-collection value index so held cards show the SAME number as
   // the collection page on the FIRST paint — no per-NFT recompute. Misses keep the floor baseline.
   await stampCardsFromIndex(nfts, xchUsdRate);
+  // Roster-first enrichment: stamp traits + our ranks + browse-identical values straight from each held
+  // collection's CACHED artifacts (slimlist2 roster + vidx) — so warm collections show FULL detail on the
+  // first paint with ZERO per-NFT MintGarden fetches. Defensive: never blocks the binder if a read hiccups.
+  try { await stampCardsFromArtifacts(nfts, collections, xchUsdRate, { budgetMs: 3500, maxCols: 40 }); }
+  catch (e) { console.error("[binder] artifact stamp skipped:", e); }
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
   // NOTE: the eager top-6 getAllCollectionCards pre-warm was REMOVED — it fired full roster scans + comps
   // builds concurrently with interactive paging/enrichment, and MintGarden's rate limit is shared upstream,
