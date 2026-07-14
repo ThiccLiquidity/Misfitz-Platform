@@ -104,7 +104,9 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   }, [warming, holdings.addresses]);
 
   useEffect(() => {
-    if (holdings.demo || holdings.addresses.length === 0 || warming || stoppedEarly) return;
+    // NOTE: stoppedEarly must NOT gate this effect. "Stop" only halts the roster paging (warming poll);
+    // the cards already loaded still need traits/ranks/values, which is exactly what this effect provides.
+    if (holdings.demo || holdings.addresses.length === 0 || warming) return;
     let cancelled = false;
     const all = nftsRef.current;
 
@@ -158,49 +160,76 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       }
     };
     (async () => {
+      // ── Value convergence — runs in PARALLEL with enrichment, not after it ────────────────────
+      // Seeded from EVERY held col1 card still missing an index-stamped value, so cards MintGarden
+      // drops from enrichment (429) still converge, and a warm value index lands values in ~1s. Each
+      // poll is one cheap lookup per collection; a not-yet-indexed collection gets the shared build
+      // kicked server-side and we poll again. Attempt 0 fires immediately (no wait).
+      const needsValue = new Set<string>(
+        all.filter((n) => n.collectionSlug?.startsWith("col1") && n.valueBasis == null).map((n) => n.launcherId),
+      );
+      const converge = (async () => {
+        for (let attempt = 0; attempt < 20 && needsValue.size > 0 && !cancelled; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, Math.min(20_000, 1_500 * 1.5 ** attempt)));
+          if (cancelled) break;
+          const byCol: Record<string, string[]> = {};
+          const cardCol = new Map(nftsRef.current.map((n) => [n.launcherId, n.collectionSlug]));
+          for (const id of needsValue) { const c = cardCol.get(id); if (c?.startsWith("col1")) (byCol[c] ??= []).push(id); }
+          if (Object.keys(byCol).length === 0) break;
+          try {
+            const res = await fetch("/api/values", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cols: byCol }) });
+            if (!res.ok) continue;
+            const data = (await res.json()) as { values?: Record<string, ValueEntry>; asOf?: number | null };
+            if (data.asOf) setValuesAsOf((prev) => (prev == null || data.asOf! > prev ? data.asOf! : prev));
+            if (cancelled) return;
+            const vals = data.values ?? {};
+            const gotIds = Object.keys(vals);
+            if (gotIds.length) {
+              setNfts((prev) => prev.map((n) => {
+                const e = vals[n.launcherId];
+                if (!e) return n;
+                const c = { ...n };
+                stampValueEntry(c, e, holdings.xchUsdRate);
+                return c;
+              }));
+              for (const id of gotIds) { needsValue.delete(id); enrichedRef.current.add(id); }
+            }
+          } catch { /* transient — poll again */ }
+        }
+      })();
+
+      // ── Trait/rank enrichment (chunked /api/binder) ───────────────────────────────────────────
       let done = 0;
-      const unranked = new Set<string>();
+      const posted = new Set<string>();
+      const returned = new Set<string>();
       for (const ids of chunks) {
         if (cancelled) return;
-        try { applyChunk(await postChunk(ids), unranked); } catch { /* keep fast card on failure */ }
+        for (const id of ids) posted.add(id);
+        try {
+          const data = await postChunk(ids);
+          for (const n of data?.nfts ?? []) returned.add(n.launcherId);
+          applyChunk(data, needsValue);
+        } catch { /* keep fast card on failure */ }
         done += ids.length;
         if (!cancelled) setProgress(Math.min(1, done / total));
       }
-      // Converge any cards still on the baseline via the CHEAP value-index endpoint — one lookup per
-      // collection (no per-NFT re-enrichment), which also kicks the shared cold build for not-yet-indexed
-      // collections. Stamps browse-identical values as they land. Replaces the old expensive /api/binder retry.
-      for (let attempt = 0; attempt < 15 && unranked.size > 0 && !cancelled; attempt++) {
-        await new Promise((r) => setTimeout(r, Math.min(30_000, 4_000 * 1.5 ** attempt)));
-        if (cancelled) break;
-        const byCol: Record<string, string[]> = {};
-        const cardCol = new Map(nftsRef.current.map((n) => [n.launcherId, n.collectionSlug]));
-        for (const id of unranked) { const c = cardCol.get(id); if (c?.startsWith("col1")) (byCol[c] ??= []).push(id); }
-        if (Object.keys(byCol).length === 0) break;
-        try {
-          const res = await fetch("/api/values", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cols: byCol }) });
-          if (!res.ok) continue;
-          const data = (await res.json()) as { values?: Record<string, ValueEntry>; asOf?: number | null };
-          if (data.asOf) setValuesAsOf((prev) => (prev == null || data.asOf! > prev ? data.asOf! : prev));
-          if (cancelled) return;
-          const vals = data.values ?? {};
-          const gotIds = Object.keys(vals);
-          if (gotIds.length) {
-            setNfts((prev) => prev.map((n) => {
-              const e = vals[n.launcherId];
-              if (!e) return n;
-              const c = { ...n };
-              stampValueEntry(c, e, holdings.xchUsdRate);
-              return c;
-            }));
-            for (const id of gotIds) { unranked.delete(id); enrichedRef.current.add(id); }
-          }
-        } catch { /* transient — poll again */ }
+      // ONE bounded second pass for ids MintGarden dropped (429/timeout) so a rate-limit blip can't
+      // leave permanent trait holes for the rest of the session. 1.5s lets the fg 429 cooldown clear.
+      const missing = [...posted].filter((id) => !returned.has(id));
+      if (missing.length > 0 && !cancelled) {
+        await new Promise((r) => setTimeout(r, 1_500));
+        for (let i = 0; i < missing.length && !cancelled; i += CHUNK) {
+          try { applyChunk(await postChunk(missing.slice(i, i + CHUNK)), needsValue); } catch { /* leave fast card */ }
+        }
       }
-      if (!cancelled) setEnriching(false);
+      // Traits + ranks are in — stop the indicator NOW. Values keep refining silently via the parallel
+      // converge poll above; the indicator no longer rides that multi-minute value tail.
+      if (!cancelled) { setProgress(1); setEnriching(false); }
+      await converge;
     })();
 
     return () => { cancelled = true; };
-  }, [warming, collectionId, refreshTick, holdings.addresses, holdings.demo, holdings.xchUsdRate, stoppedEarly]);
+  }, [warming, collectionId, refreshTick, holdings.addresses, holdings.demo, holdings.xchUsdRate]);
 
   const oneCollection = collectionId !== "all";
 

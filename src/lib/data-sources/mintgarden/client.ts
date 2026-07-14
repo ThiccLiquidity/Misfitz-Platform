@@ -293,6 +293,10 @@ export async function listAddressNfts(
   // not /address (which only sees one puzzle hash). xch1 addresses use /address.
   const endpoint = decoded.hrp.startsWith("did:chia") ? "profile" : "address";
   const q = new URLSearchParams({ type, size: String(size) });
+  // Inline CHIP-0007 attributes: /profile honors this (DID wallets get traits on the FIRST paint with
+  // ZERO per-NFT detail fetches); /address currently ignores it (harmless no-op for xch1). Traits flow
+  // to fast cards via mapListItemTraits in the mapper.
+  q.set("include_metadata", "true");
   if (cursor) q.set("page", cursor);
   const url = `/${endpoint}/${decoded.hex}/nfts?${q}`;
   // throwOnError: a caller PAGING a whole wallet must tell a transient error (429/5xx/timeout) apart from a
