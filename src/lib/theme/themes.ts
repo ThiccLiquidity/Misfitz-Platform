@@ -53,6 +53,24 @@ const BASE_THEMES: Record<ThemeMode, ThemeTokens> = {
     fair: "#b86200",
     bad: "#c42020",
   },
+  // HIDDEN prototype skin — 90s Saturday-morning: an open binder on a wood table, manila pages, chunky
+  // primary-color accents. CSS-only for now (see [data-theme="nostalgia"] in globals.css); commissioned art
+  // drops in via the --nostalgia-* CSS vars without touching this palette. Not in the visible theme toggle.
+  nostalgia: {
+    vaultBg: "#7c5236",    // wood table / desk
+    pageBg: "#fdf3d8",     // manila binder page
+    pageBorder: "#c0392b", // bold retro red trapper-keeper trim
+    cardBg: "#fffdf5",
+    cardBorder: "#2e7bc0", // primary crayon blue
+    glow: "0 2px 0 rgba(70,40,10,0.25)",
+    artBg: "#ffe8b0",
+    artIcon: "#c0392b",
+    title: "#3a2416",      // brown marker ink
+    sub: "#7a5a3a",
+    good: "#2f9e44",
+    fair: "#e8a020",
+    bad: "#c0392b",
+  },
 };
 
 // Applies a collection's accent to the chrome (border/title) while keeping the validated

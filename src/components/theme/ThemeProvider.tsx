@@ -16,8 +16,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("dark");
 
   useEffect(() => {
+    // Hidden activation for the 90s "nostalgia" skin: ?nostalgia=1 (or ?theme=nostalgia) flips it on and
+    // remembers it; there is intentionally NO visible toggle yet (prototype). Clear with ?nostalgia=0.
+    const params = new URLSearchParams(window.location.search);
+    const nostParam = params.get("nostalgia");
+    const themeParam = params.get("theme");
+    if (nostParam === "1" || themeParam === "nostalgia") {
+      window.localStorage.setItem(STORAGE_KEY, "nostalgia");
+      document.documentElement.style.colorScheme = "light";
+      setMode("nostalgia");
+      return;
+    }
+    if (nostParam === "0") window.localStorage.setItem(STORAGE_KEY, "dark");
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === "dark" || stored === "light") setMode(stored);
+    if (stored === "dark" || stored === "light" || stored === "nostalgia") {
+      setMode(stored);
+      if (stored === "nostalgia") document.documentElement.style.colorScheme = "light";
+    }
   }, []);
 
   const toggle = () => {
