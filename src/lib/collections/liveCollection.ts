@@ -63,7 +63,10 @@ export async function getCollectionView(id: string, size = 60): Promise<Collecti
   if (!col) return null;
   const xchUsdRate = rate ?? XCH_USD_FALLBACK;
   const page = await listCollectionNfts(id, undefined, size).catch(() => ({ items: [], next: null, previous: null }));
-  const floorXch = resolveCollectionFloorXchWarm(id, typeof col.floor_price === "number" ? col.floor_price : null);
+  // BLOCKING trusted floor for the SSR floor/market-cap stat: the warm (in-proc) read comes back null on a
+  // fresh serverless instance, which made legit sales-backed collections (e.g. Misfitz) show Floor "—". One
+  // Dexie sale-floor fetch (cached after) guarantees the header resolves. Cards still stream via /all.
+  const floorXch = (await resolveTrustedFloor(id, typeof col.floor_price === "number" ? col.floor_price : null)).valueFloor;
 
   return {
     id,
