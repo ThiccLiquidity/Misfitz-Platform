@@ -3,6 +3,7 @@ import { listAddressNfts, getCollection } from "@/lib/data-sources/mintgarden/cl
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
 import { fetchXchUsdRate, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
+import { resolveTrustedFloorWarm } from "@/lib/market/floorTrust";
 import type { MgCollection } from "@/lib/data-sources/mintgarden/types";
 import type { NftData } from "@/types";
 
@@ -44,8 +45,10 @@ export async function GET(req: Request) {
     for (const it of items) {
       try {
         const col = colMap.get(it.collection_id);
-        const mgFloor = typeof col?.floor_price === "number" ? col.floor_price : null; // baseline value now, not 0
-        const m = mapListItemToCard(it, col, mgFloor, xchUsdRate);
+        const mgFloor = typeof col?.floor_price === "number" ? col.floor_price : null;
+        // TRUSTED floor: unpriced (null) for troll/no-sale collections; refined again by /api/values later.
+        const floor = resolveTrustedFloorWarm(it.collection_id, mgFloor).valueFloor;
+        const m = mapListItemToCard(it, col, floor, xchUsdRate);
         cards.push({ ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName });
       } catch { /* skip one malformed item, never fail the page */ }
     }

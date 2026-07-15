@@ -8,6 +8,7 @@ import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
 import { getCompsModel } from "@/lib/valuation/compsService";
+import { resolveTrustedFloorWarm } from "@/lib/market/floorTrust";
 import { isCompsEnabled } from "@/lib/config";
 import { cacheGet, cachePut } from "@/lib/db/nftCache";
 import { isSeeded, getSeed } from "@/lib/data-sources/seed/registry";
@@ -231,8 +232,11 @@ export async function enrichNftsByIds(
     if (!d.collection.attributes_frequency_counts && rarity) {
       d.collection.attributes_frequency_counts = rarity.freq; // our own table -> per-trait rarity %
     }
-    const floor = floorByCollection[colId];
-    const m = mapDetailToNftData(d, xchUsdRate, typeof floor === "number" ? floor : null);
+    const floorOverride = floorByCollection[colId];
+    const floor = typeof floorOverride === "number"
+      ? floorOverride
+      : resolveTrustedFloorWarm(colId, typeof d.collection.floor_price === "number" ? d.collection.floor_price : null).valueFloor;
+    const m = mapDetailToNftData(d, xchUsdRate, floor);
     const card: NftData = { ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName };
     const seed = seedByCol.get(colId);
     if (seed) {

@@ -1,6 +1,6 @@
 import { getCollection, listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionSaleFloor, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionSaleFloorWarm, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency, scaledRankOf } from "@/lib/rarity/collectionFrequency";
@@ -10,6 +10,7 @@ import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, release
 import { writeValueIndex } from "@/lib/valuation/valueIndex";
 import { hasNoComps, refreshCompsIfSold, compsBuiltAt } from "@/lib/valuation/compsService";
 import { estimateFairValue } from "@/lib/valuation/estimate";
+import { resolveTrustedFloor, resolveTrustedFloorWarm, trustedFloorFrom } from "@/lib/market/floorTrust";
 import { isCompsEnabled } from "@/lib/config";
 import type { MgCollection, MgListItem, MgPage } from "@/lib/data-sources/mintgarden/types";
 import type { NftData } from "@/types";
@@ -35,25 +36,16 @@ export interface CollectionView {
 
 // Floor precedence mirrors the wallet binder: live Dexie ask -> MintGarden floor -> recent Dexie sales.
 async function resolveCollectionFloorXch(id: string, mgFloor: number | null): Promise<number | null> {
-  const [dexie, sale] = await Promise.all([
-    fetchCollectionFloor(id).catch(() => null),
-    fetchCollectionSaleFloor(id).catch(() => null),
-  ]);
-  if (typeof dexie === "number") return dexie;
-  if (mgFloor !== null) return mgFloor;
-  if (typeof sale === "number") return sale;
-  return null;
+  // TRUSTED floor: a troll / never-sell listing (or a collection with no sales) can't set the value.
+  // See floorTrust.ts + VALUATION-MODEL.md §4a. Only the floor INPUT is sanitized; model params untouched.
+  return (await resolveTrustedFloor(id, mgFloor)).valueFloor;
 }
 
 // Non-blocking floor for SSR first paint: use the cached Dexie floor if warm, else MintGarden's floor,
 // else the cached sale floor — never awaits the network. The exact Dexie floor lands via /all shortly
 // after. Keeps the collection page painting in ~1-2s instead of waiting on Dexie.
 function resolveCollectionFloorXchWarm(id: string, mgFloor: number | null): number | null {
-  const dexie = fetchCollectionFloorWarm(id);
-  if (typeof dexie === "number") return dexie;
-  if (mgFloor !== null) return mgFloor;
-  const sale = fetchCollectionSaleFloorWarm(id);
-  return typeof sale === "number" ? sale : null;
+  return resolveTrustedFloorWarm(id, mgFloor).valueFloor; // trusted floor (see resolveCollectionFloorXch)
 }
 
 function cardsFrom(items: Awaited<ReturnType<typeof listCollectionNfts>>["items"], col: MgCollection, floorXch: number | null, rate: number): NftData[] {
@@ -286,7 +278,9 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   for (const o of offerMap.values()) {
     if (o.xchOnly && !o.multiNft && o.priceXch > 0) floorCandidates.push(o.priceXch);
   }
-  const floorXch = floorCandidates.length ? Math.min(...floorCandidates) : floorFallback;
+  // Sanitize the listing floor too: a single troll ask (or a no-sale collection) must not set the value.
+  const rawListing = floorCandidates.length ? Math.min(...floorCandidates) : floorFallback;
+  const floorXch = trustedFloorFrom(fetchCollectionSaleFloorWarm(id), rawListing, typeof col.floor_price === "number" ? col.floor_price : null).valueFloor;
   const cards = cardsFrom(items, col, floorXch, xchUsdRate);
 
   // Listings come from Dexie (authoritative, full asset terms):

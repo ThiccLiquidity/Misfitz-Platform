@@ -11,7 +11,8 @@
 // process (or after the 45-min memory TTL) we rehydrate the FULL model from those persisted inputs with
 // ZERO network calls, and the trending-traits/curve appear instantly instead of waiting on a rebuild.
 
-import { fetchCollectionCompletedSales, fetchCollectionFloor, fetchCollectionSalesTip } from "@/lib/market/dexie";
+import { fetchCollectionCompletedSales, fetchCollectionSalesTip } from "@/lib/market/dexie";
+import { resolveTrustedFloor } from "@/lib/market/floorTrust";
 import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
 import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
@@ -87,10 +88,11 @@ function modelFromPersisted(p: PersistedComps): CompsModel | null {
 interface SaleRow { id: string; mgRank: number | null; num: number | null; price: number; ageDays: number; soldAt: number; traits: Trait[]; seller?: string; buyer?: string }
 
 async function build(colId: string, opts: { fresh?: boolean } = {}): Promise<CompsModel | null> {
-  const [sales, floorXch] = await Promise.all([
+  const [sales, trusted] = await Promise.all([
     fetchCollectionCompletedSales(colId, 30, { fresh: opts.fresh }),
-    fetchCollectionFloor(colId).catch(() => null),
+    resolveTrustedFloor(colId).catch(() => null),
   ]);
+  const floorXch = trusted?.valueFloor ?? null; // build() only proceeds when sales exist -> non-null, capped
   if (sales.length === 0) {
     try { cachePut(`comps-none:${colId}`, "1", 60 * 60); } catch { /* best effort */ } // no clean sales -> remember it
     return null;

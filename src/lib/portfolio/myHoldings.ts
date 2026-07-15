@@ -1,7 +1,8 @@
 import type { NftData } from "@/types";
 import { fetchOwnerListings, type OwnerScanOpts } from "@/lib/data-sources/mintgarden/owner";
 import { mapListItemToCard } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm } from "@/lib/market/dexie";
+import { fetchXchUsdRate } from "@/lib/market/dexie";
+import { resolveTrustedFloorWarm } from "@/lib/market/floorTrust";
 import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { getSeed } from "@/lib/data-sources/seed/registry";
@@ -176,30 +177,13 @@ async function getMyHoldingsFastInner(addresses: string[], opts: OwnerScanOpts =
   // Resolve one floor per collection (matches service.ts precedence; holdings anchor = cheapest
   // current listing among held cards, since the fast path has no per-NFT sale history yet).
   const colIds = Array.from(collections.keys());
-  const anchorsByCol = new Map<string, number[]>();
-  for (const it of items) {
-    if (typeof it.price === "number" && it.price > 0) {
-      const arr = anchorsByCol.get(it.collection_id) ?? [];
-      arr.push(it.price);
-      anchorsByCol.set(it.collection_id, arr);
-    }
-  }
-  // Non-blocking: read the last cached Dexie floors instantly (they warm/refresh in the background).
-  // The binder renders right away on the MintGarden floor / holdings anchor; the refined Dexie floor
-  // appears on the next load once cached. Keeps a slow Dexie off the binder's critical path.
-  const dexieFloors = colIds.map((id) => fetchCollectionFloorWarm(id));
-  const saleFloors = colIds.map((id) => fetchCollectionSaleFloorWarm(id));
+  // TRUSTED floor per collection (floorTrust.ts / VALUATION-MODEL §4a): a troll or no-sale listing contributes
+  // NO value to the portfolio total, and a held card's own ask price can't stand in for a real floor (it's
+  // ask-derived, no sales backing). Non-blocking warm reads — a slow Dexie never gates the binder render.
   const floorByCol = new Map<string, number | null>();
-  colIds.forEach((id, i) => {
-    const dexie = dexieFloors[i];
+  colIds.forEach((id) => {
     const mg = collections.get(id)?.floor_price ?? null;
-    const sale = saleFloors[i];
-    const anchors = anchorsByCol.get(id) ?? [];
-    const hold = anchors.length ? Math.min(...anchors) : null;
-    floorByCol.set(
-      id,
-      typeof dexie === "number" ? dexie : mg !== null ? mg : typeof sale === "number" ? sale : hold,
-    );
+    floorByCol.set(id, resolveTrustedFloorWarm(id, mg).valueFloor);
   });
 
   const nfts: NftData[] = [];

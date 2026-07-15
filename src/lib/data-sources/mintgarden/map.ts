@@ -205,7 +205,9 @@ export function mapDetailToNftData(
   // every card in a collection shares one base and only the rarity premium varies between them.
   // Per-NFT sale/listing prices feed that collection floor via nftMarketAnchorXch — they never set an
   // individual card's base, which is what made sibling cards' values look wildly inconsistent.
-  const floorXch = floorOverrideXch ?? mgFloor;
+  // undefined = caller resolved nothing -> use mgFloor. null = TRUSTED floor said UNPRICED -> stay null
+  // (never fall back to mgFloor, which can be the troll ask itself).
+  const floorXch = floorOverrideXch === undefined ? mgFloor : floorOverrideXch;
 
   // Special/collectible mint number -> badge + desirability value bump (VALUATION.md Part 2).
   const collectible = collectibleNumber(parseMintNumber(detail), totalSupply);

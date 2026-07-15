@@ -25,7 +25,10 @@ export async function writeValueIndex(colId: string, nfts: NftData[], opts: { fo
   _lastWrite.set(colId, now);
   const values: Record<string, ValueEntry> = {};
   for (const n of nfts) { const e = entryOf(n); if (e && n.launcherId) values[n.launcherId] = e; }
-  if (Object.keys(values).length === 0) return;
+  // Guard on CARDS, not valued entries: a complete build that yields zero values (e.g. a now-unpriced
+  // troll-floored collection) must still WRITE to overwrite a stale poisoned index. Only skip on no cards
+  // (a MintGarden hiccup returns []), which must never clobber a good index.
+  if (nfts.length === 0) return;
   const idx: ValueIndex = { builtAt: now, values };
   try {
     await cachePutLargeAsync(`vidx:${colId}`, JSON.stringify(idx), VIDX_EX_S);
