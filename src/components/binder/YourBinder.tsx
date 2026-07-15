@@ -87,9 +87,11 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         return [...m.values()].sort((a, b) => b.count - a.count);
       };
       let anyFail = false;
+      const MAX_PAGES = 600; // 30k @ 50/page — hard rail against a pager whose `next` never nulls
       for (const address of holdings.addresses) {
         let cursor: string | undefined = undefined;
         let pageFails = 0;
+        let pages = 0;
         while (!cancelled) {
           type PageReply = { cards?: NftData[]; nextCursor?: string | null; done?: boolean; retry?: boolean };
           let data: PageReply | null = null;
@@ -102,8 +104,9 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           if (cancelled) return;
 
           if (!data || data.retry) {
-            if (++pageFails >= 5) { anyFail = true; break; } // give up on THIS address; move to the next one
-            await new Promise((r) => setTimeout(r, 500 * pageFails));
+            // Exponential backoff (to 15s) so a MintGarden 429 window doesn't truncate the wallet in ~7s.
+            if (++pageFails >= 8) { anyFail = true; break; } // give up on THIS address; move to the next one
+            await new Promise((r) => setTimeout(r, Math.min(15_000, 1_000 * 2 ** (pageFails - 1))));
             continue; // retry the same cursor
           }
           pageFails = 0;
@@ -116,8 +119,10 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
             setNfts(merged);
             setCollections(deriveCollections(merged));
           }
+          const prev: string | undefined = cursor;
           cursor = data.nextCursor ?? undefined;
-          if (!cursor || data.done) break; // this address is fully loaded
+          if (!cursor || data.done || cursor === prev) break; // done, or upstream repeated the cursor (no progress)
+          if (++pages >= MAX_PAGES) { setTruncated(true); anyFail = true; break; } // safety rail
         }
         if (cancelled) return;
       }

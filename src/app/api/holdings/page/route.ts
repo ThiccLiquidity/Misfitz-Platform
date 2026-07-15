@@ -43,7 +43,9 @@ export async function GET(req: Request) {
     const cards: NftData[] = [];
     for (const it of items) {
       try {
-        const m = mapListItemToCard(it, colMap.get(it.collection_id), null, xchUsdRate);
+        const col = colMap.get(it.collection_id);
+        const mgFloor = typeof col?.floor_price === "number" ? col.floor_price : null; // baseline value now, not 0
+        const m = mapListItemToCard(it, col, mgFloor, xchUsdRate);
         cards.push({ ...m.nft, totalSupply: m.totalSupply, collectionName: m.collectionName });
       } catch { /* skip one malformed item, never fail the page */ }
     }
