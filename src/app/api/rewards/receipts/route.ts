@@ -38,6 +38,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   if (!isRewardsShadowEnabled() || !authorized(req, url)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const col = url.searchParams.get("col") || MISFITZ_COLLECTION_ID;
+  if (col !== MISFITZ_COLLECTION_ID) return NextResponse.json({ error: "not found" }, { status: 404 });
   const epoch = url.searchParams.get("epoch");
   if (!epoch) return NextResponse.json({ error: "epoch required" }, { status: 400 });
   const state = await readEpochState(col, epoch).catch(() => null);
@@ -49,10 +50,16 @@ export async function POST(req: Request) {
   if (!isRewardsShadowEnabled() || !authorized(req, url)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
   const col = (typeof body.col === "string" && body.col) || MISFITZ_COLLECTION_ID;
+  if (col !== MISFITZ_COLLECTION_ID) return NextResponse.json({ error: "not found" }, { status: 404 });
   const epoch = typeof body.epoch === "string" ? body.epoch : null;
   if (!epoch || !/^\d{4}-\d{2}$/.test(epoch)) return NextResponse.json({ error: "valid epoch (YYYY-MM) required" }, { status: 400 });
   const receipts = parseReceipts(body.receipts);
   if (!receipts.length) return NextResponse.json({ error: "no valid receipts" }, { status: 400 });
+  // Receipts only make sense after the epoch was closed + its manifest generated — guards against a stray bot
+  // POST poisoning an open epoch to "paid" (monotonic = can't undo).
+  const prior = await readEpochState(col, epoch).catch(() => null);
+  if (!prior || (prior.status !== "closed" && prior.status !== "manifest"))
+    return NextResponse.json({ error: "epoch not closed — nothing to record receipts against", epoch, status: prior?.status ?? "open" }, { status: 409 });
   const state = await recordReceipts(col, epoch, receipts).catch(() => null);
   return NextResponse.json({ ok: Boolean(state), epoch, status: state?.status ?? null, receiptCount: state?.receipts?.length ?? 0 }, { headers: { "cache-control": "no-store" } });
 }

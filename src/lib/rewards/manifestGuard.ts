@@ -92,8 +92,10 @@ export function verifyManifest(m: PayoutManifest, opts: VerifyOptions): VerifyRe
 export type Ledger = Map<string, string>;
 
 export function paymentKey(m: PayoutManifest, r: ManifestRecipient): string {
-  // collectionId prefix (default "") scopes the ledger per collection so two collections that ever share an
-  // epoch id can't collide. Back-compat: pre-colId manifests key exactly as before ("" + same 4 fields).
+  // collectionId prefix scopes the ledger per collection so two collections sharing an epoch id can't collide.
+  // NOTE: this CHANGED the key format (added a leading element). No idempotency ledger is persisted yet and
+  // provenance is still "shadow", so nothing to migrate today — but if a v1 ledger is ever persisted BEFORE
+  // this line ships, it must be migrated (or key-versioned) or paid recipients would read as unpaid = double-pay.
   return JSON.stringify([m.collectionId ?? "", m.epochId, m.kind, r.assetId, r.wallet]);
 }
 

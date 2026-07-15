@@ -33,14 +33,23 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
   const col = (typeof body.col === "string" && body.col) || MISFITZ_COLLECTION_ID;
+  if (col !== MISFITZ_COLLECTION_ID) return NextResponse.json({ error: "not found" }, { status: 404 });
   // Default: close the PREVIOUS calendar month (the just-finished epoch). Operator may pass epoch=YYYY-MM.
   const now = new Date();
   const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) - 1);
   const epoch = (typeof body.epoch === "string" && /^\d{4}-\d{2}$/.test(body.epoch)) ? body.epoch
     : `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
 
+  // Refuse to close the current/future month: the daily cron keeps recomputing it as month-to-date, so a
+  // "closed" current month would immediately go stale (and payoutAt would be in the future).
+  const curYm = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  if (epoch >= curYm) return NextResponse.json({ error: "cannot close the current or a future month — close a finished month", epoch, currentMonth: curYm }, { status: 409 });
+
   const existing = await readEpochState(col, epoch).catch(() => null);
-  if (existing?.status === "paid") return NextResponse.json({ error: "epoch already paid — cannot re-close", epoch }, { status: 409 });
+  // Write-once once the operator has downloaded the manifest (or paid): re-closing would recompute (comps drift)
+  // out from under the bot holding the downloaded file.
+  if (existing && (existing.status === "manifest" || existing.status === "paid"))
+    return NextResponse.json({ error: `epoch already ${existing.status} — cannot re-close`, epoch }, { status: 409 });
 
   const [ey, em] = epoch.split("-").map(Number);
   const epochStart = Date.UTC(ey, em - 1, 1);

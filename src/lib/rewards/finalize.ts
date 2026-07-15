@@ -29,6 +29,7 @@ export function finalizeRewardManifest(
   chiaReceivedUnits: bigint,
   sign: (hashHex: string) => string,
   chiaAssetId: string = CHIA_ASSET_ID,
+  collectionId?: string,
 ): PayoutManifest {
   // Retry sales (awaiting block depth) are excluded from computeEpoch and do NOT roll to the next epoch's fetch
   // window — re-run prepareRewardEpoch until retry drains before finalizing, else those buyers/sellers are lost.
@@ -42,6 +43,7 @@ export function finalizeRewardManifest(
     prepared.settlement.routedToBurnMojos,
     chiaAssetId,
     "chain-verified",
+    collectionId,
   );
   return signManifest(m, sign);
 }
