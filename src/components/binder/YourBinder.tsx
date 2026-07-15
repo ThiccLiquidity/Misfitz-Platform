@@ -369,7 +369,15 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   ) : null;
   return (
     <div>
-      <WorkingIndicator active={warming || enriching} label={warming ? `Loading your collection… ${nfts.length.toLocaleString()} so far` : "Reading wallet & refining rarity"} progress={warming ? undefined : progress} />
+      <WorkingIndicator
+        active={warming || enriching}
+        label={
+          warming
+            ? `Reading wallet · ${nfts.length.toLocaleString()} NFT${nfts.length === 1 ? "" : "s"}${collections.length ? ` · ${collections.length} collection${collections.length === 1 ? "" : "s"}` : ""}`
+            : "Adding traits, rarity & prices…"
+        }
+        progress={warming ? undefined : progress}
+      />
       {holdings.demo && (
         <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400">
           Demo binder (seeded Misfitz) — sign in or paste an address to see your real collection.
