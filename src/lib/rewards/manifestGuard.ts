@@ -92,7 +92,9 @@ export function verifyManifest(m: PayoutManifest, opts: VerifyOptions): VerifyRe
 export type Ledger = Map<string, string>;
 
 export function paymentKey(m: PayoutManifest, r: ManifestRecipient): string {
-  return JSON.stringify([m.epochId, m.kind, r.assetId, r.wallet]);
+  // collectionId prefix (default "") scopes the ledger per collection so two collections that ever share an
+  // epoch id can't collide. Back-compat: pre-colId manifests key exactly as before ("" + same 4 fields).
+  return JSON.stringify([m.collectionId ?? "", m.epochId, m.kind, r.assetId, r.wallet]);
 }
 
 export interface PendingResult {

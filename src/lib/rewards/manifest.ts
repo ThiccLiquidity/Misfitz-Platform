@@ -18,6 +18,8 @@ export interface PayoutManifest {
   version: 1;
   kind: "reward" | "drip";
   epochId: string;
+  collectionId?: string; // which collection this epoch belongs to. Optional for back-compat; when set it
+                         // scopes the idempotency paymentKey so two collections sharing an epoch id can't collide.
   generatedAt: number;
   asset: { id: string; symbol: string; decimals: number };
   recipients: ManifestRecipient[];
@@ -68,13 +70,13 @@ export function buildDripManifest(
   epochId: string,
   r: DripResult,
   generatedAt: number,
-  opts: { symbol?: string; assetId?: string; decimals?: number } = {},
+  opts: { symbol?: string; assetId?: string; decimals?: number; collectionId?: string } = {},
 ): PayoutManifest {
   const asset = { id: opts.assetId ?? TOKEN_TAIL_TBD, symbol: opts.symbol ?? "$TOKEN", decimals: opts.decimals ?? 3 };
   const recipients: ManifestRecipient[] = r.wallets
     .filter((w) => w.tokenUnits > BigInt(0))
     .map((w) => ({ wallet: w.wallet, assetId: asset.id, amountUnits: w.tokenUnits.toString(), reason: `drip:${w.nftCount}nft` }));
-  return finalize({ version: 1, kind: "drip", epochId, generatedAt, asset, recipients, provenance: "shadow", notes: [
+  return finalize({ version: 1, kind: "drip", epochId, collectionId: opts.collectionId, generatedAt, asset, recipients, provenance: "shadow", notes: [
     "Monthly $TOKEN drip. Deterministic (no conversion). Verify hash + guards, dry-run, confirm, then send.",
   ] });
 }
@@ -89,6 +91,7 @@ export function buildRewardManifest(
   routedToBurnMojos: bigint = BigInt(0),
   chiaAssetId: string = CHIA_ASSET_ID,
   provenance: "shadow" | "chain-verified" = "shadow",
+  collectionId?: string,
 ): PayoutManifest {
   const asset = { id: chiaAssetId, symbol: "$CHIA", decimals: 3 };
   // Guard against mis-wiring: every $CHIA key must be a SETTLED, verified wallet. Passing the unsettled epoch
@@ -102,7 +105,7 @@ export function buildRewardManifest(
   const recipients: ManifestRecipient[] = payable
     .filter((p) => !isUnattributed(p.wallet) && (chiaPerWallet.get(p.wallet) ?? BigInt(0)) > BigInt(0))
     .map((p) => ({ wallet: p.wallet, assetId: asset.id, amountUnits: (chiaPerWallet.get(p.wallet) as bigint).toString(), reason: `reward:owed ${p.total.toString()} mojos XCH` }));
-  return finalize({ version: 1, kind: "reward", epochId, generatedAt, asset, recipients, provenance,
+  return finalize({ version: 1, kind: "reward", epochId, collectionId, generatedAt, asset, recipients, provenance,
     routedToBurnUnits: routedToBurnMojos.toString(),
     notes: [
       "$CHIA reward payout. Buy $CHIA with the reward pot FIRST, then this manifest splits the ACTUAL received.",

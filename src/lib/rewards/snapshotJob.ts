@@ -12,6 +12,7 @@ import { operatorPlanFromSettlement } from "./operator";
 import { allocateDrip, weighHoldings, type SnapshotNft } from "./allocator";
 import { dripForMonth, MISFITZ_TOKEN } from "./token";
 import { toSnapshotDTO, toOperatorDTO, leaderboardWallets, buildWalletMap, type ProfileMap } from "./snapshotSerialize";
+import { buildSettlementDoc, type SettlementDoc } from "./settlementDoc";
 import { resolveIdentities } from "./identity";
 import { isRewardsShadowEnabled } from "./flag";
 import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync } from "@/lib/db/nftCache";
@@ -28,6 +29,7 @@ const SNAP_KEY = (c: string, e: string) => `rw:snap:v1:${c}:${e}`;
 const SNAP_PTR = (c: string) => `rw:snap:latest:${c}`;
 const WALLETS_KEY = (c: string, e: string) => `rw:wallets:v1:${c}:${e}`;
 const OPS_KEY = (c: string, e: string) => `rw:ops:v1:${c}:${e}`;   // operator-only blob (served by the authed route)
+const SETTLE_KEY = (c: string, e: string) => `rw:settledoc:v1:${c}:${e}`; // operator-only combined settlement document
 const ATTRIB_KEY = (c: string, e: string) => `rw:attrib:${c}:${e}`;
 
 // Incremental attribution: only fetch MintGarden events for offerIds we haven't attributed this epoch. Keeps the
@@ -112,6 +114,14 @@ export async function computeRewardsSnapshot(colId: string, opts: ComputeOpts): 
   const dto = toSnapshotDTO({ colId, epoch: opts.epoch, status: opts.status, computedAt, epochResult, settlement, drip, truncated, profiles });
   const opsDto = toOperatorDTO({ colId, epoch: opts.epoch, status: opts.status, computedAt, operator });
   const walletMap = buildWalletMap(drip, settlement);
+  // Operator-only combined settlement document (XCH move breakdown + $CHIPS drip + per-wallet table + hash).
+  // Served by the authed /api/rewards/manifest route. $CHIPS asset id defaults to the placeholder until minted.
+  const settleDoc = buildSettlementDoc({
+    collectionId: colId, epochId: opts.epoch, status: opts.status, generatedAt: computedAt, truncated,
+    epochResult, settlement, operator, drip,
+    tokenAssetId: process.env.CHIPS_ASSET_ID || undefined,
+  });
+  await cachePutLargeAsync(SETTLE_KEY(colId, opts.epoch), JSON.stringify(settleDoc), EX_S);
   await cachePutLargeAsync(SNAP_KEY(colId, opts.epoch), JSON.stringify(dto), EX_S);
   await cachePutLargeAsync(WALLETS_KEY(colId, opts.epoch), JSON.stringify(walletMap), EX_S);
   await cachePut(OPS_KEY(colId, opts.epoch), JSON.stringify(opsDto), EX_S); // small — plain SET
@@ -140,6 +150,17 @@ export async function readOperator(colId: string): Promise<OperatorSnapshotDTO |
   const epoch = await latestEpoch(colId);
   if (!epoch) return null;
   try { const raw = await cacheGet(OPS_KEY(colId, epoch), READ_TTL); return raw ? (JSON.parse(raw) as OperatorSnapshotDTO) : null; } catch { return null; }
+}
+
+// Operator-only read of the combined settlement document for a specific epoch (served by the authed
+// /api/rewards/manifest route). Reads a specific epoch (not the pointer) so a closed final epoch's doc can be
+// downloaded even after the MTD pointer has moved on to the next month.
+export async function readSettlementDoc(colId: string, epoch: string): Promise<SettlementDoc | null> {
+  try { const raw = await cacheGetLarge(SETTLE_KEY(colId, epoch), READ_TTL); return raw ? (JSON.parse(raw) as SettlementDoc) : null; } catch { return null; }
+}
+
+export async function latestEpochId(colId: string): Promise<string | null> {
+  return latestEpoch(colId);
 }
 
 export async function readWalletValue(colId: string, wallet: string): Promise<WalletLookupValue | null> {
