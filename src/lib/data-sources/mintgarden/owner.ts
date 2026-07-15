@@ -81,9 +81,12 @@ async function collectionsFor(items: MgListItem[], existing?: Map<string, MgColl
   return map;
 }
 
-export async function fetchOwnerListings(address: string, opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<OwnerListings> {
+// listFn is a TEST SEAM (defaults to the real client) so a large-wallet fixture can drive the pager.
+export interface OwnerScanOpts { budgetMs?: number; fresh?: boolean; listFn?: typeof listAddressNfts }
+export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = {}): Promise<OwnerListings> {
   const t0 = Date.now();
   const budgetMs = opts.budgetMs ?? PAGE_BUDGET_MS;
+  const list = opts.listFn ?? listAddressNfts;
   const short = `${address.slice(0, 8)}...${address.slice(-4)}`;
   const key = address.trim().toLowerCase();
 
@@ -123,12 +126,21 @@ export async function fetchOwnerListings(address: string, opts: { budgetMs?: num
 
   // Fetch one page with a short retry so a single 429/timeout doesn't abort the whole pass. Returns null
   // only after retries fail — the caller then checkpoints + returns warming (never a false "complete").
-  async function fetchPage(cur: string | null | undefined): Promise<MgPage<MgListItem> | null> {
+  async function fetchPage(cur: string | null | undefined, firstOfPass: boolean): Promise<MgPage<MgListItem> | null> {
     for (let attempt = 0; attempt < 3; attempt++) {
-      try { return await listAddressNfts(address, cur, PAGE_SIZE, "owned", true); }
+      // Attempt 0 asks for inline metadata (traits on first paint). Retries DROP include_metadata: a 10k-NFT
+      // DID's metadata-heavy /profile page can exceed even the 15s timeout, and a page that never lands means
+      // the cursor never advances ("0 NFTs, syncing…" forever). A metadata-free page is small/fast; those
+      // cards' traits backfill via /api/binder enrichment, exactly like xch1 wallets already do.
+      const withMeta = attempt === 0;
+      try { return await list(address, cur, PAGE_SIZE, "owned", true, false, withMeta); }
       catch {
-        if (attempt < 2 && Date.now() - t0 < budgetMs) await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
-        else break; // out of budget or retries -> null -> checkpoint + warming (resume next poll)
+        // Retries are budget-gated EXCEPT the first page of a resume pass with a real budget (the poll): every
+        // poll MUST move the cursor at least once or a whale can loop at zero forever. The 8s SSR pass stays
+        // fast (it returns warming) while the 30s poll is allowed the extra retry to guarantee progress.
+        const guarantee = firstOfPass && budgetMs > 15_000;
+        if (attempt < 2 && (guarantee || Date.now() - t0 < budgetMs)) await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
+        else break;
       }
     }
     return null;
@@ -138,10 +150,12 @@ export async function fetchOwnerListings(address: string, opts: { budgetMs?: num
     const seen = new Set(items.map((i) => i.encoded_id));
     let hitBudget = false;
     let pageErr = false;
+    let pagesFetched = 0;
     do {
       if (Date.now() - t0 > budgetMs) { hitBudget = true; break; }
-      const page = await fetchPage(cursor);
+      const page = await fetchPage(cursor, pagesFetched === 0);
       if (!page) { pageErr = true; break; } // transient after retries — stop, keep progress, resume next poll
+      pagesFetched += 1;
       for (const item of page.items) {
         if (items.length >= MAX_HOLDINGS) { truncated = true; break; }
         if (seen.has(item.encoded_id)) continue;
@@ -152,7 +166,19 @@ export async function fetchOwnerListings(address: string, opts: { budgetMs?: num
     } while (cursor && items.length < MAX_HOLDINGS);
 
     // COMPLETE only if we reached a genuine end (or the cap) WITHOUT budget/error stopping us early.
-    const complete = !hitBudget && !pageErr && (!cursor || items.length >= MAX_HOLDINGS);
+    let complete = !hitBudget && !pageErr && (!cursor || items.length >= MAX_HOLDINGS);
+
+    // "This wallet is EMPTY" is a claim we only make after a confirming second look. An upstream that degrades
+    // under load can 200 an empty page for a huge /profile — indistinguishable from a genuinely empty wallet.
+    // One cheap metadata-free re-probe; if it disagrees or errors, stay warming so the poll retries rather than
+    // telling a whale they own nothing. A genuinely empty wallet costs one tiny extra request and still reads
+    // as complete-empty ("No NFTs found" stays correct for them).
+    if (complete && items.length === 0) {
+      try {
+        const probe = await list(address, undefined, PAGE_SIZE, "owned", true, false, false);
+        if ((probe.items ?? []).length > 0) complete = false; // upstream disagreed — rescan next poll
+      } catch { complete = false; } // couldn't confirm empty — warming, never zero-and-done
+    }
 
     // Persist paging progress BEFORE resolving collections (a network step), so a function kill during
     // collectionsFor never loses this pass's pages. Carries the collections resolved so far.

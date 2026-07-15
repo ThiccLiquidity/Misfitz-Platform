@@ -286,6 +286,7 @@ export async function listAddressNfts(
   type = "owned",
   throwOnError = false,
   background = false,
+  includeMetadata = true, // /profile only; retries drop it so a metadata-heavy page can't sink a whale's scan
 ): Promise<MgPage<MgListItem>> {
   const decoded = decodeChiaAddress(address);
   if (!decoded) return EMPTY_PAGE;
@@ -296,7 +297,7 @@ export async function listAddressNfts(
   // Inline CHIP-0007 attributes: /profile honors this (DID wallets get traits on the FIRST paint with
   // ZERO per-NFT detail fetches); /address currently ignores it (harmless no-op for xch1). Traits flow
   // to fast cards via mapListItemTraits in the mapper.
-  q.set("include_metadata", "true");
+  if (includeMetadata) q.set("include_metadata", "true");
   if (cursor) q.set("page", cursor);
   const url = `/${endpoint}/${decoded.hex}/nfts?${q}`;
   // throwOnError: a caller PAGING a whole wallet must tell a transient error (429/5xx/timeout) apart from a
@@ -304,7 +305,7 @@ export async function listAddressNfts(
   // include_metadata makes /profile pages several-fold larger; 6s trips on big pages under load and reads
   // as "MintGarden failed". Give /profile 15s (matches listCollectionNfts metadata pages); /address ignores
   // include_metadata (small pages) so it keeps the fast default.
-  const timeoutMs = endpoint === "profile" ? 15_000 : DEFAULT_TIMEOUT_MS;
+  const timeoutMs = endpoint === "profile" && includeMetadata ? 15_000 : DEFAULT_TIMEOUT_MS;
   const page = throwOnError
     ? await getJson<MgPage<MgListItem>>(url, timeoutMs, background)
     : await getJsonOrNull<MgPage<MgListItem>>(url, timeoutMs, background);

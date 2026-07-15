@@ -1,5 +1,5 @@
 import type { NftData } from "@/types";
-import { fetchOwnerListings } from "@/lib/data-sources/mintgarden/owner";
+import { fetchOwnerListings, type OwnerScanOpts } from "@/lib/data-sources/mintgarden/owner";
 import { mapListItemToCard } from "@/lib/data-sources/mintgarden/map";
 import { fetchXchUsdRate, fetchCollectionFloorWarm, fetchCollectionSaleFloorWarm } from "@/lib/market/dexie";
 import type { MgCollection, MgListItem } from "@/lib/data-sources/mintgarden/types";
@@ -42,6 +42,13 @@ const EMPTY: MyHoldings = {
   nfts: [], totalEstimateXch: 0, totalEstimateUsd: 0, xchUsdRate: XCH_USD_FALLBACK,
   collections: [], addresses: [], truncated: false, warming: false, demo: false,
 };
+
+// Pure render gate for /binder: ZERO ("No NFTs found") is only ever shown when a COMPLETED scan confirmed it.
+// Anything unfinished (warming) renders the binder so the /api/holdings poll can stream the rest in.
+export function binderGate(addressCount: number, h: MyHoldings | null): { noResults: boolean; showBinder: MyHoldings | null } {
+  const showBinder = h && (h.nfts.length > 0 || h.warming) ? h : null;
+  return { showBinder, noResults: addressCount > 0 && !showBinder };
+}
 
 function summarize(nfts: NftData[], xchUsdRate: number, addresses: string[], truncated: boolean, warming: boolean, demo: boolean): MyHoldings {
   const colMap = new Map<string, HeldCollection>();
@@ -92,7 +99,7 @@ async function applySeedOverlay(nfts: NftData[], floorByCol: Map<string, number 
 // NEVER throws: on any unexpected upstream/mapping error, degrade to an empty WARMING binder so the page
 // still renders and the /api/holdings poll resumes from the Redis checkpoint. error.tsx is for bugs, not
 // for MintGarden having a bad minute.
-export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<MyHoldings> {
+export async function getMyHoldingsFast(addresses: string[], opts: OwnerScanOpts = {}): Promise<MyHoldings> {
   try {
     return await getMyHoldingsFastInner(addresses, opts);
   } catch (err) {
@@ -101,7 +108,7 @@ export async function getMyHoldingsFast(addresses: string[], opts: { budgetMs?: 
   }
 }
 
-async function getMyHoldingsFastInner(addresses: string[], opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<MyHoldings> {
+async function getMyHoldingsFastInner(addresses: string[], opts: OwnerScanOpts = {}): Promise<MyHoldings> {
   if (addresses.length === 0) return EMPTY;
   const t0 = Date.now();
 
@@ -138,7 +145,10 @@ async function getMyHoldingsFastInner(addresses: string[], opts: { budgetMs?: nu
   let truncated = false;
   let warming = false;
   for (const o of owners) {
-    if (!o) continue;
+    // An address we could NOT read is UNKNOWN, not empty. Without warming=true here, one swallowed failure
+    // renders a whale as "No NFTs found" — the worst failure mode. warming keeps the binder on screen and lets
+    // the /api/holdings poll resume from the Redis checkpoint.
+    if (!o) { warming = true; continue; }
     truncated = truncated || o.truncated;
     warming = warming || o.warming;
     for (const [id, c] of o.collections) if (!collections.has(id)) collections.set(id, c);

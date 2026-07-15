@@ -1,5 +1,5 @@
 import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
-import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
+import { getMyHoldingsFast, binderGate } from "@/lib/portfolio/myHoldings";
 import { YourBinder } from "@/components/binder/YourBinder";
 import { WalletProfileBar } from "@/components/portfolio/WalletProfileBar";
 import { BinderEmptyState } from "@/components/binder/BinderEmptyState";
@@ -26,8 +26,7 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
   const holdings = addresses.length ? await getMyHoldingsFast(addresses, { budgetMs: 8_000 }) : null; // short budget = fast first paint; poll finishes big wallets
   // A still-"warming" whale wallet may SSR with 0 items on the first pass — that is NOT "no results";
   // render the binder so its poll loop can stream the rest in.
-  const noResults = addresses.length > 0 && (!holdings || (holdings.nfts.length === 0 && !holdings.warming));
-  const showBinder = holdings && (holdings.nfts.length > 0 || holdings.warming) ? holdings : null;
+  const { noResults, showBinder } = binderGate(addresses.length, holdings);
 
   return (
     <div className="py-2">

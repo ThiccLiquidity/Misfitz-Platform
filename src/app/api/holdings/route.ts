@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60; // one resume pass pages within a ~40s budget, then returns
 
 export async function POST(req: Request) {
-  let body: { addresses?: unknown; refresh?: unknown };
+  let body: { addresses?: unknown; refresh?: unknown; offset?: unknown };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "bad json" }, { status: 400 }); }
   const raw = Array.isArray(body.addresses) ? body.addresses : [];
   const addresses = [
@@ -22,7 +22,14 @@ export async function POST(req: Request) {
   if (addresses.length === 0) return NextResponse.json({ error: "no valid addresses" }, { status: 400 });
   try {
     const holdings = await getMyHoldingsFast(addresses, { budgetMs: 30_000, fresh: body.refresh === true });
-    return NextResponse.json(holdings, { headers: { "cache-control": "no-store" } });
+    // Delta: a 10k-card roster is far past Vercel's ~4.5MB serverless response cap, so a full-roster reply 500s
+    // and the poll can never complete. Roster order is append-only while warming, so a count offset is a stable
+    // cursor — send only the tail. Totals/collections are still computed over the FULL set (summarize).
+    const offset = typeof body.offset === "number" && body.offset > 0 ? Math.floor(body.offset) : 0;
+    return NextResponse.json(
+      offset > 0 ? { ...holdings, nfts: holdings.nfts.slice(offset), rosterCount: holdings.nfts.length } : { ...holdings, rosterCount: holdings.nfts.length },
+      { headers: { "cache-control": "no-store" } },
+    );
   } catch {
     // Degrade, never 500: report warming so the client keeps polling and the checkpointed scan resumes.
     return NextResponse.json(
