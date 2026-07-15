@@ -75,28 +75,53 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     if (!warming || holdings.addresses.length === 0) return;
     let cancelled = false;
     (async () => {
+      type PollData = MyHoldings & { rosterCount?: number; done?: boolean };
       let attempts = 0;
       let fails = 0;
-      while (!cancelled && attempts < 60 && fails < 6) {
-        await new Promise((r) => setTimeout(r, 3500));
+      // false while the server scan is still warming (roster UNSTABLE -> the server sends only the stable first
+      // chunk and we REPLACE it, never shrinking). true once the scan is complete (roster STABLE -> the server
+      // index-pages it and we APPEND deduped chunks until drained). This keeps a 10k reply under Vercel's cap
+      // AND never drops cards for multi-address binders (a naive single offset into a growing roster would).
+      let completed = false;
+      while (!cancelled && attempts < 120 && fails < 6) {
+        await new Promise((r) => setTimeout(r, completed ? 300 : 3500));
         if (cancelled) return;
         attempts += 1;
         try {
+          const have = completed ? nftsRef.current.length : 0;
           const res = await fetch("/api/holdings", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ addresses: holdings.addresses }),
+            body: JSON.stringify({ addresses: holdings.addresses, have }),
           });
           if (!res.ok) { fails += 1; continue; }
           fails = 0;
-          const data = (await res.json()) as MyHoldings;
+          const data = (await res.json()) as PollData;
           if (cancelled) return;
-          // While warming, the roster only grows; a degraded/lock-loser pass can return fewer (even zero)
-          // items — never let it shrink what's on screen. A final (!warming) complete roster replaces as-is.
-          if (Array.isArray(data.nfts) && (!data.warming || data.nfts.length > nftsRef.current.length)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
-          if (Array.isArray(data.collections)) setCollections(data.collections);
-          setTruncated(data.truncated);
-          if (!data.warming) { setWarming(false); return; }
+          const degraded = data.warming && (data.nfts?.length ?? 0) === 0; // transient lock-loser / error pass
+          if (Array.isArray(data.collections) && (data.collections.length || !data.warming)) setCollections(data.collections);
+          if (!degraded) setTruncated(data.truncated);
+
+          if (data.warming) {
+            // Server re-warmed (cache expiry / degrade): drop back to the slow warming cadence and re-arm the
+            // transition so the next complete reply re-aligns the cursor before draining resumes.
+            completed = false;
+            // Unstable roster: replace the first chunk, never shrinking what's on screen.
+            if (Array.isArray(data.nfts) && data.nfts.length >= nftsRef.current.length) { setNfts(data.nfts); nftsRef.current = data.nfts; }
+            continue;
+          }
+          // Scan complete -> stable, index-paged. First complete reply (have=0) sets the base; subsequent
+          // chunks append (deduped by launcherId) until the whole roster is drained.
+          if (!completed) {
+            completed = true;
+            if (Array.isArray(data.nfts)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
+          } else if (Array.isArray(data.nfts) && data.nfts.length) {
+            const seen = new Set(nftsRef.current.map((n) => n.launcherId));
+            const merged = [...nftsRef.current, ...data.nfts.filter((n) => !seen.has(n.launcherId))];
+            setNfts(merged); nftsRef.current = merged;
+          }
+          if (data.done || nftsRef.current.length >= (data.rosterCount ?? nftsRef.current.length)) { setWarming(false); return; }
+          // else: keep draining the next chunk (fast loop)
         } catch { fails += 1; }
       }
       // Cap hit or repeated failures: show the honest "partial — sync incomplete" state (not a clean, possibly
@@ -270,11 +295,12 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         body: JSON.stringify({ addresses: holdings.addresses, refresh: true }),
       });
       if (res.ok) {
-        const data = (await res.json()) as MyHoldings;
+        const data = (await res.json()) as MyHoldings & { done?: boolean };
         if (Array.isArray(data.nfts)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
         if (Array.isArray(data.collections)) setCollections(data.collections);
         setTruncated(data.truncated);
-        if (data.warming) setWarming(true); // whale: hand off to the resume poll loop
+        // whale, or scan done but more chunks to transfer: hand off to the drain-poll loop
+        if (data.warming || data.done === false) setWarming(true);
         setRefreshTick((t) => t + 1); // re-run enrichment for any newly-added cards
       }
     } catch { /* ignore */ }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
+import { getMyHoldingsFast, pageRoster } from "@/lib/portfolio/myHoldings";
 import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
 import { XCH_USD_FALLBACK } from "@/lib/market/dexie";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60; // one resume pass pages within a ~40s budget, then returns
 
 export async function POST(req: Request) {
-  let body: { addresses?: unknown; refresh?: unknown };
+  let body: { addresses?: unknown; refresh?: unknown; have?: unknown };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "bad json" }, { status: 400 }); }
   const raw = Array.isArray(body.addresses) ? body.addresses : [];
   const addresses = [
@@ -22,10 +22,11 @@ export async function POST(req: Request) {
   if (addresses.length === 0) return NextResponse.json({ error: "no valid addresses" }, { status: 400 });
   try {
     const holdings = await getMyHoldingsFast(addresses, { budgetMs: 30_000, fresh: body.refresh === true });
-    // Full roster each pass (client never shrinks it). NOTE: a per-address delta cursor is the planned follow-up
-    // to keep a 10k-card reply under Vercel's ~4.5MB cap — a naive single-offset slice DROPS cards for
-    // multi-address binders (segments grow independently), so it was intentionally not shipped. See SESSION-SUMMARY.
-    return NextResponse.json(holdings, { headers: { "cache-control": "no-store" } });
+    // Chunk the reply so a 10k roster stays under Vercel's response cap. While warming we serve only the stable
+    // first chunk (the roster is still growing); once complete we page by index from `have`. See pageRoster.
+    const have = typeof body.have === "number" ? body.have : 0;
+    const page = pageRoster(holdings.nfts, holdings.warming, have);
+    return NextResponse.json({ ...holdings, ...page }, { headers: { "cache-control": "no-store" } });
   } catch {
     // Degrade, never 500: report warming so the client keeps polling and the checkpointed scan resumes.
     return NextResponse.json(

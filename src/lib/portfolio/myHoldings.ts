@@ -43,6 +43,20 @@ const EMPTY: MyHoldings = {
   collections: [], addresses: [], truncated: false, warming: false, demo: false,
 };
 
+// Chunk the roster for the /api/holdings poll so a 10k-card reply stays under Vercel's ~4.5MB response cap.
+// CRITICAL correctness rule: while `warming` the roster is UNSTABLE (per-address segments grow independently),
+// so a positional index into it is meaningless — we only ever serve the stable first chunk (the client REPLACES
+// it each poll, never shrinking). Once the scan is COMPLETE the full roster is stable, so we page it by index
+// from `have` and the client APPENDS. `done` = the client has everything after merging this response.
+export const ROSTER_CHUNK = 1200; // ~1-2KB/card -> well under 4.5MB
+export function pageRoster(all: NftData[], warming: boolean, have: number, chunk = ROSTER_CHUNK): { nfts: NftData[]; rosterCount: number; chunkStart: number; done: boolean } {
+  const rosterCount = all.length;
+  const start = warming ? 0 : Math.max(0, Math.floor(have) || 0);
+  const nfts = all.slice(start, start + chunk);
+  const done = !warming && start + nfts.length >= rosterCount;
+  return { nfts, rosterCount, chunkStart: start, done };
+}
+
 // Pure render gate for /binder: ZERO ("No NFTs found") is only ever shown when a COMPLETED scan confirmed it.
 // Anything unfinished (warming) renders the binder so the /api/holdings poll can stream the rest in.
 export function binderGate(addressCount: number, h: MyHoldings | null): { noResults: boolean; showBinder: MyHoldings | null } {
