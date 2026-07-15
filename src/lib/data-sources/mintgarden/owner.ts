@@ -69,16 +69,25 @@ const HOLDSCAN_EX_S = 30 * 60;    // ...persisted 30 min
 const PAGE_BUDGET_MS = 28_000;    // per-invocation paging budget — leaves room for metadata + writes under 60s
 
 interface CachedListings { items: MgListItem[]; collections: [string, MgCollection][]; truncated: boolean }
-interface HoldingsCheckpoint { cursor: string | null; items: MgListItem[]; truncated: boolean; collections: [string, MgCollection][] }
+interface HoldingsCheckpoint { cursor: string | null; items: MgListItem[]; truncated: boolean; collections: [string, MgCollection][]; done?: boolean }
 
 // Fetch metadata only for collections NOT already resolved (carried in the checkpoint across passes), so a
 // resume pass costs ~zero collection lookups instead of re-resolving every collection every time.
-async function collectionsFor(items: MgListItem[], existing?: Map<string, MgCollection>): Promise<Map<string, MgCollection>> {
+// DEADLINE-BOUNDED: a many-collection whale can hold 100s of distinct collections, and each cold getCollection
+// is a network call (6s timeout) at concurrency 8 — resolving them UNBOUNDED after the paging budget is what
+// used to blow Vercel's 60s cap. Ids not reached by the deadline are simply retried on the next poll;
+// `resolvedNew` lets the caller tell "not attempted yet" apart from "attempted, all dead".
+const COLS_PASS_MS = 8_000; // per-pass allowance; worst overshoot ~ one in-flight 6s wave past the deadline
+
+interface ColsResult { map: Map<string, MgCollection>; resolvedNew: boolean; missing: number }
+async function collectionsFor(items: MgListItem[], existing?: Map<string, MgCollection>, deadline?: number): Promise<ColsResult> {
   const map = existing ? new Map(existing) : new Map<string, MgCollection>();
   const need = Array.from(new Set(items.map((i) => i.collection_id))).filter((id) => !map.has(id));
-  const cols = await mapPool(need, 8, (id) => getCollection(id).catch(() => null));
-  need.forEach((id, i) => { const c = cols[i]; if (c) map.set(id, c); });
-  return map;
+  const cols = await mapPool(need, 8, (id) =>
+    deadline != null && Date.now() > deadline ? Promise.resolve<MgCollection | null>(null) : getCollection(id).catch(() => null));
+  let resolvedNew = false;
+  need.forEach((id, i) => { const c = cols[i]; if (c) { map.set(id, c); resolvedNew = true; } });
+  return { map, resolvedNew, missing: need.reduce((n, id) => n + (map.has(id) ? 0 : 1), 0) };
 }
 
 // listFn is a TEST SEAM (defaults to the real client) so a large-wallet fixture can drive the pager.
@@ -106,6 +115,7 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
   let cursor: string | null | undefined = undefined;
   let truncated = false;
   let colMap = new Map<string, MgCollection>();
+  let pagingDone = false; // checkpoint says the cursor is exhausted — only collection metadata remains
   if (!opts.fresh) try {
     const cp = await cacheGetLarge(`holdscan:${key}`, HOLDSCAN_TTL);
     if (cp) {
@@ -114,6 +124,7 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
       cursor = c.cursor ?? undefined;
       truncated = c.truncated;
       colMap = new Map(c.collections ?? []);
+      pagingDone = c.done === true;
     }
   } catch { /* start fresh */ }
 
@@ -121,7 +132,9 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
   //    (possibly empty) and let the caller poll again — no duplicate paging storm.
   const gotLock = await tryLock(`holds:${key}`, 55).catch(() => false);
   if (!gotLock) {
-    return { items, collections: await collectionsFor(items, colMap), truncated, warming: true };
+    // NO network on this path: another invocation is paging (or a killed one's lock is expiring). Resolving
+    // 100s of collections here was itself unbounded; unresolved ones stamp on a later poll instead.
+    return { items, collections: colMap, truncated, warming: true };
   }
 
   // Fetch one page with a short retry so a single 429/timeout doesn't abort the whole pass. Returns null
@@ -154,7 +167,7 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
     let hitBudget = false;
     let pageErr = false;
     let pagesFetched = 0;
-    do {
+    if (!pagingDone) do {
       if (Date.now() - t0 > budgetMs) { hitBudget = true; break; }
       const page = await fetchPage(cursor, pagesFetched === 0);
       if (!page) { pageErr = true; break; } // transient after retries — stop, keep progress, resume next poll
@@ -169,7 +182,7 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
     } while (cursor && items.length < MAX_HOLDINGS);
 
     // COMPLETE only if we reached a genuine end (or the cap) WITHOUT budget/error stopping us early.
-    let complete = !hitBudget && !pageErr && (!cursor || items.length >= MAX_HOLDINGS);
+    let complete = pagingDone || (!hitBudget && !pageErr && (!cursor || items.length >= MAX_HOLDINGS));
 
     // "This wallet is EMPTY" is a claim we only make after a confirming second look. An upstream that degrades
     // under load can 200 an empty page for a huge /profile — indistinguishable from a genuinely empty wallet.
@@ -183,16 +196,18 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
       } catch { complete = false; } // couldn't confirm empty — warming, never zero-and-done
     }
 
-    // Persist paging progress BEFORE resolving collections (a network step), so a function kill during
-    // collectionsFor never loses this pass's pages. Carries the collections resolved so far.
-    if (!complete) {
-      const pre: HoldingsCheckpoint = { cursor: cursor ?? null, items, truncated, collections: [...colMap.entries()] };
-      await cachePutLargeAsync(`holdscan:${key}`, JSON.stringify(pre), HOLDSCAN_EX_S);
-    }
+    // collectionsFor is now deadline-bounded, so the old "pre-collections" checkpoint write (a SECOND full
+    // multi-MB serialize+gzip+shard of the roster every pass) is gone — the single write below persists this
+    // pass's pages AND its resolved collections together.
+    const { map: collections, resolvedNew, missing } = await collectionsFor(items, colMap, Date.now() + COLS_PASS_MS);
 
-    const collections = await collectionsFor(items, colMap); // only newly-seen collections hit the network
+    // Finishing also requires collection metadata SETTLED: all resolved, or paging is done and a full pass
+    // dedicated to collections resolved nothing new (those ids are dead upstream — tolerate the misses, exactly
+    // like the old .catch(() => null) did). Otherwise checkpoint + warm so the next poll (which skips paging via
+    // `done`) spends its whole allowance on the remaining collections.
+    const finished = complete && (missing === 0 || (pagingDone && !resolvedNew));
 
-    if (complete) {
+    if (finished) {
       if (items.length > 0) {
         const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
         await cachePutLargeAsync(`holdings3:${key}`, JSON.stringify(payload), HOLDINGS_EX_S);
@@ -206,7 +221,7 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
 
     // Budget hit / more pages remain / transient error: update the checkpoint WITH the newly-resolved
     // collections (so the next pass skips re-resolving them) and poll again.
-    const checkpoint: HoldingsCheckpoint = { cursor: cursor ?? null, items, truncated, collections: [...collections.entries()] };
+    const checkpoint: HoldingsCheckpoint = { cursor: cursor ?? null, items, truncated, collections: [...collections.entries()], done: complete };
     await cachePutLargeAsync(`holdscan:${key}`, JSON.stringify(checkpoint), HOLDSCAN_EX_S);
     recordTiming("wallet.holdings", Date.now() - t0);
     if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings PARTIAL ${items.length} nfts in ${Date.now() - t0}ms (warming)`);

@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   ].slice(0, 25); // bound: no one pastes 25+ wallets
   if (addresses.length === 0) return NextResponse.json({ error: "no valid addresses" }, { status: 400 });
   try {
-    const holdings = await getMyHoldingsFast(addresses, { budgetMs: 30_000, fresh: body.refresh === true });
+    const holdings = await getMyHoldingsFast(addresses, { budgetMs: 20_000, fresh: body.refresh === true });
     // Chunk the reply so a 10k roster stays under Vercel's response cap. While warming we serve only the stable
     // first chunk (the roster is still growing); once complete we page by index from `have`. See pageRoster.
     const have = typeof body.have === "number" ? body.have : 0;
