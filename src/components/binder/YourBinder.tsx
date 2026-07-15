@@ -85,21 +85,15 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           const res = await fetch("/api/holdings", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            // offset = how many cards we already have: the server sends only the tail, keeping a 10k-card
-            // roster under Vercel's response cap so the poll can actually finish.
-            body: JSON.stringify({ addresses: holdings.addresses, offset: nftsRef.current.length }),
+            body: JSON.stringify({ addresses: holdings.addresses }),
           });
           if (!res.ok) { fails += 1; continue; }
           fails = 0;
           const data = (await res.json()) as MyHoldings;
           if (cancelled) return;
-          // The server sends only NEW cards (delta). Append the ones we don't already have (dedupe by
-          // launcherId). The roster grows while warming and never shrinks; totals/collections come whole below.
-          if (Array.isArray(data.nfts) && data.nfts.length > 0) {
-            const have = new Set(nftsRef.current.map((n) => n.launcherId));
-            const merged = [...nftsRef.current, ...data.nfts.filter((n) => !have.has(n.launcherId))];
-            setNfts(merged); nftsRef.current = merged;
-          }
+          // While warming, the roster only grows; a degraded/lock-loser pass can return fewer (even zero)
+          // items — never let it shrink what's on screen. A final (!warming) complete roster replaces as-is.
+          if (Array.isArray(data.nfts) && (!data.warming || data.nfts.length > nftsRef.current.length)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
           if (Array.isArray(data.collections)) setCollections(data.collections);
           setTruncated(data.truncated);
           if (!data.warming) { setWarming(false); return; }

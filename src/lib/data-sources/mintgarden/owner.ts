@@ -126,15 +126,18 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
 
   // Fetch one page with a short retry so a single 429/timeout doesn't abort the whole pass. Returns null
   // only after retries fail — the caller then checkpoints + returns warming (never a false "complete").
+  let metaBroken = false; // once a metadata page times out this pass, stop asking for it (don't re-pay 15s/page)
   async function fetchPage(cur: string | null | undefined, firstOfPass: boolean): Promise<MgPage<MgListItem> | null> {
     for (let attempt = 0; attempt < 3; attempt++) {
       // Attempt 0 asks for inline metadata (traits on first paint). Retries DROP include_metadata: a 10k-NFT
       // DID's metadata-heavy /profile page can exceed even the 15s timeout, and a page that never lands means
       // the cursor never advances ("0 NFTs, syncing…" forever). A metadata-free page is small/fast; those
-      // cards' traits backfill via /api/binder enrichment, exactly like xch1 wallets already do.
-      const withMeta = attempt === 0;
+      // cards' traits backfill via /api/binder enrichment, exactly like xch1 wallets already do. Once metadata
+      // has timed out this pass we latch metaBroken so later pages skip it and don't re-pay the 15s timeout.
+      const withMeta = attempt === 0 && !metaBroken;
       try { return await list(address, cur, PAGE_SIZE, "owned", true, false, withMeta); }
       catch {
+        if (withMeta) metaBroken = true;
         // Retries are budget-gated EXCEPT the first page of a resume pass with a real budget (the poll): every
         // poll MUST move the cursor at least once or a whale can loop at zero forever. The 8s SSR pass stays
         // fast (it returns warming) while the 30s poll is allowed the extra retry to guarantee progress.
