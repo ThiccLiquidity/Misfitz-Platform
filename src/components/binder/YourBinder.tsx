@@ -68,65 +68,62 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const [valuesAsOf, setValuesAsOf] = useState<number | null>(null);
 
-  // Whale wallets can't be fully paged inside one serverless call, so the page SSRs a first batch with
-  // warming=true. Poll the resume endpoint until the full roster lands, growing the card set + collections
-  // as pages arrive. Enrichment (below) is held off until this completes so we enrich the FULL set once.
+  // CLIENT-ORCHESTRATED paging. The browser drives the cursor loop: one fast (~440ms) MintGarden page per
+  // request via GET /api/holdings/page. Each request is O(1) on the server (no lock, no checkpoint, no
+  // reprocessing), so the timeout / OOM / oversized-reply / stuck-lock failures of the old bulk poll are
+  // structurally impossible. Cards paint as pages arrive; traits + values backfill via the enrichment effect
+  // below (held until warming ends) and the /api/values convergence — exactly as xch1 wallets already work.
   useEffect(() => {
     if (!warming || holdings.addresses.length === 0) return;
     let cancelled = false;
     (async () => {
-      type PollData = MyHoldings & { rosterCount?: number; done?: boolean };
-      let attempts = 0;
-      let fails = 0;
-      // false while the server scan is still warming (roster UNSTABLE -> the server sends only the stable first
-      // chunk and we REPLACE it, never shrinking). true once the scan is complete (roster STABLE -> the server
-      // index-pages it and we APPEND deduped chunks until drained). This keeps a 10k reply under Vercel's cap
-      // AND never drops cards for multi-address binders (a naive single offset into a growing roster would).
-      let completed = false;
-      while (!cancelled && attempts < 120 && fails < 6) {
-        await new Promise((r) => setTimeout(r, completed ? 300 : 3500));
-        if (cancelled) return;
-        attempts += 1;
-        try {
-          const have = completed ? nftsRef.current.length : 0;
-          const res = await fetch("/api/holdings", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ addresses: holdings.addresses, have }),
-          });
-          if (!res.ok) { fails += 1; continue; }
-          fails = 0;
-          const data = (await res.json()) as PollData;
+      const seen = new Set(nftsRef.current.map((n) => n.launcherId));
+      const deriveCollections = (cards: NftData[]) => {
+        const m = new Map<string, { id: string; name: string; count: number }>();
+        for (const n of cards) {
+          const c = m.get(n.collectionSlug) ?? { id: n.collectionSlug, name: n.collectionName ?? n.collectionSlug, count: 0 };
+          c.count += 1; m.set(n.collectionSlug, c);
+        }
+        return [...m.values()].sort((a, b) => b.count - a.count);
+      };
+      let anyFail = false;
+      for (const address of holdings.addresses) {
+        let cursor: string | undefined = undefined;
+        let pageFails = 0;
+        while (!cancelled) {
+          type PageReply = { cards?: NftData[]; nextCursor?: string | null; done?: boolean; retry?: boolean };
+          let data: PageReply | null = null;
+          try {
+            const q = new URLSearchParams({ address });
+            if (cursor) q.set("cursor", cursor);
+            const res = await fetch(`/api/holdings/page?${q.toString()}`, { headers: { "cache-control": "no-store" } });
+            if (res.ok) data = (await res.json()) as PageReply;
+          } catch { /* network hiccup -> retry below */ }
           if (cancelled) return;
-          const degraded = data.warming && (data.nfts?.length ?? 0) === 0; // transient lock-loser / error pass
-          if (Array.isArray(data.collections) && (data.collections.length || !data.warming)) setCollections(data.collections);
-          if (!degraded) setTruncated(data.truncated);
 
-          if (data.warming) {
-            // Server re-warmed (cache expiry / degrade): drop back to the slow warming cadence and re-arm the
-            // transition so the next complete reply re-aligns the cursor before draining resumes.
-            completed = false;
-            // Unstable roster: replace the first chunk, never shrinking what's on screen.
-            if (Array.isArray(data.nfts) && data.nfts.length >= nftsRef.current.length) { setNfts(data.nfts); nftsRef.current = data.nfts; }
-            continue;
+          if (!data || data.retry) {
+            if (++pageFails >= 5) { anyFail = true; break; } // give up on THIS address; move to the next one
+            await new Promise((r) => setTimeout(r, 500 * pageFails));
+            continue; // retry the same cursor
           }
-          // Scan complete -> stable, index-paged. First complete reply (have=0) sets the base; subsequent
-          // chunks append (deduped by launcherId) until the whole roster is drained.
-          if (!completed) {
-            completed = true;
-            if (Array.isArray(data.nfts)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
-          } else if (Array.isArray(data.nfts) && data.nfts.length) {
-            const seen = new Set(nftsRef.current.map((n) => n.launcherId));
-            const merged = [...nftsRef.current, ...data.nfts.filter((n) => !seen.has(n.launcherId))];
-            setNfts(merged); nftsRef.current = merged;
+          pageFails = 0;
+
+          const incoming = (data.cards ?? []).filter((n) => n && n.launcherId && !seen.has(n.launcherId));
+          if (incoming.length) {
+            for (const n of incoming) seen.add(n.launcherId);
+            const merged = [...nftsRef.current, ...incoming];
+            nftsRef.current = merged;
+            setNfts(merged);
+            setCollections(deriveCollections(merged));
           }
-          if (data.done || nftsRef.current.length >= (data.rosterCount ?? nftsRef.current.length)) { setWarming(false); return; }
-          // else: keep draining the next chunk (fast loop)
-        } catch { fails += 1; }
+          cursor = data.nextCursor ?? undefined;
+          if (!cursor || data.done) break; // this address is fully loaded
+        }
+        if (cancelled) return;
       }
-      // Cap hit or repeated failures: show the honest "partial — sync incomplete" state (not a clean, possibly
-      // empty binder) and stop warming so enrichment runs on whatever loaded. Refresh resumes from the checkpoint.
-      if (!cancelled) { setStoppedEarly(true); setWarming(false); }
+      if (cancelled) return;
+      if (anyFail) setStoppedEarly(true); // an address didn't fully load -> honest "partial" state
+      setWarming(false); // fully loaded (or partial) -> hand off to the trait/value enrichment effect
     })();
     return () => { cancelled = true; };
   }, [warming, holdings.addresses]);
@@ -285,26 +282,16 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
   // Force-refresh: re-page the wallet from MintGarden NOW (bypasses the 30-min holdings cache) so a
   // just-bought NFT shows immediately. Re-runs enrichment on the fresh set via refreshTick.
   const doRefresh = async () => {
-    if (refreshing || holdings.addresses.length === 0) return;
-    setStoppedEarly(false); // a manual refresh re-enables loading after an early stop
+    if (refreshing || warming || holdings.addresses.length === 0) return;
+    // Re-page from scratch via the client loop. /api/holdings/page is a live MintGarden read (no cache), so
+    // clearing the roster + re-arming `warming` gives fresh holdings and naturally drops any sold NFTs.
+    setStoppedEarly(false);
     setRefreshing(true);
-    try {
-      const res = await fetch("/api/holdings", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ addresses: holdings.addresses, refresh: true }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as MyHoldings & { done?: boolean };
-        if (Array.isArray(data.nfts)) { setNfts(data.nfts); nftsRef.current = data.nfts; }
-        if (Array.isArray(data.collections)) setCollections(data.collections);
-        setTruncated(data.truncated);
-        // whale, or scan done but more chunks to transfer: hand off to the drain-poll loop
-        if (data.warming || data.done === false) setWarming(true);
-        setRefreshTick((t) => t + 1); // re-run enrichment for any newly-added cards
-      }
-    } catch { /* ignore */ }
-    finally { setRefreshing(false); }
+    setNfts([]); nftsRef.current = [];
+    enrichedRef.current = new Set();
+    setRefreshTick((t) => t + 1);
+    setWarming(true);
+    setRefreshing(false);
   };
 
   function pickCollection(id: string) {
