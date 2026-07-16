@@ -33,13 +33,13 @@ export async function runBotPayout(m: PayoutManifest, deps: BotDeps, opts: BotOp
   const sent: PayoutReceipt[] = [];
   const halt = (haltReason: string): BotRunResult => ({ status: "halted", haltReason, sent, skippedAlreadyPaid: 0 });
 
-  // The signature gate is only enforced when a verifier is supplied — so the bot MUST have one (no JS caller can
-  // wire `verifySig: undefined` and silently disable it).
-  if (typeof deps.verifySig !== "function") return halt("no signature verifier configured — refusing to send");
+  // The signature gate is enforced unless the operator DELIBERATELY set allowUnsigned (hash-only v1). A normal
+  // run must supply a verifier — no JS caller can silently wire `verifySig: undefined` to disable it.
+  if (!opts.allowUnsigned && typeof deps.verifySig !== "function") return halt("no signature verifier configured — refusing to send");
 
-  // 1) Verify — signature is MANDATORY here (the bot always supplies the verifier; no opt-out). Reward manifests
-  //    must be chain-verified (Design 1's gate) before a single payment goes out.
-  const vr = verifyManifest(m, { allowedAssets: opts.allowedAssets, fundingCapUnits: opts.fundingCapUnits, verifySignature: deps.verifySig });
+  // 1) Verify — hash + guards always; the operator SIGNATURE too unless allowUnsigned. Reward manifests must be
+  //    chain-verified (Design 1's gate) before a single payment goes out.
+  const vr = verifyManifest(m, { allowedAssets: opts.allowedAssets, fundingCapUnits: opts.fundingCapUnits, verifySignature: opts.allowUnsigned ? undefined : deps.verifySig });
   if (!vr.ok) return halt("verify failed: " + vr.errors.join("; "));
   if (m.kind === "reward" && m.provenance !== "chain-verified") return halt("reward manifest is not chain-verified — run the on-chain royalty gate first");
 

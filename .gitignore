@@ -21,3 +21,8 @@ __write_test__
 
 # TS incremental build info (generated)
 tsconfig.tsbuildinfo
+
+# Reward payout bot (operator-local; never commit)
+bot-config.json
+bot-ledger.json
+bot-ledger.json.tmp

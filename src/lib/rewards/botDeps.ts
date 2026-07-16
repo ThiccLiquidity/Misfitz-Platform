@@ -31,4 +31,6 @@ export interface BotOpts {
   fundingCapUnits: bigint;   // MANDATORY every run (stricter than the guard)
   maxSends?: number;         // absolute per-run recipient cap (default 500)
   confirmTimeoutMs?: number; // waitConfirmed budget per send (default 120s)
+  allowUnsigned?: boolean;   // DELIBERATE hash-only mode (v1): skip the operator-SIGNATURE gate but keep the hash
+                             // + all other guards. Must be set explicitly — a normal run still requires a signer.
 }

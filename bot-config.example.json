@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to bot-config.json and fill in. Holds NO private keys — Sage holds the keys. Do NOT commit the real file.",
+  "siteUrl": "https://YOUR-SITE.vercel.app",
+  "opsSecret": "PREFER_ENV: set REWARDS_OPS_SECRET instead of putting it here",
+  "ledgerPath": "./bot-ledger.json",
+  "allowedAssets": ["69326954fe16117cd6250e929748b2a1ab916347598bc8180749279cfae21ddb"],
+  "fundingCapUnits": "0",
+  "maxSends": 500,
+  "confirmTimeoutMs": 180000,
+  "sage": { "rpcUrl": "http://localhost:9257", "apiKey": "" },
+  "requireSignature": false
+}
