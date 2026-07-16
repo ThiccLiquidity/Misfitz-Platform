@@ -205,6 +205,40 @@ export async function fetchCollectionFloor(
   });
 }
 
+// Cheapest clean single-NFT XCH asks (sorted ascending, up to 20) — lets callers compute a ROBUST floor
+// (median of the cheapest few) that a single troll / fat-finger listing can't move. Cached like the floor.
+export async function fetchCollectionAsks(dexieCollectionId: string): Promise<number[]> {
+  if (!dexieCollectionId.startsWith("col1")) return [];
+  return withCache(`asks_${dexieCollectionId}`, adaptiveTtl(dexieCollectionId, 5 * 60_000), async () => {
+    try {
+      const url = new URL(`${DEXIE_BASE}/offers`);
+      url.searchParams.set("status", "0");
+      url.searchParams.set("offered", dexieCollectionId);
+      url.searchParams.set("requested", "xch");
+      url.searchParams.set("sort", "price_asc");
+      url.searchParams.set("page_size", "20");
+      const res = await tfetch(url.toString());
+      if (!res.ok) return [];
+      const json = (await res.json()) as { offers?: { price?: number; requested?: { id?: string }[] }[] };
+      const asks: number[] = [];
+      for (const o of json?.offers ?? []) {
+        const req = o.requested ?? [];
+        const xchOnly = req.length === 1 && (req[0].id ?? "").toLowerCase() === "xch";
+        if (xchOnly && typeof o.price === "number" && o.price > 0) asks.push(o.price);
+      }
+      return asks.sort((a, b) => a - b);
+    } catch {
+      return [];
+    }
+  });
+}
+export function fetchCollectionAsksWarm(dexieCollectionId: string): number[] {
+  if (!dexieCollectionId.startsWith("col1")) return [];
+  const hit = _cache.get(`asks_${dexieCollectionId}`);
+  if (!hit || Date.now() >= hit.expiresAt) void fetchCollectionAsks(dexieCollectionId).catch(() => {});
+  return hit ? (hit.value as number[]) : [];
+}
+
 // ── Collection recent-sale floor ──────────────────────────────────────────────
 
 /**

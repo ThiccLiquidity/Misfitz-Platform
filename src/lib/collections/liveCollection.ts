@@ -269,7 +269,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
     }
   }
 
-  const [floorFallback, offerMap] = await Promise.all([floorPromise, offersPromise]);
+  const [, offerMap] = await Promise.all([floorPromise, offersPromise]); // floorPromise warms the trusted-floor caches
   const mgListings = await mgListingsPromise;
 
   // Floor = cheapest CLEAN single-NFT XCH offer from Dexie. The scan now queries requested=xch&sort=
@@ -281,9 +281,9 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   for (const o of offerMap.values()) {
     if (o.xchOnly && !o.multiNft && o.priceXch > 0) floorCandidates.push(o.priceXch);
   }
-  // Sanitize the listing floor too: a single troll ask (or a no-sale collection) must not set the value.
-  const rawListing = floorCandidates.length ? Math.min(...floorCandidates) : floorFallback;
-  const floorXch = trustedFloorFrom(fetchCollectionSaleFloorWarm(id), rawListing, typeof col.floor_price === "number" ? col.floor_price : null).valueFloor;
+  // Robust TRUSTED floor over the collection's actual clean asks (median of the cheapest 5): a single troll
+  // can't move it, and a legit run-up shows its true floor. floorPromise above warmed the sale-floor cache.
+  const floorXch = trustedFloorFrom(fetchCollectionSaleFloorWarm(id), floorCandidates, typeof col.floor_price === "number" ? col.floor_price : null).valueFloor;
   const cards = cardsFrom(items, col, floorXch, xchUsdRate);
 
   // Listings come from Dexie (authoritative, full asset terms):
