@@ -31,22 +31,22 @@ compute `pending` (skips already-paid) → cap check → dry-run summary → you
 `markIntended` → `sendCat` → `waitConfirmed` → `markDone` → receipt. Returns `{status, sent[], skippedAlreadyPaid}`;
 `status` is `completed | aborted | halted`. Re-running after any halt is safe and idempotent.
 
-## The on-chain royalty gate (`src/lib/rewards/chainVerify.ts`, before a REAL reward manifest)
-Implement `RoyaltyChainProvider` (`chainProvider.ts`) against your full node RPC or an indexer: for each sale it
-returns the settlement spend (payments, buyer/seller, price, coin/spend/block, depth). `verifySales(sales,
-provider, cfg)` then confirms the royalty coin actually paid your creator wallet (≥ `minRoyaltyBps` of the chain
-price, ≥ `minBlockDepth` confirmations, single-NFT, XCH-only) and returns `{verified, retry, rejected}`. Only
-`verified` sales (with their ACTUAL on-chain royalty/attribution) build the reward manifest as `chain-verified`;
-`retry` roll to next run; `rejected` are excluded from every pot (a missing royalty is an evasion signal to audit,
-not a rewards event).
+## Wallet isolation (the bot may only ever touch the DESIGNATED distribution wallet)
+Sage's RPC spends from **whatever key is logged in** — `send_cat` does not select a wallet. Two layers, both
+mandatory before the first live send:
 
-## Run book (monthly)
-1. Server publishes the month's reward + drip manifests (signed). Reward manifest is `chain-verified`.
-2. Read the "Send X XCH to the hot wallet" figure from the dashboard/operator plan; do the $CHIA and $TOKEN buys
-   yourself; send the artist cut nowhere (it stays).
-3. Run the bot for the reward manifest, then the drip manifest, then send the burn $TOKEN to the burn address.
-4. Confirm each dry-run summary. Keep the receipts log.
+1. **Physical isolation (operational — code cannot substitute for this).** The distribution wallet lives on its
+   own Sage profile, ideally its own Sage instance / OS user / machine, holding **only** one epoch's funding.
+   Then even a total bot compromise can only reach that wallet's balance. Your personal/royalty keys should
+   never be loadable by the Sage instance the bot talks to.
+2. **Fingerprint pin (enforced in code, fail-closed).** `bot-config.json` must set `sage.fingerprint` to the
+   distribution wallet's key fingerprint. A live send REFUSES if it is unset; the orchestrator halts before the
+   first send — and the Sage adapter re-checks before **every** send — unless Sage's active fingerprint equals
+   the pin. Probe error, unknown fingerprint, or mismatch all HALT with nothing sent. Never assume; never
+   auto-switch keys (`login` is deliberately not called).
 
-## Never
-Send without a signature · pay a non-chain-verified reward manifest · `markDone` before the RPC confirmed ·
-auto-resolve a conflict · run sends in parallel · continue past a failed send · put any Traitfolio key in the bot.
+Plus blast-radius bounds (already mandatory): fund the wallet **per-epoch only** with the manifest's totals, and
+set `fundingCapUnits` ≈ that epoch's total — a bug can never touch more than one epoch's pot.
+
+**Operator must confirm once against the installed Sage version (TODO-CONFIRM in `botSage.ts`):** the exact RPC
+method that reports the active key's f

@@ -12,6 +12,12 @@ export interface WalletRpc {
   // Optional crash-recovery: has a payment with this dedupeTag already been broadcast? Returns its txId or null.
   // If absent, the bot HALTS on any orphaned "intended" (never auto-resends) and the operator reconciles.
   lookupTx?(dedupeTag: string): Promise<string | null>;
+  // Optional WALLET-PIN guard: resolve ONLY if the RPC is provably operating on the operator's DESIGNATED
+  // distribution wallet (e.g. Sage's active fingerprint == the configured fingerprint). MUST throw on a
+  // mismatch AND whenever the identity cannot be confirmed (probe error, null/unknown fingerprint, no pin
+  // configured) — never assume the right wallet. The orchestrator calls it after operator confirmation and
+  // before the FIRST send, and halts (sends nothing) on any throw. See BOT-CONTRACT.md "Wallet isolation".
+  preflight?(): Promise<void>;
 }
 
 export interface LedgerStore {
@@ -35,4 +41,6 @@ export interface BotOpts {
                              // + all other guards. Must be set explicitly — a normal run still requires a signer.
   expectedKind?: "reward" | "drip"; // the operator asked to pay THIS kind — reject a manifest whose kind differs.
   expectedAssetId?: string;         // ...and its asset MUST be this (binds kind->asset: a "drip" can't pay $CHIA).
+  requireWalletPreflight?: boolean; // live CLI sets true: a wallet impl WITHOUT preflight() is refused — the
+                                    // wallet-pin guard must EXIST, not merely pass. Fail-closed by construction.
 }

@@ -90,6 +90,9 @@ async function postReceipts(cfg: BotConfig, col: string, epoch: string, kind: "r
 async function doSend(cfg: BotConfig, manifest: PayoutManifest, col: string, epoch: string, live: boolean, allowCreate: boolean): Promise<void> {
   if (cfg.requireSignature) throw new Error("requireSignature=true but no real signature verifier is wired in botCli — implement operator-pubkey verification before flipping this flag (do NOT go live with a stub verifier)");
   if (BigInt(cfg.fundingCapUnits) <= BigInt(0)) throw new Error("config.fundingCapUnits is 0 — set a real hard cap (base units) before a live send");
+  // WALLET PIN: a live send is refused outright until the designated distribution wallet's fingerprint is
+  // pinned in the config; the orchestrator + Sage adapter then HALT unless Sage's active key matches it.
+  if (live && !cfg.sage.fingerprint) throw new Error("config.sage.fingerprint is not set — pin the DESIGNATED distribution wallet's fingerprint before a live send (open Sage on that wallet, copy its fingerprint; see BOT-CONTRACT.md 'Wallet isolation')");
   const kind = manifest.kind; // "reward" | "drip"
   const store = new FileLedgerStore(cfg.ledgerPath, { allowCreate });
   const deps: BotDeps = {
@@ -106,6 +109,7 @@ async function doSend(cfg: BotConfig, manifest: PayoutManifest, col: string, epo
     allowUnsigned: !cfg.requireSignature,
     expectedKind: kind,
     expectedAssetId: cfg.assetForKind[kind],
+    requireWalletPreflight: true, // the wallet-pin guard must EXIST — a WalletRpc without preflight() halts
   };
   if (!live) {
     const { pending } = pendingRecipients(manifest, await store.load());

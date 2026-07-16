@@ -78,6 +78,20 @@ export async function runBotPayout(m: PayoutManifest, deps: BotDeps, opts: BotOp
   const ok = await deps.gate.confirm(summarizePayout(m, pending, skippedAlreadyPaid, vr.warnings));
   if (!ok) return { status: "aborted", sent, skippedAlreadyPaid };
 
+  // 5.5) WALLET PIN (fail-closed): prove the RPC is operating on the DESIGNATED distribution wallet before a
+  // single coin moves. preflight() must throw on a fingerprint mismatch OR whenever the wallet's identity can't
+  // be confirmed — any throw halts with nothing sent. It runs here (after confirm, not earlier) so the human
+  // pause between summary and "yes" can't widen a pin-check→send gap; the Sage adapter also re-asserts the pin
+  // inside every sendCat. Steps 1–5 are spend-free (recovery only READS tx status), so a wrong wallet before
+  // this point can only cause a halt, never a send.
+  if (opts.requireWalletPreflight && typeof deps.wallet.preflight !== "function") {
+    return halt("wallet has no preflight() wallet-pin guard but requireWalletPreflight is set — refusing to send");
+  }
+  if (typeof deps.wallet.preflight === "function") {
+    try { await deps.wallet.preflight(); }
+    catch (e) { return halt(`wallet preflight failed: ${(e as Error)?.message ?? String(e)}`); }
+  }
+
   // 6) Sequential send loop with write-ahead. Any throw/timeout halts immediately; sent + ledger are preserved.
   for (const r of pending) {
     const key = paymentKey(m, r);

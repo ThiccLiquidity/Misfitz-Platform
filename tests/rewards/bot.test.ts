@@ -16,7 +16,7 @@ function manifest(provenance: "shadow" | "chain-verified" = "chain-verified", si
   const epoch = computeEpoch([toSale({ offerId: "s1", nftId: "n1", priceXch: 100, soldAt: 1, buyer: A("a"), seller: A("b") } as RawSale, null)], [], 0, 10);
   const s = settleUnattributed(epoch);
   const chia = distributeChia(s.payable, s.verifiedRewardPotMojos, BigInt(1_000_000));
-  const m = buildRewardManifest("2026-06", s.payable, chia, 1, s.routedToBurnMojos, CHIA_ASSET_ID, provenance);
+  const m = buildRewardManifest("2026-06", s.payable, chia, 1, s.routedToBurnMojos, CHIA_ASSET_ID, provenance, "col1");
   return sign ? signManifest(m, (h) => "sig:" + h) : m;
 }
 
@@ -106,4 +106,35 @@ test("no signature verifier configured -> halt before anything (F1)", async () =
   const r = await runBotPayout(manifest(), { ...d, verifySig: undefined as unknown as typeof d.verifySig }, OPTS);
   assert.equal(r.status, "halted");
   assert.match(r.haltReason ?? "", /signature verifier/);
+});
+
+// ---- Wallet pin (preflight): the bot must only ever spend from the DESIGNATED distribution wallet.
+
+test("wallet pin: preflight throws (wrong/unknown fingerprint) -> halt, nothing sent", async () => {
+  const w = wallet();
+  w.impl.preflight = async () => { throw new Error("Sage's active wallet fingerprint 111 is NOT the designated distribution wallet 222"); };
+  const r = await runBotPayout(manifest(), deps(store().impl, w.impl), OPTS);
+  assert.equal(r.status, "halted");
+  assert.match(r.haltReason ?? "", /preflight failed/);
+  assert.match(r.haltReason ?? "", /NOT the designated distribution wallet/);
+  assert.equal(w.sends.length, 0);
+});
+
+test("wallet pin: requireWalletPreflight refuses a wallet impl WITHOUT the guard (fail-closed)", async () => {
+  const w = wallet(); // no preflight()
+  const r = await runBotPayout(manifest(), deps(store().impl, w.impl), { ...OPTS, requireWalletPreflight: true });
+  assert.equal(r.status, "halted");
+  assert.match(r.haltReason ?? "", /no preflight/);
+  assert.equal(w.sends.length, 0);
+});
+
+test("wallet pin: a passing preflight runs exactly once (pre-loop) and sends proceed", async () => {
+  const m = manifest();
+  const w = wallet();
+  let probes = 0;
+  w.impl.preflight = async () => { probes++; };
+  const r = await runBotPayout(m, deps(store().impl, w.impl), { ...OPTS, requireWalletPreflight: true });
+  assert.equal(r.status, "completed", r.haltReason);
+  assert.equal(probes, 1);
+  assert.equal(w.sends.length, m.recipients.length);
 });

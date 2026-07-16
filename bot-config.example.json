@@ -8,6 +8,6 @@
   "maxSends": 500,
   "confirmTimeoutMs": 180000,
   "feeMojos": "0",
-  "sage": { "rpcUrl": "http://localhost:9257", "apiKey": "" },
+  "sage": { "rpcUrl": "http://localhost:9257", "apiKey": "", "fingerprint": "SET THIS to the DESIGNATED distribution wallet fingerprint — a live send refuses to run without it" },
   "requireSignature": false
 }

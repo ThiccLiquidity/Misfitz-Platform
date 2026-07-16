@@ -86,3 +86,27 @@ shadow data; live `send` is correctly refused by the guards.
 3. **`confirmed` means on-chain** (not merely "submitted"), and Sage's real RPC endpoint/auth (it may use TLS
    client certs rather than a Bearer key — adjust `rpc()` accordingly).
 4. Set a small nonzero `feeMojos` so a send doesn't sit unconfirmed under mempool load.
+
+---
+
+## Wallet isolation — the bot must NEVER touch your other Sage wallets (mandatory before live)
+Sage's RPC spends from the **currently logged-in key** (there is no per-call wallet selector). So the protection
+is a hard **fingerprint pin**, plus physical isolation:
+
+- **Isolation (operational, the only real guarantee):** run the distribution wallet on its **own Sage
+  profile/instance** (ideally its own OS user or machine), holding only one epoch's funds. Code cannot make a
+  compromised Sage safe — Sage holds the keys.
+- **Fingerprint pin (in code, MANDATORY):** set `sage.fingerprint` in the config to the DESIGNATED distribution
+  wallet's fingerprint. Before the first send (and re-checked before EVERY send), the bot probes Sage's active
+  fingerprint and **HALTS, sending nothing,** unless it matches. If the pin is unset, or the probe errors, or the
+  fingerprint can't be read — it fails **closed**. So an open personal wallet, or a mid-run profile switch, is
+  refused rather than spent from.
+- **Blast radius:** even in a worst case, `fundingCapUnits` + per-epoch funding bound the loss to one epoch's pot.
+
+### Runbook step 0 (do this EVERY run)
+1. Create a dedicated Sage profile for distribution once; copy its fingerprint into `sage.fingerprint`.
+2. Open Sage on **that profile only**; confirm the fingerprint matches the config.
+3. Fund it with just this epoch's manifest totals; set `fundingCapUnits` ≈ that total.
+4. First live run ever: do a tiny **canary send** to a wallet you control and verify it on-chain (this also
+   confirms Sage's amount-units + the `get_key` fingerprint method — the two `TODO-CONFIRM`s).
+5. NEVER auto-login to "fix" a fingerprint mismatch, and never keep more than one epoch's funds in the wallet.

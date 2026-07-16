@@ -18,7 +18,11 @@ export interface BotConfig {
   maxSends: number;
   confirmTimeoutMs: number;
   feeMojos: string;             // network fee per send (0 risks slow/unconfirmed; set a small nonzero for live)
-  sage: { rpcUrl: string; apiKey?: string };
+  // sage.fingerprint = the WALLET PIN: the key fingerprint of the DESIGNATED distribution wallet. Sage's RPC
+  // spends from whatever key is logged in, so before (and during) every live run the bot probes Sage's active
+  // fingerprint and HALTS unless it equals this value. MANDATORY for a live send — with it unset the CLI
+  // refuses, so the bot can never spend from a personal/royalty wallet you left open. See BOT-CONTRACT.md.
+  sage: { rpcUrl: string; apiKey?: string; fingerprint?: string };
   requireSignature: boolean;    // v1: false (hash-only). Flip true only once a REAL verifier is wired (see botCli).
 }
 
@@ -26,7 +30,7 @@ interface RawConfig {
   siteUrl?: string; opsSecret?: string; ledgerPath?: string;
   chiaAssetId?: string; chipsAssetId?: string;
   fundingCapUnits?: string; maxSends?: number; confirmTimeoutMs?: number; feeMojos?: string;
-  sage?: { rpcUrl?: string; apiKey?: string }; requireSignature?: boolean;
+  sage?: { rpcUrl?: string; apiKey?: string; fingerprint?: string | number }; requireSignature?: boolean;
 }
 
 export function loadConfig(configPath = "./bot-config.json"): BotConfig {
@@ -53,7 +57,13 @@ export function loadConfig(configPath = "./bot-config.json"): BotConfig {
     maxSends: raw.maxSends ?? 500,
     confirmTimeoutMs: raw.confirmTimeoutMs ?? 180_000,
     feeMojos: raw.feeMojos ?? "0",
-    sage: { rpcUrl: raw.sage?.rpcUrl ?? "http://localhost:9257", apiKey: raw.sage?.apiKey },
+    sage: {
+      rpcUrl: raw.sage?.rpcUrl ?? "http://localhost:9257",
+      apiKey: raw.sage?.apiKey,
+      // Accept number or string in the JSON (fingerprints are u32s; people paste both) but pin as a string.
+      // Deliberately NO env override: the pin lives only in the config file next to the ledger.
+      fingerprint: raw.sage?.fingerprint != null && String(raw.sage.fingerprint).trim() !== "" ? String(raw.sage.fingerprint).trim() : undefined,
+    },
     requireSignature: raw.requireSignature ?? false,
   };
 }
