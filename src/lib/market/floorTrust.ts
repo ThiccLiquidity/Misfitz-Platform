@@ -1,5 +1,4 @@
 import { fetchCollectionSaleFloor, fetchCollectionSaleFloorWarm, fetchCollectionAsks, fetchCollectionAsksWarm } from "./dexie";
-import { robustFloor } from "@/lib/valuation/estimate";
 
 // TRUSTED-FLOOR resolver — the single chokepoint that stops troll/never-sell listings from poisoning values.
 // Owner-decided rules (VALUATION-MODEL.md §4a):
@@ -12,7 +11,7 @@ import { robustFloor } from "@/lib/valuation/estimate";
 //      anchor. Frozen model params are untouched — this only sanitizes the floor INPUT.
 const _capMult = Number(process.env.TRAITFOLIO_SALES_CAP_MULT);
 export const SALES_CAP_MULT = _capMult > 0 ? _capMult : 4; // thin-collection sanity cap only
-export const MIN_ROBUST_ASKS = 3; // >= this many clean asks => trust the robust median (a run-up is real)
+export const MIN_TRUSTED_ASKS = 3; // >= this many clean asks => trust the cheapest (a run-up is real, not a lone troll)
 
 export type FloorTrust = "sales-backed" | "indicative" | "none";
 
@@ -28,22 +27,23 @@ export interface TrustedFloor {
 export function trustedFloorFrom(salesAnchor: number | null, asks: number[], mgFloor?: number | null): TrustedFloor {
   const clean = (asks ?? []).filter((p) => typeof p === "number" && p > 0).sort((a, b) => a - b);
   const mg = (typeof mgFloor === "number" && mgFloor > 0) ? mgFloor : null;
-  const robust = robustFloor(clean) ?? mg;       // median of cheapest 5; falls back to MintGarden floor
-  const displayAsk = clean[0] ?? mg;             // cheapest ask (may be a troll)
+  const cheapest = clean[0] ?? mg;               // the cheapest real ask = the floor you can actually buy at
+  const displayAsk = cheapest;
 
   if (salesAnchor == null || salesAnchor <= 0) {
     // No sales -> unpriced. Show the ask (if any) as indicative; value against nothing.
     return { valueFloor: null, displayAsk, salesAnchor: null, trust: displayAsk != null ? "indicative" : "none", capped: false };
   }
-  // Sales-backed. With enough clean asks the robust median IS the floor (a single troll can't move it), so a
-  // genuine run-up shows its true price. Thin collections (a lone ask) get the sales sanity-cap.
-  if (clean.length >= MIN_ROBUST_ASKS && robust != null) {
-    return { valueFloor: robust, displayAsk, salesAnchor, trust: "sales-backed", capped: false };
+  // Sales-backed: the cheapest real listing IS the floor (that's what every marketplace shows). With enough
+  // listings a genuine run-up is trusted as-is. Only a THIN collection whose lone ask sits far above recent
+  // sales gets the sanity-cap (the lone ask could itself be the troll — the "Not"-with-sales case).
+  if (clean.length >= MIN_TRUSTED_ASKS && cheapest != null) {
+    return { valueFloor: cheapest, displayAsk, salesAnchor, trust: "sales-backed", capped: false };
   }
   const cap = SALES_CAP_MULT * salesAnchor;
-  const raw = robust ?? salesAnchor;
+  const raw = cheapest ?? salesAnchor;
   const valueFloor = Math.min(raw, cap);
-  return { valueFloor, displayAsk, salesAnchor, trust: "sales-backed", capped: robust != null && robust > cap };
+  return { valueFloor, displayAsk, salesAnchor, trust: "sales-backed", capped: cheapest != null && cheapest > cap };
 }
 
 // Blocking resolve (collection page / deal scoring — anchored to the true, sanitized floor).
