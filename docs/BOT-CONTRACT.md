@@ -58,3 +58,31 @@ ledger makes a crash unable to double-pay.
 Fresh distribution wallet fingerprint + Sage RPC details; the $CHIPS tail id (mint it); the funding caps; and the
 on-chain royalty gate + manifest signing before real rewards go live. Until then: `preview` works today on real
 shadow data; live `send` is correctly refused by the guards.
+
+---
+
+## Safety hardening (from the Fable adversarial review — read before going live)
+- **One bot at a time.** The ledger takes an exclusive lock (`bot-ledger.json.lock`). A second run refuses to
+  start. If the bot crashed, verify no send is in flight (inspect the ledger's `intended`), then delete the lock.
+- **First run is explicit.** A *missing* ledger is treated as an error (you're probably in the wrong directory,
+  where an empty ledger would double-pay). Pass `--new-ledger` only for a genuine first run. The ledger path is
+  resolved against the **config file's** directory, not your shell's cwd.
+- **Pin the manifest.** `preview` prints the drip manifest hash; a live `send` requires `--expect-hash <that>` and
+  refuses if the freshly-downloaded manifest doesn't match — so a server/transport swap between preview and send
+  can't slip a different payout through. The ops secret is sent as a Bearer header, never in the URL.
+- **Kind is bound to asset.** A "drip" manifest may only pay the $CHIPS asset, a "reward" only $CHIA. A tampered
+  manifest that keeps kind "drip" but sets the asset to $CHIA is rejected.
+- **Crash recovery confirms.** A recovered in-flight tx is re-checked on-chain (`waitConfirmed`) before it's
+  marked paid — a failed/evicted tx never gets recorded as a payment. The bot never auto-resends; it halts.
+- **Write-ahead + fsync.** Each payment is fsync'd to the ledger *before* it's broadcast, so even a power loss
+  can't lose the record and cause a resend.
+
+## Sage semantics you MUST confirm before the first LIVE send (botSage.ts is marked TODO-CONFIRM)
+1. **Amount units** — is Sage's `send_cat.amount` in CAT **base units** or display units (decimals: 3)? Getting
+   this wrong is a silent 1000× mis-send. Confirm against a tiny test send first.
+2. **Memo round-trip** — Chia memos are hex bytes. `lookupTx` matches the paymentKey memo; if Sage returns memos
+   as hex while we store a JSON string, crash-recovery lookup silently never matches (safe — it just halts and you
+   reconcile by hand — but know that's the workflow).
+3. **`confirmed` means on-chain** (not merely "submitted"), and Sage's real RPC endpoint/auth (it may use TLS
+   client certs rather than a Bearer key — adjust `rpc()` accordingly).
+4. Set a small nonzero `feeMojos` so a send doesn't sit unconfirmed under mempool load.

@@ -39,9 +39,14 @@ export async function runBotPayout(m: PayoutManifest, deps: BotDeps, opts: BotOp
 
   // 1) Verify — hash + guards always; the operator SIGNATURE too unless allowUnsigned. Reward manifests must be
   //    chain-verified (Design 1's gate) before a single payment goes out.
-  const vr = verifyManifest(m, { allowedAssets: opts.allowedAssets, fundingCapUnits: opts.fundingCapUnits, verifySignature: opts.allowUnsigned ? undefined : deps.verifySig });
+  const vr = verifyManifest(m, { allowedAssets: opts.allowedAssets, kind: opts.expectedKind, fundingCapUnits: opts.fundingCapUnits, verifySignature: opts.allowUnsigned ? undefined : deps.verifySig });
   if (!vr.ok) return halt("verify failed: " + vr.errors.join("; "));
   if (m.kind === "reward" && m.provenance !== "chain-verified") return halt("reward manifest is not chain-verified — run the on-chain royalty gate first");
+  // Bind kind->asset: a tampered "drip" manifest must not be able to pay out $CHIA (or vice-versa).
+  if (opts.expectedAssetId && m.asset.id !== opts.expectedAssetId) return halt(`manifest asset ${m.asset.id} is not the expected asset for a ${m.kind} payout — refusing`);
+  // Every recipient's paymentKey is scoped by collectionId; a missing one risks a cross-collection ledger
+  // collision (double-pay or a silent skip). Refuse rather than pay on an ambiguous key.
+  if (!m.collectionId) return halt("manifest has no collectionId — refusing (payment-key collision risk)");
 
   // 2) Crash-recovery sweep: an "intended" with no "done" means we may have sent (or not) before a crash. Never
   //    auto-resend — resolve via the wallet's dedupe lookup, else HALT for the operator.
@@ -50,8 +55,13 @@ export async function runBotPayout(m: PayoutManifest, deps: BotDeps, opts: BotOp
   for (const it of intended) {
     if (ledger.get(it.key) === it.amountUnits) continue; // already done
     const tx = deps.wallet.lookupTx ? await deps.wallet.lookupTx(it.key).catch(() => null) : null;
-    if (tx) { await deps.store.markDone(it.key, it.amountUnits, tx); ledger.set(it.key, it.amountUnits); }
-    else return halt(`unresolved intended payment: ${it.key} — reconcile before re-running`);
+    if (tx) {
+      // A found tx is NOT proof of payment — Sage keeps failed/evicted/pending records too. Hold it to the same
+      // bar as a fresh send: confirm on-chain or HALT for the operator (never mark a dead tx as paid).
+      const confirmed = await deps.wallet.waitConfirmed(tx, opts.confirmTimeoutMs ?? 120_000);
+      if (!confirmed) return halt(`recovered tx ${tx} for ${it.key} exists but is NOT confirmed on-chain — reconcile before re-running`);
+      await deps.store.markDone(it.key, it.amountUnits, tx); ledger.set(it.key, it.amountUnits);
+    } else return halt(`unresolved intended payment: ${it.key} — reconcile before re-running`);
   }
 
   // 3) Ledger diff — a changed amount for an already-paid recipient is a conflict; NEVER auto top-up.

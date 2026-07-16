@@ -33,4 +33,6 @@ export interface BotOpts {
   confirmTimeoutMs?: number; // waitConfirmed budget per send (default 120s)
   allowUnsigned?: boolean;   // DELIBERATE hash-only mode (v1): skip the operator-SIGNATURE gate but keep the hash
                              // + all other guards. Must be set explicitly — a normal run still requires a signer.
+  expectedKind?: "reward" | "drip"; // the operator asked to pay THIS kind — reject a manifest whose kind differs.
+  expectedAssetId?: string;         // ...and its asset MUST be this (binds kind->asset: a "drip" can't pay $CHIA).
 }

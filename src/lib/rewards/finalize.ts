@@ -55,7 +55,9 @@ export function finalizeDripManifest(
   tokenAssetId: string,
   sign: (hashHex: string) => string,
   symbol = "$TOKEN",
+  collectionId?: string, // REQUIRED for the payout bot (it halts on a manifest with no collectionId — the
+                         // paymentKey is scoped by it, so omitting it risks a cross-collection ledger collision).
 ): PayoutManifest {
-  const m = buildDripManifest(epochId, drip, Date.now(), { symbol, assetId: tokenAssetId });
+  const m = buildDripManifest(epochId, drip, Date.now(), { symbol, assetId: tokenAssetId, collectionId });
   return signManifest(m, sign);
 }

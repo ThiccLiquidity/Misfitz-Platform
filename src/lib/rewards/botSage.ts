@@ -8,7 +8,7 @@
 // confirm, set no `sage.confirmed` and a live send fails safely with a clear message.
 import type { WalletRpc } from "./botDeps";
 
-interface SageCfg { rpcUrl: string; apiKey?: string }
+interface SageCfg { rpcUrl: string; apiKey?: string; feeMojos?: string }
 
 export class SageWallet implements WalletRpc {
   constructor(private readonly cfg: SageCfg) {}
@@ -35,7 +35,7 @@ export class SageWallet implements WalletRpc {
       address: p.toWallet,
       amount: p.amountUnits.toString(),
       memos: [p.dedupeTag],
-      fee: 0,
+      fee: this.cfg.feeMojos ?? "0",
     });
     const txId = out.transaction_id ?? out.tx_id;
     if (!txId) throw new Error(`Sage send_cat returned no transaction id${out.error ? `: ${out.error}` : ""}`);

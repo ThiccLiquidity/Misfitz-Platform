@@ -55,6 +55,9 @@ export function verifyManifest(m: PayoutManifest, opts: VerifyOptions): VerifyRe
     const key = `${r.assetId} ${r.wallet}`;
     if (seen.has(key)) errors.push(`duplicate recipient: ${r.assetId}/${r.wallet}`);
     seen.add(key);
+    // Canonical decimal only: BigInt("0x10") would silently parse hex, letting the ledger string-compare and the
+    // hash canonicalization disagree for equal values. Amounts must be plain base-10 integer strings.
+    if (!/^(0|[1-9][0-9]*)$/.test(r.amountUnits)) { errors.push(`non-canonical amount for ${r.wallet}: ${r.amountUnits}`); continue; }
     let amt: bigint;
     try {
       amt = BigInt(r.amountUnits);
