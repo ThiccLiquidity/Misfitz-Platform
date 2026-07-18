@@ -213,6 +213,16 @@ function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean, fres
 // instance yet. Drives the "values as of X ago" freshness badge.
 export function compsBuiltAt(colId: string): number | null { return _builtAt.get(colId) ?? null; }
 
+// Manual bust: force a FRESH comps rebuild NOW — bypasses the tip-probe throttle, the age timers, and the
+// cached sales blob (fresh=true re-pulls Dexie). AWAITED so the caller can immediately recompute + re-index
+// with the new model. Abuse-bounded by the same cross-instance build lock as every other rebuild path
+// (lock-losers just pick up the freshly persisted blob), so hammering it cannot 429-storm Dexie/MintGarden.
+export async function forceCompsRefresh(colId: string): Promise<void> {
+  if (!colId.startsWith("col1")) return;
+  const stale = (await getCompsModel(colId).catch(() => null)) ?? null;
+  await kickBuild(colId, stale, true, true);
+}
+
 // Event-driven freshness: a cheap Dexie tip-probe. If Dexie's newest completed sale is newer than the newest
 // sale already baked into our model, kick a FRESH rebuild and AWAIT it — so the caller can immediately
 // recompute + re-index with the new value. Throttled to one probe per collection per minute per instance;

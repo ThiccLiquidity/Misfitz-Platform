@@ -49,31 +49,4 @@ Plus blast-radius bounds (already mandatory): fund the wallet **per-epoch only**
 set `fundingCapUnits` ≈ that epoch's total — a bug can never touch more than one epoch's pot.
 
 **Operator must confirm once against the installed Sage version (TODO-CONFIRM in `botSage.ts`):** the exact RPC
-method that reports the active key's fingerprint (guessed as `get_key`), and that `send_cat` indeed has no
-per-call key selector. A wrong guess fails closed (halt), but the pin only *protects* once the probe is real.
-
-## The on-chain royalty gate (`src/lib/rewards/chainVerify.ts`, before a REAL reward manifest)
-Implement `RoyaltyChainProvider` (`chainProvider.ts`) against your full node RPC or an indexer: for each sale it
-returns the settlement spend (payments, buyer/seller, price, coin/spend/block, depth). `verifySales(sales,
-provider, cfg)` then confirms the royalty coin actually paid your creator wallet (≥ `minRoyaltyBps` of the chain
-price, ≥ `minBlockDepth` confirmations, single-NFT, XCH-only) and returns `{verified, retry, rejected}`. Only
-`verified` sales (with their ACTUAL on-chain royalty/attribution) build the reward manifest as `chain-verified`;
-`retry` roll to next run; `rejected` are excluded from every pot (a missing royalty is an evasion signal to audit,
-not a rewards event).
-
-## Run book (monthly)
-0. **Wallet check (every run):** open Sage on the DISTRIBUTION profile only (log out / close any other profile —
-   the pin will halt on them anyway, but don't rely on it alone); verify the fingerprint shown matches
-   `sage.fingerprint` in the config. First live run ever: do a tiny canary first — a 1-recipient manifest for a
-   minimal amount to a wallet you control, verify it on-chain, then proceed.
-1. Server publishes the month's reward + drip manifests (signed). Reward manifest is `chain-verified`.
-2. Read the "Send X XCH to the hot wallet" figure from the dashboard/operator plan; do the $CHIA and $TOKEN buys
-   yourself; send the artist cut nowhere (it stays). Fund the distribution wallet with THIS epoch's totals only.
-3. Run the bot for the reward manifest, then the drip manifest, then send the burn $TOKEN to the burn address.
-4. Confirm each dry-run summary. Keep the receipts log.
-
-## Never
-Send without a signature · pay a non-chain-verified reward manifest · `markDone` before the RPC confirmed ·
-auto-resolve a conflict · run sends in parallel · continue past a failed send · put any Traitfolio key in the bot ·
-send from an unpinned wallet (or auto-`login` to "fix" a mismatch) · keep more than one epoch's funds in the
-distribution wallet.
+method that reports the active key's f

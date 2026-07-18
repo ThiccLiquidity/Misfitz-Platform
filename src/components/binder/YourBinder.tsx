@@ -87,6 +87,12 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
         return [...m.values()].sort((a, b) => b.count - a.count);
       };
       let anyFail = false;
+      // Sent-out/sold NFTs: the merge below is APPEND-ONLY, so a stale SSR seed (cached roster / snapshot)
+      // could previously never shrink — a wallet that dropped from 201 to 150 stayed at 201 forever. We
+      // collect every launcherId the live re-page actually returns (union across ALL addresses); when the
+      // scan completes cleanly for every address, that union IS the wallet and we prune to it at the end.
+      const live = new Set<string>();
+      let pruneSafe = true; // false on any no-progress anomaly — never prune cards we may simply not have seen
       const MAX_PAGES = 600; // 30k @ 50/page — hard rail against a pager whose `next` never nulls
       for (const address of holdings.addresses) {
         let cursor: string | undefined = undefined;
@@ -111,6 +117,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           }
           pageFails = 0;
 
+          for (const n of data.cards ?? []) if (n && n.launcherId) live.add(n.launcherId); // ALL returned ids, seen or not
           const incoming = (data.cards ?? []).filter((n) => n && n.launcherId && !seen.has(n.launcherId));
           if (incoming.length) {
             for (const n of incoming) seen.add(n.launcherId);
@@ -121,6 +128,7 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
           }
           const prev: string | undefined = cursor;
           cursor = data.nextCursor ?? undefined;
+          if (cursor && cursor === prev && !data.done) pruneSafe = false; // upstream repeated the cursor — the tail may be unseen
           if (!cursor || data.done || cursor === prev) break; // done, or upstream repeated the cursor (no progress)
           if (++pages >= MAX_PAGES) { setTruncated(true); anyFail = true; break; } // safety rail
         }
@@ -128,6 +136,18 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       }
       if (cancelled) return;
       if (anyFail) setStoppedEarly(true); // an address didn't fully load -> honest "partial" state
+      if (!anyFail && pruneSafe) {
+        // CONVERGE (fix: wallet never drops sent-out NFTs): the scan completed cleanly for EVERY address,
+        // so `live` is exactly what the wallet(s) hold RIGHT NOW. Prune cards the fresh re-page did not
+        // return — NFTs sent/sold since the (possibly cached) SSR seed. Skipped on any partial scan
+        // (anyFail / repeated cursor / page cap) so a rate-limited pass can never drop still-held cards.
+        const pruned = nftsRef.current.filter((n) => live.has(n.launcherId));
+        if (pruned.length !== nftsRef.current.length) {
+          nftsRef.current = pruned;
+          setNfts(pruned);
+          setCollections(deriveCollections(pruned));
+        }
+      }
       setWarming(false); // fully loaded (or partial) -> hand off to the trait/value enrichment effect
     })();
     return () => { cancelled = true; };

@@ -27,7 +27,7 @@ interface CacheDb {
 }
 
 const DETAIL_TTL_MS = 14 * 24 * 60 * 60_000; // 14 days
-const COLLECTION_TTL_MS = 24 * 60 * 60_000;  //  1 day
+const COLLECTION_TTL_MS = 60 * 60_000; // 1h read-fresh (was 24h — served day-stale volume/floor on collection headers)
 
 // -- Shared Redis layer (Phase 2) --------------------------------------------------------------------
 // Reads env at module load. Works with Vercel KV's env vars (KV_REST_API_*) OR a direct Upstash
@@ -185,7 +185,7 @@ export async function cachedCollectionJson(id: string): Promise<string | null> {
   return (await redisGet(`tf:c:${id}`, COLLECTION_TTL_MS)) ?? (await cache())?.getCollection(id) ?? null;
 }
 export function storeCollectionJson(id: string, json: string): void {
-  redisPut(`tf:c:${id}`, json, 48 * 60 * 60); // collection meta readable 1d; 48h ex (was 30d)
+  redisPut(`tf:c:${id}`, json, 48 * 60 * 60); // collection meta readable 1h (COLLECTION_TTL_MS); 48h ex
   void cache().then((c) => c?.putCollection(id, json));
 }
 
