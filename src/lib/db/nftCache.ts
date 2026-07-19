@@ -64,6 +64,31 @@ function redis(): Promise<RedisLike | null> {
   return _redisPromise;
 }
 
+// Per-key-prefix byte counters — relative Upstash bandwidth visibility (per-instance since boot), surfaced
+// via /api/cache-health so we can see what still moves through Redis now that big blobs are on R2. Purely
+// observational: every update is wrapped so a counter bug can NEVER affect a cache read/write.
+const _rbytes = new Map<string, { getBytes: number; putBytes: number; gets: number; puts: number }>();
+function _bucketFor(key: string): { getBytes: number; putBytes: number; gets: number; puts: number } {
+  const parts = key.split(":");
+  const p = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : (parts[0] || "other");
+  let e = _rbytes.get(p);
+  if (!e) { e = { getBytes: 0, putBytes: 0, gets: 0, puts: 0 }; _rbytes.set(p, e); }
+  return e;
+}
+function _noteGet(key: string, bytes: number): void { try { const e = _bucketFor(key); e.gets++; e.getBytes += bytes; } catch { /* never break a read */ } }
+function _notePut(key: string, bytes: number): void { try { const e = _bucketFor(key); e.puts++; e.putBytes += bytes; } catch { /* never break a write */ } }
+// Snapshot for /api/cache-health. Sorted by total bytes desc so the top consumer is obvious.
+export function redisByteStats(): { prefix: string; getMB: number; putMB: number; gets: number; puts: number }[] {
+  const rows = [...(_rbytes.entries())].map(([prefix, v]) => ({
+    prefix,
+    getMB: Math.round((v.getBytes / 1_048_576) * 100) / 100,
+    putMB: Math.round((v.putBytes / 1_048_576) * 100) / 100,
+    gets: v.gets, puts: v.puts,
+  }));
+  rows.sort((a, b) => (b.getMB + b.putMB) - (a.getMB + a.putMB));
+  return rows;
+}
+
 // Redis stores an envelope { v: <json string>, t: <fetchedAt ms> } so freshness is checked on read with
 // the caller's TTL (same semantics as SQLite). @upstash/redis serializes/parses JSON transparently.
 async function redisGet(key: string, ttlMs: number): Promise<string | null> {
@@ -71,6 +96,7 @@ async function redisGet(key: string, ttlMs: number): Promise<string | null> {
     const r = await redis();
     if (!r) return null;
     const o = (await r.get(key)) as { v?: string; t?: number } | null;
+    if (o && typeof o.v === "string") _noteGet(key, o.v.length); // bytes transferred, fresh or stale
     if (o && typeof o.v === "string" && typeof o.t === "number" && Date.now() - o.t < ttlMs) return o.v;
     return null;
   } catch { return null; }
@@ -90,6 +116,7 @@ export function keepAlive(p: Promise<unknown>): void {
   void safe;
 }
 function redisPut(key: string, json: string, exSeconds: number = REDIS_GC_TTL_S): void {
+  _notePut(key, json.length);
   keepAlive(redis().then((r) => r?.set(key, { v: json, t: Date.now() }, { ex: exSeconds })));
 }
 
@@ -172,6 +199,7 @@ export async function cachedDetailJsonMany(ids: string[]): Promise<(string | nul
           const vals = (await r.mget(...slice.map((id) => `tf:d:${id}`))) as ({ v?: string; t?: number } | null)[];
           for (let j = 0; j < slice.length; j++) {
             const o = vals[j];
+            if (o && typeof o.v === "string") _noteGet(`tf:d:${slice[j]}`, o.v.length); // count MGET bytes (the enrichment hot path)
             if (o && typeof o.v === "string" && typeof o.t === "number" && now - o.t < DETAIL_REDIS_TTL_MS) out[start + j] = o.v;
           }
         } catch { /* this chunk falls to local/network; other chunks unaffected */ }
