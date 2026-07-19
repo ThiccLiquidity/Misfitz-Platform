@@ -80,3 +80,34 @@ it's on the Upstash console → database → Usage.)
 3. **Soon:** Tier-2 #1 (freq key) + #2 (R2 for mega-blobs) for permanent headroom.
 4. Add a per-key **byte counter** to `/api/status` (wrap the get/set/mget calls in nftCache.ts) so we
    measure the top keys instead of estimating.
+
+---
+
+## Enabling Cloudflare R2 (the structural fix — your steps)
+The pluggable blob backend is built and flag-gated: with no R2 env vars the app uses Redis exactly as
+before. To move the big blobs (rosters, rarity tables, wallet holdings) onto R2's zero-egress storage:
+
+1. **Create the bucket.** Cloudflare dashboard → R2 → *Create bucket* → name it e.g. `traitfolio-cache`.
+2. **Create an API token.** R2 → *Manage R2 API Tokens* → *Create API token* → permission **Object Read & Write**,
+   scoped to that bucket. Copy the **Access Key ID**, **Secret Access Key**, and your **Account ID** (shown in
+   the R2 overview / endpoint `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`).
+3. **Set env vars in Vercel** (Project → Settings → Environment Variables) and your local `.env`:
+   ```
+   R2_ACCOUNT_ID=<account id>
+   R2_ACCESS_KEY_ID=<access key id>
+   R2_SECRET_ACCESS_KEY=<secret>
+   R2_BUCKET=traitfolio-cache
+   TRAITFOLIO_BLOB_STORE=r2
+   ```
+   (Leaving `TRAITFOLIO_BLOB_STORE` unset also works once the four R2 vars are present — it auto-enables.
+   Set it to `redis` to force the old path back.)
+4. **Add a lifecycle rule** on the bucket to garbage-collect old objects (R2 → bucket → Settings → Object
+   lifecycle → delete objects after e.g. **7 days**). The code also freshness-checks each object on read, so
+   stale blobs are ignored regardless; the rule just keeps storage tiny.
+5. **Deploy.** On the first read after enabling, a blob not yet on R2 falls back to the existing Redis copy
+   (migration is seamless — no cache wipe); new writes go to R2. Redis bandwidth for these blobs then drops
+   to ~zero as traffic shifts to R2.
+6. `npm install` (pulls `aws4fetch`, the R2 request signer) before the build.
+
+Cost on R2: storage only (~$0.015/GB-month; first 10 GB free), reads are free. For Traitfolio's blob volume
+that's effectively $0.

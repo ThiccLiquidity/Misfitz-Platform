@@ -16,6 +16,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
+import { getActiveBlobBackend } from "./blobStore";
 
 interface CacheDb {
   getDetail(id: string): string | null;
@@ -211,24 +212,54 @@ const KVZ_SHARD_MAX = 800_000; // base64 chars per shard, safely under the ~1MB 
 // shard keys so a torn re-write can never mix an old shard with a new one — a reader either sees a complete
 // generation or falls back to a miss (safe re-scan). All awaited so a completed build actually persists
 // before the serverless function is frozen.
-async function putLargeInner(key: string, json: string, exSeconds: number = REDIS_GC_TTL_S): Promise<void> {
-  const b64 = gzipSync(Buffer.from(json, "utf8")).toString("base64");
+// Redis large-blob PRIMITIVES (operate on the base64-gzip payload) — the DEFAULT backend, and the read
+// fallback while blobs migrate to R2. Same sharded manifest + generation-stamp scheme as before.
+async function redisPutLargeB64(key: string, b64: string, exSeconds: number): Promise<void> {
   const g = Date.now().toString(36);
   const shards = Math.max(1, Math.ceil(b64.length / KVZ_SHARD_MAX));
   const r = await redis();
-  if (r) {
-    if (shards === 1) {
-      // Fits in one shard (the common case: gzipped roster/rarity ~80-200KB) -> inline it in the manifest so
-      // a read is ONE GET instead of manifest + shard. Big command saver on the hottest read paths.
-      await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards: 1, len: b64.length, data: b64 }), t: Date.now() }, { ex: exSeconds });
-    } else {
-      for (let i = 0; i < shards; i++) {
-        await r.set(`tf:kvz:${key}:${g}:${i}`, { v: b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX), t: Date.now() }, { ex: exSeconds });
-      }
-      await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: exSeconds });
+  if (!r) return;
+  if (shards === 1) {
+    // Fits in one shard (the common case: gzipped roster/rarity ~80-200KB) -> inline it in the manifest so
+    // a read is ONE GET instead of manifest + shard. Big command saver on the hottest read paths.
+    await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards: 1, len: b64.length, data: b64 }), t: Date.now() }, { ex: exSeconds });
+  } else {
+    for (let i = 0; i < shards; i++) {
+      await r.set(`tf:kvz:${key}:${g}:${i}`, { v: b64.slice(i * KVZ_SHARD_MAX, (i + 1) * KVZ_SHARD_MAX), t: Date.now() }, { ex: exSeconds });
+    }
+    await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: exSeconds });
+  }
+}
+async function redisGetLargeB64(key: string, ttlMs: number): Promise<string | null> {
+  const man = await redisGet(`tf:kvz:${key}`, ttlMs);
+  if (!man) return null;
+  const m = JSON.parse(man) as { g?: string; shards: number; len?: number; data?: string };
+  let joined: string | null = null;
+  if (typeof m.data === "string") {
+    joined = m.data; // inlined single-shard payload -> 1 GET total
+  } else if (m.shards > 0 && typeof m.g === "string") {
+    const r = await redis();
+    if (r) {
+      const keys = Array.from({ length: m.shards }, (_, i) => `tf:kvz:${key}:${m.g}:${i}`);
+      const vals = (await r.mget(...keys)) as ({ v?: string } | null)[]; // ONE command for all shards
+      const parts: string[] = [];
+      let ok = true;
+      for (const o of vals) { if (o && typeof o.v === "string") parts.push(o.v); else { ok = false; break; } }
+      if (ok) joined = parts.join("");
     }
   }
-  await cache().then((c) => c?.putKv(`z:${key}`, b64));
+  if (joined != null && (typeof m.len !== "number" || joined.length === m.len)) return joined;
+  return null;
+}
+
+async function putLargeInner(key: string, json: string, exSeconds: number = REDIS_GC_TTL_S): Promise<void> {
+  const b64 = gzipSync(Buffer.from(json, "utf8")).toString("base64");
+  const backend = getActiveBlobBackend(); // R2 when configured, else null -> Redis
+  try {
+    if (backend) await backend.putBlob(key, b64, exSeconds);
+    else await redisPutLargeB64(key, b64, exSeconds);
+  } catch { /* shared write optional; the local blob below still covers this instance */ }
+  await cache().then((c) => c?.putKv(`z:${key}`, b64)); // per-instance local fallback, always
 }
 // Fire-and-forget (kept alive past function freeze). Use for non-critical large writes.
 export function cachePutLarge(key: string, json: string, exSeconds?: number): void {
@@ -240,26 +271,17 @@ export async function cachePutLargeAsync(key: string, json: string, exSeconds?: 
 }
 export async function cacheGetLarge(key: string, ttlMs: number): Promise<string | null> {
   try {
-    const man = await redisGet(`tf:kvz:${key}`, ttlMs);
-    if (man) {
-      const m = JSON.parse(man) as { g?: string; shards: number; len?: number; data?: string };
-      let joined: string | null = null;
-      if (typeof m.data === "string") {
-        joined = m.data; // inlined single-shard payload -> 1 GET total
-      } else if (m.shards > 0 && typeof m.g === "string") {
-        const r = await redis();
-        if (r) {
-          const keys = Array.from({ length: m.shards }, (_, i) => `tf:kvz:${key}:${m.g}:${i}`);
-          const vals = (await r.mget(...keys)) as ({ v?: string } | null)[]; // ONE command for all shards
-          const parts: string[] = [];
-          let ok = true;
-          for (const o of vals) { if (o && typeof o.v === "string") parts.push(o.v); else { ok = false; break; } }
-          if (ok) joined = parts.join("");
-        }
-      }
-      if (joined != null && (typeof m.len !== "number" || joined.length === m.len)) return gunzipSync(Buffer.from(joined, "base64")).toString("utf8");
+    const backend = getActiveBlobBackend();
+    let b64: string | null = null;
+    if (backend) {
+      b64 = await backend.getBlob(key, ttlMs).catch(() => null);
+      // Migration fallback: a blob written before R2 was enabled still lives in Redis until it expires.
+      if (b64 == null) b64 = await redisGetLargeB64(key, ttlMs).catch(() => null);
+    } else {
+      b64 = await redisGetLargeB64(key, ttlMs).catch(() => null);
     }
-    const localB64 = (await cache())?.getKv(`z:${key}`, ttlMs);
+    if (b64 != null) return gunzipSync(Buffer.from(b64, "base64")).toString("utf8");
+    const localB64 = (await cache())?.getKv(`z:${key}`, ttlMs); // per-instance local fallback
     if (localB64) return gunzipSync(Buffer.from(localB64, "base64")).toString("utf8");
     return null;
   } catch { return null; }
