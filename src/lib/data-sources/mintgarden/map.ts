@@ -160,7 +160,11 @@ function getRankEstimator(collection: MgCollection): RankEstimator | null {
   const total = collection.nft_count ?? 0;
   const key = `${collection.id}:${total}`;
   if (!rankEstimatorCache.has(key)) {
-    rankEstimatorCache.set(key, buildRankEstimator(collection.attributes_frequency_counts ?? {}, total));
+    const counts = collection.attributes_frequency_counts;
+    // Don't cache a null estimator from an absent table — the table can be transiently missing (re-sourced
+    // from collection meta elsewhere); caching null here would poison this collection for the process life.
+    if (!counts || Object.keys(counts).length === 0) return null;
+    rankEstimatorCache.set(key, buildRankEstimator(counts, total));
   }
   return rankEstimatorCache.get(key) ?? null;
 }

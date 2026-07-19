@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     // Don't pin a still-"warming" payload at the edge — serve those no-store so the warmed data appears next.
     const cache = r.warming || force
       ? "no-store"
-      : "public, max-age=60, s-maxage=600, stale-while-revalidate=3600"; // 10min edge (was 5) — halves cold-origin roster/rarity/comps blob reads; values still converge via /api/values
+      : "public, max-age=60, s-maxage=1800, stale-while-revalidate=86400"; // 30min edge — big cut to cold-origin roster/rarity/comps blob reads; values still converge via /api/values
     return NextResponse.json({ ...r, recentSales }, { headers: { "Cache-Control": cache } });
   } catch {
     return NextResponse.json({ error: "upstream unavailable" }, { status: 502 });

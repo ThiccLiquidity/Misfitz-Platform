@@ -162,7 +162,10 @@ function slimNftDetail(d: MgNftDetail): MgNftDetail {
       banner_uri: c.banner_uri ?? null,
       nft_count: c.nft_count ?? null,
       floor_price: c.floor_price ?? null,
-      attributes_frequency_counts: c.attributes_frequency_counts ?? null,
+      // attributes_frequency_counts is INTENTIONALLY dropped here — it's a per-COLLECTION table (~10KB) that was
+      // being duplicated into every NFT's blob (~78% of each detail's bytes). Consumers re-source it ONCE per
+      // collection from getCollection() meta (which carries the same MintGarden table). Massive Redis-bandwidth cut.
+      attributes_frequency_counts: null,
       volume: c.volume ?? null,
       trade_count: c.trade_count ?? null,
       creator: c.creator ?? null,
@@ -258,21 +261,59 @@ const EMPTY_PAGE: MgPage<MgListItem> = { items: [], next: null, previous: null }
 // Batch-fetch details, reading ALL cache hits in ONE Redis MGET (vs one GET per id) — the biggest command
 // saver on the enrichment/comps paths. Only cache-missing ids hit MintGarden (bounded concurrency). Order
 // preserved; each entry is the detail or null.
+// In-process memo of per-NFT detail JSON so a warm lambda serving repeat enrichment chunks (value polls,
+// re-mounts, comps rebuilds on the same instance) does NOT re-MGET the same details from Redis every time —
+// after FIX #1 the details are small (~2-3KB), so this is pure Redis-bandwidth savings. Bounded + TTL'd.
+const _detailJsonMemo = new Map<string, { json: string; at: number }>();
+const DETAIL_JSON_MEMO_MS = 60 * 60_000;      // matches NFT_DETAIL_TTL; details are near-immutable
+const DETAIL_JSON_MEMO_BUDGET = 24_000_000;   // ~24MB of JSON chars — bounds lambda memory even during the
+                                              // 24h window where some blobs still carry the old fat freq table
+let _detailJsonMemoBytes = 0;
+function detailMemoGet(id: string): string | null {
+  const m = _detailJsonMemo.get(id);
+  if (!m) return null;
+  if (Date.now() - m.at >= DETAIL_JSON_MEMO_MS) { _detailJsonMemoBytes -= m.json.length; _detailJsonMemo.delete(id); return null; }
+  return m.json;
+}
+function detailMemoPut(id: string, json: string): void {
+  const prev = _detailJsonMemo.get(id);
+  if (prev) _detailJsonMemoBytes -= prev.json.length;
+  _detailJsonMemo.set(id, { json, at: Date.now() });
+  _detailJsonMemoBytes += json.length;
+  while (_detailJsonMemoBytes > DETAIL_JSON_MEMO_BUDGET && _detailJsonMemo.size > 1) { // evict oldest until under budget
+    const oldest = _detailJsonMemo.keys().next().value;
+    if (oldest === undefined) break;
+    const e = _detailJsonMemo.get(oldest);
+    if (e) _detailJsonMemoBytes -= e.json.length;
+    _detailJsonMemo.delete(oldest);
+  }
+}
+
 export async function getNftDetailsBatch(ids: string[], background = false): Promise<(MgNftDetail | null)[]> {
   const out: (MgNftDetail | null)[] = new Array(ids.length).fill(null);
   if (ids.length === 0) return out;
-  const cachedJsons = await cachedDetailJsonMany(ids).catch(() => new Array<string | null>(ids.length).fill(null));
-  const miss: number[] = [];
+  // 1) In-proc memo first — only the ids we don't already have go to the Redis MGET.
+  const needIdx: number[] = [];
   for (let i = 0; i < ids.length; i++) {
-    const j = cachedJsons[i];
+    const j = detailMemoGet(ids[i]);
     if (j) { try { out[i] = JSON.parse(j) as MgNftDetail; continue; } catch { /* refetch */ } }
-    miss.push(i);
+    needIdx.push(i);
   }
-  if (miss.length) {
-    const LIMIT = 12; let next = 0;
-    await Promise.all(Array.from({ length: Math.min(LIMIT, miss.length) }, async () => {
-      while (next < miss.length) { const k = miss[next++]; out[k] = await getNftDetail(ids[k], background, false, true).catch(() => null); }
-    }));
+  if (needIdx.length) {
+    const cachedJsons = await cachedDetailJsonMany(needIdx.map((n) => ids[n])).catch(() => new Array<string | null>(needIdx.length).fill(null));
+    const miss: number[] = [];
+    for (let n = 0; n < needIdx.length; n++) {
+      const i = needIdx[n];
+      const j = cachedJsons[n];
+      if (j) { try { out[i] = JSON.parse(j) as MgNftDetail; detailMemoPut(ids[i], j); continue; } catch { /* refetch */ } }
+      miss.push(i);
+    }
+    if (miss.length) {
+      const LIMIT = 12; let next = 0;
+      await Promise.all(Array.from({ length: Math.min(LIMIT, miss.length) }, async () => {
+        while (next < miss.length) { const k = miss[next++]; out[k] = await getNftDetail(ids[k], background, false, true).catch(() => null); }
+      }));
+    }
   }
   return out;
 }

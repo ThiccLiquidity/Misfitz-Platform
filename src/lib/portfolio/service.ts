@@ -4,7 +4,7 @@ import { mapDetailToNftData, nftMarketAnchorXch, isDisplayableNft } from "@/lib/
 import { getCollectionFrequency, scaledRankOf, type CollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { computeDealScore } from "@/lib/rarity/enrich";
-import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
+import { getNftDetailsBatch, getCollection } from "@/lib/data-sources/mintgarden/client";
 import { fetchXchUsdRate, fetchCollectionFloor, fetchCollectionListingCount, fetchCollectionSaleFloor, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { valueRange, type Confidence } from "@/lib/valuation/range";
 import { getCompsModel } from "@/lib/valuation/compsService";
@@ -201,12 +201,34 @@ export async function enrichNftsByIds(
   // small bounded-concurrency pool
   const details = await getNftDetailsBatch(ids); // ONE Redis MGET for cached details; network only for misses
 
+  // Detail blobs no longer embed the per-collection attributes_frequency_counts (bandwidth). Re-source
+  // MintGarden's table ONCE per collection from the (small, cached) collection meta and inject it back, so
+  // RANKED collections keep identical trait-rarity %/ranks. Unranked collections (meta also lacks it) fall
+  // through to OUR computed table in the needFreq pass below, exactly as before.
+  {
+    const metaCols = [...new Set(details.filter((d): d is NonNullable<typeof d> => !!d?.collection?.id?.startsWith("col1")).map((d) => d.collection.id))];
+    const mgTables = new Map<string, Record<string, Record<string, number>>>();
+    await Promise.all(metaCols.map(async (c) => {
+      try { const meta = await getCollection(c); if (meta?.attributes_frequency_counts) mgTables.set(c, meta.attributes_frequency_counts); } catch { /* fall through to our table */ }
+    }));
+    for (const d of details) {
+      if (d && !d.collection.attributes_frequency_counts) {
+        const t = mgTables.get(d.collection.id);
+        if (t) d.collection.attributes_frequency_counts = t;
+      }
+    }
+  }
+
   // For collections MintGarden hasn't ranked (no attributes_frequency_counts) but whose NFTs carry
   // traits, inject OUR OWN computed frequency table so the rank estimator + trait-rarity math can run.
   // Non-blocking: uses the cached table if warm, else kicks a background build and skips this pass.
+  // GUARD: a collection whose details carry openrarity_rank is MintGarden-RANKED — never route it here even
+  // if the meta re-inject above failed transiently, or we'd (a) kick a needless full scan and (b) overwrite
+  // genuine MG ranks with our scaled ranks. Trait % just stays absent for this one response instead.
+  const rankedCols = new Set(details.filter((d): d is NonNullable<typeof d> => !!d && d.openrarity_rank != null && !!d.collection?.id).map((d) => d.collection.id));
   const needFreq = [...new Set(
     details
-      .filter((d): d is NonNullable<typeof d> => !!d && !d.collection?.attributes_frequency_counts && !!d.collection?.id?.startsWith("col1") && !isSeeded(d.collection.id))
+      .filter((d): d is NonNullable<typeof d> => !!d && !d.collection?.attributes_frequency_counts && !!d.collection?.id?.startsWith("col1") && !isSeeded(d.collection.id) && !rankedCols.has(d.collection.id))
       .map((d) => d.collection.id),
   )];
   const freqByCol = new Map<string, CollectionFrequency>();

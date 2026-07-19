@@ -1,6 +1,5 @@
 {
   "crons": [
-    { "path": "/api/warm", "schedule": "0 8 * * *" },
     { "path": "/api/rewards/cron", "schedule": "0 9 * * *" }
   ]
 }

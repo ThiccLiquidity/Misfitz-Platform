@@ -14,7 +14,7 @@
 import { fetchCollectionCompletedSales, fetchCollectionSalesTip } from "@/lib/market/dexie";
 import { resolveTrustedFloor } from "@/lib/market/floorTrust";
 import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
-import { getNftDetailsBatch } from "@/lib/data-sources/mintgarden/client";
+import { getNftDetailsBatch, getCollection } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
 import { cacheGet, cachePut, keepAlive, tryLock, releaseLock } from "@/lib/db/nftCache";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
@@ -146,6 +146,14 @@ async function build(colId: string, opts: { fresh?: boolean } = {}): Promise<Com
     rankOf = (r) => (r.num != null ? seed.byNumber[String(r.num)]?.rank ?? null : null);
   } else if (haveMgRanks) {
     if (supply <= 0) supply = fetched.reduce((m, r) => Math.max(m, r.mgRank ?? 0), 0);
+    // Details no longer embed the freq table — re-source MintGarden's from the (cached) collection meta so
+    // trait-demand still works for ranked collections (identical numbers, once-per-collection read). background
+    // lane (build() runs off the interactive path). Last-resort: our own computed table, so trait-demand is
+    // never silently dropped (which would change values and cache the degraded model).
+    if (!traitFreq) {
+      try { const meta = await getCollection(colId, true); if (meta?.attributes_frequency_counts) traitFreq = meta.attributes_frequency_counts as TraitFreq; } catch { /* fall through */ }
+      if (!traitFreq) { const fd = await getCollectionFrequency(colId, { waitMs: 1500 }).catch(() => null); if (fd?.freq) traitFreq = fd.freq as TraitFreq; }
+    }
     rankOf = (r) => r.mgRank;
   } else {
     const freqData = await getCollectionFrequency(colId, { wait: true }).catch(() => null);

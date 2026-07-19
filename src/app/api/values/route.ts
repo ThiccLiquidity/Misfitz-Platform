@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import { readValueIndex, vidxIsFresh } from "@/lib/valuation/valueIndex";
 import { getAllCollectionCards } from "@/lib/collections/liveCollection";
 import { keepAlive } from "@/lib/db/nftCache";
+
+// Per-instance throttle: a "pending"/stale collection should not re-kick the (multi-MB) getAllCollectionCards
+// build on EVERY poll — once per 5 min per collection is plenty and slashes repeated roster/vidx reads.
+const _lastKick = new Map<string, number>();
+function shouldKick(colId: string): boolean {
+  const now = Date.now();
+  const last = _lastKick.get(colId) ?? 0;
+  if (now - last < 5 * 60_000) return false;
+  _lastKick.set(colId, now);
+  return true;
+}
 import type { ValueEntry } from "@/lib/valuation/valueEntry";
 
 // Cheap value lookup for the portfolio's convergence poll: given held ids grouped by collection, return each
@@ -25,11 +36,11 @@ export async function POST(req: Request) {
     const idx = await readValueIndex(colId).catch(() => null);
     if (!idx) {
       pending.push(colId);
-      keepAlive(getAllCollectionCards(colId).catch(() => null)); // shared cold build; writes the index for next poll
+      if (shouldKick(colId)) keepAlive(getAllCollectionCards(colId).catch(() => null)); // shared cold build; writes the index for next poll
       return;
     }
     if (idx.builtAt > asOf) asOf = idx.builtAt;
-    if (!vidxIsFresh(idx)) keepAlive(getAllCollectionCards(colId).catch(() => null)); // serve stale NOW, rebuild for the next poll
+    if (!vidxIsFresh(idx) && shouldKick(colId)) keepAlive(getAllCollectionCards(colId).catch(() => null)); // serve stale NOW, rebuild for the next poll
     const ids = Array.isArray(cols[colId]) ? (cols[colId] as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 600) : [];
     for (const nftId of ids) { const e = idx.values[nftId]; if (e) values[nftId] = e; }
   }));
