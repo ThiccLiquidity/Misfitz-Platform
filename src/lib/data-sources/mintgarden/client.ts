@@ -127,7 +127,7 @@ async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Prom
   return p as Promise<T>;
 }
 
-const NFT_DETAIL_TTL = 10 * 60_000;
+const NFT_DETAIL_TTL = 60 * 60_000; // 60min (was 10) — details are near-immutable (traits/art); cuts refetch+rewrite churn. Sale-event freshness is owned by the sales/holdings paths, not this blob.
 const COLLECTION_TTL = 10 * 60_000;
 
 // Project a raw NFT detail down to ONLY the fields we consume (exactly the typed MgNftDetail shape) before

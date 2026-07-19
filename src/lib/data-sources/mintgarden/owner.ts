@@ -69,6 +69,25 @@ const HOLDSCAN_EX_S = 30 * 60;    // ...persisted 30 min
 const PAGE_BUDGET_MS = 28_000;    // per-invocation paging budget — leaves room for metadata + writes under 60s
 
 interface CachedListings { items: MgListItem[]; collections: [string, MgCollection][]; truncated: boolean }
+
+// Short in-process L1 memo of the COMPLETED roster so repeated holdings polls within a warm lambda don't
+// re-pull the whole (up to ~1MB gzipped) roster from Redis on every call — holdings3 was the one big blob
+// with no memo (frequency/comps/value-index all have one). 45s << HOLDINGS_TTL, so it never serves staler
+// than the Redis path would; only the finished roster is memoized (checkpoints + fresh=true read through).
+// NOTE: a memo hit returns the SHARED `items` array/objects (not a fresh JSON.parse). Every consumer of
+// fetchOwnerListings today treats the roster as read-only (map.ts is pure; stampers copy into NftData) — keep
+// it that way. BOUNDED: capped + expired entries evicted so a lambda serving many wallets can't retain whale
+// rosters (tens of MB each) forever.
+const _holdMemo = new Map<string, { value: CachedListings; at: number }>();
+const HOLD_MEMO_MS = 45_000;
+const HOLD_MEMO_CAP = 8;
+function holdMemoPut(key: string, value: CachedListings): void {
+  if (_holdMemo.size >= HOLD_MEMO_CAP && !_holdMemo.has(key)) {
+    const oldest = _holdMemo.keys().next().value;
+    if (oldest !== undefined) _holdMemo.delete(oldest);
+  }
+  _holdMemo.set(key, { value, at: Date.now() });
+}
 interface HoldingsCheckpoint { cursor: string | null; items: MgListItem[]; truncated: boolean; collections: [string, MgCollection][]; done?: boolean }
 
 // Fetch metadata only for collections NOT already resolved (carried in the checkpoint across passes), so a
@@ -100,15 +119,26 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
   const key = address.trim().toLowerCase();
 
   // 1) Completed roster already cached? Serve it — no paging. (fresh=true skips it: a "Refresh" click re-pages now.)
-  if (!opts.fresh) try {
-    const done = await cacheGetLarge(`holdings3:${key}`, HOLDINGS_TTL);
-    if (done) {
-      const c = JSON.parse(done) as CachedListings;
-      if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings CACHE HIT in ${Date.now() - t0}ms (${c.items.length} nfts)`);
-      recordTiming("wallet.holdings", Date.now() - t0);
-      return { items: c.items, collections: new Map(c.collections), truncated: c.truncated, warming: false };
+  if (!opts.fresh) {
+    const mm = _holdMemo.get(key);
+    if (mm) {
+      if (Date.now() - mm.at < HOLD_MEMO_MS) {
+        recordTiming("wallet.holdings", Date.now() - t0);
+        return { items: mm.value.items, collections: new Map(mm.value.collections), truncated: mm.value.truncated, warming: false };
+      }
+      _holdMemo.delete(key); // expired — evict rather than retain the roster for the lambda's life
     }
-  } catch { /* fall through to resume/scan */ }
+    try {
+      const done = await cacheGetLarge(`holdings3:${key}`, HOLDINGS_TTL);
+      if (done) {
+        const c = JSON.parse(done) as CachedListings;
+        holdMemoPut(key, c); // seed the memo so the next SSR reload skips the Redis re-pull
+        if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] ${short} holdings CACHE HIT in ${Date.now() - t0}ms (${c.items.length} nfts)`);
+        recordTiming("wallet.holdings", Date.now() - t0);
+        return { items: c.items, collections: new Map(c.collections), truncated: c.truncated, warming: false };
+      }
+    } catch { /* fall through to resume/scan */ }
+  }
 
   // 2) Resume from a checkpoint if one exists (a previous invocation ran out of budget mid-scan).
   let items: MgListItem[] = [];
@@ -210,6 +240,7 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
     if (finished) {
       if (items.length > 0) {
         const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
+        holdMemoPut(key, payload); // a fresh completed scan seeds the memo too
         await cachePutLargeAsync(`holdings3:${key}`, JSON.stringify(payload), HOLDINGS_EX_S);
       }
       const cleared: HoldingsCheckpoint = { cursor: null, items: [], truncated, collections: [] };
