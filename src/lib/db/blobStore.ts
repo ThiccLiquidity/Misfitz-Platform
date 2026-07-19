@@ -74,7 +74,7 @@ class R2BlobBackend implements BlobBackend {
     catch (e) { noteErr("r2.get", e); return null; }
     if (!res || !res.ok) { if (res && res.status !== 404) noteErr("r2.get", `status ${res.status}`); _stats.misses++; return null; }
     const storedAt = Number(res.headers.get("x-amz-meta-storedat") ?? "0");
-    if (!(storedAt > 0) || Date.now() - storedAt > ttlMs) { _stats.misses++; return null; } // missing/stale -> miss (mirrors Redis)
+    if (!(storedAt > 0) || Date.now() - storedAt >= ttlMs) { _stats.misses++; return null; } // missing/stale -> miss (fresh iff age < ttlMs, mirrors redisGet)
     return await res.text().catch(() => null);
   }
 
@@ -100,7 +100,7 @@ export class MemoryBlobBackend implements BlobBackend {
   async getBlob(key: string, ttlMs: number): Promise<string | null> {
     const e = this.store.get(key);
     if (!e) return null;
-    if (Date.now() - e.at > ttlMs) return null;
+    if (Date.now() - e.at >= ttlMs) return null; // fresh iff age < ttlMs (mirrors redisGet; ttl 0 => stale)
     return e.b64;
   }
   async putBlob(key: string, b64: string, exSeconds?: number): Promise<void> {
