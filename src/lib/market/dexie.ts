@@ -481,9 +481,22 @@ export interface CompletedSale {
   date: string;  // ISO completion date
 }
 
-export async function fetchCollectionCompletedSales(colId: string, maxPages = 30, opts: { fresh?: boolean } = {}): Promise<CompletedSale[]> {
+export async function fetchCollectionCompletedSales(colId: string, maxPages = 30, opts: { fresh?: boolean; cacheOnly?: boolean } = {}): Promise<CompletedSale[]> {
   if (!colId.startsWith("col1")) return [];
   const salesTtl = adaptiveTtl(colId, 30 * 60_000); // busy collections re-pull sales sooner than 30m (was fixed 30m)
+
+  // cacheOnly: serve only what's ALREADY cached (L1 or the persisted Redis blob) and NEVER hit Dexie. Used
+  // by the display-only recent-sales rail so it adds zero upstream load — a briefly-empty rail is fine, the
+  // comps model's own background refresh keeps `sales:` warm. Generous soft read (1h) so we don't refetch.
+  if (opts.cacheOnly) {
+    const l1 = _cache.get(`colsales_${colId}`);
+    if (l1 && Date.now() < l1.expiresAt) return l1.value as CompletedSale[];
+    try {
+      const dbHit = await cacheGet(`sales:${colId}`, 60 * 60_000);
+      if (dbHit) { const r = JSON.parse(dbHit) as CompletedSale[]; return Array.isArray(r) ? r : []; }
+    } catch { /* no blob — return empty rather than scan */ }
+    return [];
+  }
 
   // The network scan: dedup latest-XCH-sale per NFT, then persist + record activity. Shared by both the
   // cached read path and the fresh (comps-refresh) path so a fresh pull also updates the blob for everyone.

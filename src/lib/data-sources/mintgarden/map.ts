@@ -51,12 +51,15 @@ function lastSalePriceXch(events: MgNftDetail["events"]): number | null {
 // Up to `n` most-recent SALE prices (XCH), newest first. Raw chain sale events (type 2) — UNFILTERED by the
 // comps wash-defenses, so this is display-only "recent sales", never fed into valuation. Events are
 // chronological ascending, so take the tail and reverse.
-function recentSalesXch(events: MgNftDetail["events"], n = 3): { priceXch: number }[] {
-  const sales: { priceXch: number }[] = [];
+export interface RecentSale { priceXch: number; date: string | null }
+// Full on-chain sale history (type 2), newest first, capped at 20 so a heavily-flipped NFT can't bloat the
+// enrichment payload. Display-only — NEVER fed into valuation (comps wash-defenses handle the model).
+function recentSalesXch(events: MgNftDetail["events"], cap = 20): RecentSale[] {
+  const sales: RecentSale[] = [];
   for (const e of events ?? []) {
-    if (e?.type === 2 && typeof e.xch_price === "number" && e.xch_price > 0) sales.push({ priceXch: e.xch_price });
+    if (e?.type === 2 && typeof e.xch_price === "number" && e.xch_price > 0) sales.push({ priceXch: e.xch_price, date: e.timestamp ?? null });
   }
-  return sales.slice(-n).reverse();
+  return sales.slice(-cap).reverse();
 }
 
 // Per-NFT price signal used to derive a COLLECTION floor when the market has no other floor: this

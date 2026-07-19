@@ -172,6 +172,7 @@ function slimNftDetail(d: MgNftDetail): MgNftDetail {
     openrarity_rank: d.openrarity_rank ?? null,
     events: (d.events ?? []).map((e) => ({
       type: e?.type ?? null,
+      timestamp: e?.timestamp ?? null,
       xch_price: e?.xch_price ?? null,
       address: e?.address ? { encoded_id: e.address.encoded_id } : null,
       previous_address: e?.previous_address ? { encoded_id: e.previous_address.encoded_id } : null,

@@ -62,6 +62,7 @@ export interface MgNftDetail {
   // collection has no floor.
   events?: {
     type?: number | null;          // 2 = transfer/sale
+    timestamp?: string | null;     // ISO 8601 event time (sale date)
     xch_price?: number | null;
     address?: { encoded_id?: string | null } | null;          // buyer / new owner
     previous_address?: { encoded_id?: string | null } | null; // seller

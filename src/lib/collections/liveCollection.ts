@@ -1,6 +1,6 @@
 import { getCollection, listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import { mapListItemToCard, isDisplayableNft } from "@/lib/data-sources/mintgarden/map";
-import { fetchXchUsdRate, fetchCollectionSaleFloorWarm, fetchCollectionActiveOffers, type CollectionOffer, XCH_USD_FALLBACK } from "@/lib/market/dexie";
+import { fetchXchUsdRate, fetchCollectionSaleFloorWarm, fetchCollectionActiveOffers, fetchCollectionCompletedSales, type CollectionOffer, type CompletedSale, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import { getCompsModel } from "@/lib/valuation/compsService";
 import { getCollectionFrequency, scaledRankOf } from "@/lib/rarity/collectionFrequency";
@@ -437,4 +437,34 @@ export async function getAllCollectionCards(id: string, opts: { forceIndex?: boo
     })());
   }
   return result(nfts, comps.hotTraits(), false);
+}
+// ── Collection recent-sales FEED ─────────────────────────────────────────────
+// A shareable "recently sold" strip for the collection page. PURE JOIN of two things we ALREADY cache —
+// the Dexie completed-sales blob (fetchCollectionCompletedSales, cacheOnly: no new fetch, deduped
+// latest-sale-per-NFT so this shows one row per recently-sold NFT) and the cards already loaded for the
+// binder. ZERO new network/Redis work. JOIN KEY: CompletedSale.id is the Dexie HEX launcher id, which
+// equals card.id (MintGarden item id, hex) — NOT card.launcherId (the nft1... bech32 form).
+export interface SaleFeedItem {
+  id: string;            // MintGarden item id (hex) — the join key
+  launcherId: string;    // nft1... bech32 id — powers the SOLD card's MintGarden link
+  name: string;
+  thumb: string | null;  // card art
+  rank: number | null;   // rarity rank (may be null pre-enrichment)
+  priceXch: number;      // clean XCH sale price
+  date: string;          // ISO completion date
+}
+
+export async function getCollectionRecentSales(id: string, cards: NftData[], limit = 25): Promise<SaleFeedItem[]> {
+  if (!id.startsWith("col1")) return [];
+  const sales = await fetchCollectionCompletedSales(id, 30, { cacheOnly: true }).catch(() => [] as CompletedSale[]);
+  if (!sales.length) return [];
+  const byId = new Map(cards.map((c) => [c.id.toLowerCase(), c])); // CompletedSale.id (hex) == card.id (hex)
+  const items: SaleFeedItem[] = [];
+  for (const s of sales) {
+    const c = byId.get(s.id.toLowerCase());
+    if (!c || !(s.price > 0) || !s.date) continue; // only sales we can attribute to a known card
+    items.push({ id: c.id, launcherId: c.launcherId, name: c.name, thumb: c.imageUrl ?? null, rank: c.rarityRank, priceXch: s.price, date: s.date });
+  }
+  items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)); // newest first
+  return items.slice(0, limit);
 }

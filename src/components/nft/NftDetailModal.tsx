@@ -9,7 +9,8 @@ import type { NftData } from "@/types";
 import type { FairValueEstimate } from "@/types";
 import { NftRarityCard } from "./NftRarityCard";
 import { DealScoreGauge, colorForLabel, funLabel } from "./DealScoreGauge";
-import { formatUsd, formatXch } from "@/lib/format";
+import { formatUsd, formatXch, timeAgo } from "@/lib/format";
+import { SoldShowcase, type SoldShowcaseData } from "./SoldShowcase";
 import type { RarityTierThresholds } from "@/lib/rarity/tiers";
 import { getRarityTier, resolveTierThresholds } from "@/lib/rarity/tiers";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
@@ -70,15 +71,18 @@ export function NftDetailModal({
   const collectionHref = fromPortfolio && nft.collectionSlug?.startsWith("col1") ? `/collection/${nft.collectionSlug}` : null;
   const [showValueInfo, setShowValueInfo] = useState(false); // tap-to-toggle (touch has no hover)
   const [expandTrait, setExpandTrait] = useState(false);
+  const [showAllSales, setShowAllSales] = useState(false); // expand from last-3 to the card's whole sale history
+  const [soldSale, setSoldSale] = useState<{ priceXch: number; date?: string | null } | null>(null); // open the SOLD showcase for one sale
   // Keyboard: Escape closes the lightbox if open, otherwise the modal (a11y).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      if (soldSale) return; // the SOLD showcase handles its own Escape
       if (lightbox) setLightbox(false); else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox, onClose]);
+  }, [lightbox, soldSale, onClose]);
   // Lock the page behind the modal so scrolling stays inside the card details (not the page).
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -123,7 +127,13 @@ export function NftDetailModal({
   const mgSlug = (nft.name ?? "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const mgNftUrl = `https://mintgarden.io/nfts/${mgSlug ? `${mgSlug}-` : ""}${nft.launcherId}`;
 
+  const topTraits = [...(nft.traits ?? [])]
+    .sort((a, b) => (a.rarityPercent ?? 101) - (b.rarityPercent ?? 101))
+    .slice(0, 3)
+    .map((t) => ({ type: t.trait_type, value: String(t.value) }));
+
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/75 py-10"
       onClick={onClose}
@@ -353,24 +363,48 @@ export function NftDetailModal({
             </div>
           )}
 
-          {/* Recent sales (unfiltered chain events) — display only, never fed into valuation */}
-          {nft.recentSales && nft.recentSales.length > 0 && (
-            <div className="px-4 pt-2 pb-1">
-              <div className="rounded-lg px-3 py-2" style={{ border: `1px solid ${divider}` }}>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wide" style={{ color: lblColor }}>
-                  Recent sales <span style={{ color: subColor }}>· unfiltered</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {nft.recentSales.map((s, i) => (
-                    <span key={i} className="rounded-md px-2 py-0.5 text-xs font-bold tabular-nums"
-                      style={{ background: "color-mix(in srgb, var(--gold) 10%, transparent)", color: "var(--title)" }}>
-                      {formatXch(s.priceXch)} XCH
-                    </span>
-                  ))}
+          {/* Recent sales (unfiltered chain events) — display only, never fed into valuation. Last 3 by default;
+              expand to the card's whole sale history. Tap any sale to open a shareable SOLD card. */}
+          {nft.recentSales && nft.recentSales.length > 0 && (() => {
+            const all = nft.recentSales!;
+            const shown = showAllSales ? all : all.slice(0, 3);
+            return (
+              <div className="px-4 pt-2 pb-1">
+                <div className="rounded-lg px-3 py-2" style={{ border: `1px solid ${divider}` }}>
+                  <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: lblColor }}>
+                    Recent sales <span style={{ color: subColor }}>· tap to share</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {shown.map((s, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setSoldSale(s); }}
+                        className="flex items-center justify-between rounded-md px-2.5 py-1.5 text-left transition-opacity hover:opacity-80"
+                        style={{ background: "color-mix(in srgb, var(--gold) 8%, transparent)", border: `1px solid ${divider}` }}
+                      >
+                        <span className="text-sm font-black tabular-nums" style={{ color: "var(--title)" }}>{formatXch(s.priceXch)} XCH</span>
+                        <span className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: subColor }}>
+                          {s.date ? timeAgo(s.date) : "—"}
+                          <span aria-hidden style={{ color: "var(--gold)" }}>↗</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {all.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowAllSales((v) => !v); }}
+                      className="mt-1.5 w-full rounded-md py-1 text-[11px] font-bold transition-opacity hover:opacity-80"
+                      style={{ color: "var(--gold)" }}
+                    >
+                      {showAllSales ? "Show less" : `See all ${all.length} sales →`}
+                    </button>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* List-price coach (portfolio only): what to list at for each badge, with a live slider */}
           {fromPortfolio && fv && fv.totalEstimate > 0 && (
@@ -529,5 +563,23 @@ export function NftDetailModal({
         </div>
       </div>
     </div>
+    {soldSale && (
+      <SoldShowcase
+        sale={{
+          name: nft.name,
+          imageUrl: nft.imageUrl,
+          launcherId: nft.launcherId,
+          rank: nft.rarityRank,
+          totalSupply,
+          priceXch: soldSale.priceXch,
+          date: soldSale.date ?? null,
+          xchUsdRate: xchUsdRate > 0 ? xchUsdRate : undefined,
+          traits: topTraits,
+          collectionName,
+        } satisfies SoldShowcaseData}
+        onClose={() => setSoldSale(null)}
+      />
+    )}
+    </>
   );
 }

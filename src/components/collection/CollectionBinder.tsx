@@ -5,6 +5,9 @@ import Image from "next/image";
 import type { CollectionData, NftData } from "@/types";
 import { BinderView } from "@/components/binder/BinderView";
 import { TierStatsBar } from "@/components/collection/TierStatsBar";
+import { RecentSalesRail } from "@/components/collection/RecentSalesRail";
+import { SoldShowcase, type SoldShowcaseData } from "@/components/nft/SoldShowcase";
+import type { SaleFeedItem } from "@/lib/collections/liveCollection";
 import { FilterSidebar, type TierFilter, type SortKey, type TraitFilters, type CatFilter } from "@/components/collection/FilterSidebar";
 import { MobileFilterSheet, MobileFilterButton } from "@/components/collection/MobileFilterSheet";
 import { WorkingIndicator } from "@/components/status/WorkingIndicator";
@@ -35,6 +38,8 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   // Start with the SSR first page (mint order), then swap to the whole collection sorted rarest-first.
   const [nfts, setNfts] = useState<NftData[]>(view.nfts);
   const [hotTraits, setHotTraits] = useState<{ type: string; value: string; ratio: number }[]>([]);
+  const [recentSales, setRecentSales] = useState<SaleFeedItem[]>([]);
+  const [soldSale, setSoldSale] = useState<SaleFeedItem | null>(null);
   const { mode: themeMode } = useThemeMode();
   const statLight = themeMode === "light";
   const [fullLoaded, setFullLoaded] = useState(false);
@@ -79,7 +84,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
       setIndexing(true);
       fetch(`/api/collection/${view.id}/all`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean; valuesAsOf?: number | null } | null) => {
+        .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean; valuesAsOf?: number | null; recentSales?: SaleFeedItem[] } | null) => {
           if (cancelled) return;
           const nfts = data?.nfts ?? [];
           const reschedule = () => { if (tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); } };
@@ -121,6 +126,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
               setHotTraits((prev) => (hotKey(prev) === hotKey(data.hotTraits!) ? prev : data.hotTraits!));
             }
             setFullLoaded(true);
+            if (data?.recentSales) setRecentSales(data.recentSales);
             if (data?.valuesAsOf) setValuesAsOf(data.valuesAsOf);
             if (nfts.length > lastTotal) { lastTotal = nfts.length; tries = 0; } // grew -> reset backoff, keep polling
           }
@@ -411,6 +417,25 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         </div>
       </div>
 
+
+      <RecentSalesRail sales={recentSales} light={statLight} onOpen={setSoldSale} />
+
+      {soldSale && (
+        <SoldShowcase
+          sale={{
+            name: soldSale.name,
+            imageUrl: soldSale.thumb,
+            launcherId: soldSale.launcherId,
+            rank: soldSale.rank,
+            totalSupply: view.totalSupply,
+            priceXch: soldSale.priceXch,
+            date: soldSale.date,
+            xchUsdRate: view.xchUsdRate,
+            collectionName: view.name,
+          } satisfies SoldShowcaseData}
+          onClose={() => setSoldSale(null)}
+        />
+      )}
 
       <TierStatsBar collection={SHELL} nfts={nfts} />
 

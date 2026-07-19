@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllCollectionCards } from "@/lib/collections/liveCollection";
+import { getAllCollectionCards, getCollectionRecentSales } from "@/lib/collections/liveCollection";
 import { forceCompsRefresh } from "@/lib/valuation/compsService";
 import { timed } from "@/lib/perf/timing";
 
@@ -17,12 +17,14 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const force = new URL(req.url).searchParams.get("refresh") === "1";
     if (force) await forceCompsRefresh(params.id).catch(() => {});
     const r = await timed("collection.all", () => getAllCollectionCards(params.id, { forceIndex: force }));
+    // Recent-sales feed: a pure join over already-cached Dexie sales + the cards we just loaded. No new fetch.
+    const recentSales = await getCollectionRecentSales(params.id, r.nfts).catch(() => []);
     // User-agnostic, so let Vercel's EDGE cache serve repeat opens (~100ms, zero function) via s-maxage.
     // Don't pin a still-"warming" payload at the edge — serve those no-store so the warmed data appears next.
     const cache = r.warming || force
       ? "no-store"
       : "public, max-age=60, s-maxage=300, stale-while-revalidate=3600";
-    return NextResponse.json(r, { headers: { "Cache-Control": cache } });
+    return NextResponse.json({ ...r, recentSales }, { headers: { "Cache-Control": cache } });
   } catch {
     return NextResponse.json({ error: "upstream unavailable" }, { status: 502 });
   }
