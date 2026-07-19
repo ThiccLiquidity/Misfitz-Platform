@@ -170,6 +170,7 @@ async function main(): Promise<void> {
     const sent: { assetId: string; amountUnits: string; txId: string }[] = [];
     for (const [key, amountUnits] of ledger) {
       let parsed: unknown[]; try { parsed = JSON.parse(key) as unknown[]; } catch { continue; }
+      if (!Array.isArray(parsed) || parsed.length !== 5) continue; // skip the 4-element epoch sentinel (not a payment)
       const [kCol, kEpoch, kKind, kAsset] = parsed as [string, string, string, string];
       if (kEpoch === epoch && kKind === kind && (!col || kCol === col)) sent.push({ assetId: kAsset, amountUnits, txId: "ledger" });
     }

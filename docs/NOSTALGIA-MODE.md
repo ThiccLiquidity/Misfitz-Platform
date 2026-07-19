@@ -65,3 +65,11 @@ Keep it hidden for now. If the owner likes the lightweight preview, the cheapest
 commission the wood-desk + paper textures first (biggest visual payoff for least art), do a contrast/a11y
 pass, then decide whether to add it as a real third option in the theme toggle. Everything past that (controller,
 pogs, CRT) is polish that can land incrementally.
+
+## Accessibility — contrast pass (done, this session)
+The manila/cream page palette failed AA on two status colors used as text: `good` (3.1:1) and `fair`
+(2.0:1, amber-on-cream — the classic offender). Both were darkened (`good` #1b6e2e = 5.7:1, `fair` #8a5500 =
+5.6:1); `sub`/`bad` were nudged for margin. Headings (brown on manila) already pass (~10:1). The vibrant
+trapper-keeper red stays on borders (3:1 UI-component bar, fine). **Remaining before user-facing:** a quick
+audit that no subtle text renders directly on the dark wood desk (`vaultBg #7c5236`) — inside-the-binder text
+is all on light pages, but confirm nav/chrome once the toggle is exposed.

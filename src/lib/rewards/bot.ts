@@ -3,7 +3,7 @@
 // with a write-ahead ledger so a crash never double-pays. It holds no keys and makes no network calls except
 // through injected deps. Every halt is fail-closed. See BOT-CONTRACT.md.
 
-import { verifyManifest, paymentKey, pendingRecipients, type Ledger } from "./manifestGuard";
+import { verifyManifest, paymentKey, pendingRecipients, manifestSentinelKey, type Ledger } from "./manifestGuard";
 import { type PayoutManifest, type ManifestRecipient } from "./manifest";
 import { type BotDeps, type BotOpts } from "./botDeps";
 
@@ -64,6 +64,15 @@ export async function runBotPayout(m: PayoutManifest, deps: BotDeps, opts: BotOp
     } else return halt(`unresolved intended payment: ${it.key} — reconcile before re-running`);
   }
 
+  // 2.5) EPOCH SENTINEL — refuse a DIFFERENT manifest for an epoch that already started sending. Prevents a
+  // re-cut manifest (e.g. a re-frozen airdrop snapshot, or a changed monthly drip) from over-emitting in
+  // aggregate across runs, since the per-recipient ledger alone can't see wallets that dropped out of a re-cut.
+  const sentinelKey = manifestSentinelKey(m);
+  const startedHash = ledger.get(sentinelKey);
+  if (startedHash && startedHash !== m.hash) {
+    return halt(`epoch ${m.epochId} already started with a different manifest (hash ${startedHash.slice(0, 12)}…) — refusing this one (${m.hash.slice(0, 12)}…). If ZERO payments were recorded for this epoch (check the ledger\u2019s done map), deleting the sentinel entry is safe; otherwise reconcile before continuing.`);
+  }
+
   // 3) Ledger diff — a changed amount for an already-paid recipient is a conflict; NEVER auto top-up.
   const { pending, conflicts } = pendingRecipients(m, ledger);
   if (conflicts.length) return halt(`ledger conflict on ${conflicts.length} recipient(s) — a re-cut manifest needs manual reconciliation`);
@@ -90,6 +99,13 @@ export async function runBotPayout(m: PayoutManifest, deps: BotDeps, opts: BotOp
   if (typeof deps.wallet.preflight === "function") {
     try { await deps.wallet.preflight(); }
     catch (e) { return halt(`wallet preflight failed: ${(e as Error)?.message ?? String(e)}`); }
+  }
+
+  // Pin the epoch to THIS manifest hash before the first send (write-ahead). A resume with the same manifest
+  // passes the sentinel check above; any re-cut against a different snapshot halts there.
+  if (!startedHash) {
+    try { await deps.store.markDone(sentinelKey, m.hash, "epoch-sentinel"); ledger.set(sentinelKey, m.hash); }
+    catch (e) { return halt(`could not persist the epoch sentinel: ${(e as Error)?.message ?? String(e)}`); }
   }
 
   // 6) Sequential send loop with write-ahead. Any throw/timeout halts immediately; sent + ledger are preserved.

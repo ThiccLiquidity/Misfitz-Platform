@@ -66,10 +66,12 @@ const BASE_THEMES: Record<ThemeMode, ThemeTokens> = {
     artBg: "#ffe8b0",
     artIcon: "#c0392b",
     title: "#3a2416",      // brown marker ink
-    sub: "#7a5a3a",
-    good: "#2f9e44",
-    fair: "#e8a020",
-    bad: "#c0392b",
+    // Contrast pass (AA on the manila/cream pages): good/fair failed as text (3.1:1 / 2.0:1) — darkened. The
+    // vibrant trapper-keeper red stays on BORDERS (pageBorder / the CSS block); these tokens are TEXT only.
+    sub: "#6a4a2a",        // 7.2:1
+    good: "#1b6e2e",       // 5.7:1 (was #2f9e44, 3.1:1 — fail)
+    fair: "#8a5500",       // 5.6:1 (was #e8a020, 2.0:1 — fail)
+    bad: "#a82a1e",        // 6.3:1 (text; border trim keeps #c0392b)
   },
 };
 

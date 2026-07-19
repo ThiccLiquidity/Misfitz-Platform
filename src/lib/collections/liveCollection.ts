@@ -9,6 +9,7 @@ import { seedPctFn, stampSeedOntoCard } from "@/lib/data-sources/seed/overlay";
 import { cacheGet, cachePut, cacheGetLarge, cachePutLargeAsync, tryLock, releaseLock, keepAlive } from "@/lib/db/nftCache";
 import { writeValueIndex } from "@/lib/valuation/valueIndex";
 import { hasNoComps, refreshCompsIfSold, compsBuiltAt } from "@/lib/valuation/compsService";
+import { freezeSaleTagsOnDetect } from "@/lib/rewards/detectLive";
 import { estimateFairValue } from "@/lib/valuation/estimate";
 import { resolveTrustedFloor, resolveTrustedFloorWarm, trustedFloorFrom } from "@/lib/market/floorTrust";
 import { isCompsEnabled } from "@/lib/config";
@@ -433,7 +434,10 @@ export async function getAllCollectionCards(id: string, opts: { forceIndex?: boo
   if (!opts.forceIndex) {
     keepAlive((async () => {
       const refreshed = await refreshCompsIfSold(id).catch(() => false);
-      if (refreshed) await getAllCollectionCards(id, { forceIndex: true }).catch(() => {}); // recompute + force-write vidx with the fresh model
+      if (refreshed) {
+        await getAllCollectionCards(id, { forceIndex: true }).catch(() => {}); // recompute + force-write vidx with the fresh model
+        await freezeSaleTagsOnDetect(id).catch(() => {}); // freeze the bonus deal-tag ~at purchase (flag-gated no-op when rewards shadow is off)
+      }
     })());
   }
   return result(nfts, comps.hotTraits(), false);

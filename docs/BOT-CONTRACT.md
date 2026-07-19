@@ -145,3 +145,12 @@ set as the bot's wallet-pin.
   wallet — do NOT override; fix the exclusion.
 - **Zero recipients:** `buildLaunchAirdrop` THROWS if the eligible set is empty with a positive bucket
   (empty snapshot or over-broad exclusion) — never emits a 0-recipient "100M distributed" manifest.
+
+### Epoch pay-once sentinel (reconcile)
+On the first send of an epoch the bot writes a sentinel `[collectionId, epochId, kind, "__manifest__"] ->
+manifestHash` into the ledger's `done` map, and refuses any later manifest for the same `(collectionId,
+epochId, kind)` whose hash differs. This makes a one-time payout (e.g. the genesis airdrop) impossible to
+re-cut against a different snapshot and over-emit. If you must legitimately abandon a manifest that recorded
+**zero** payments (check the ledger's `done` map has only the sentinel entry for that epoch), delete that one
+sentinel entry and re-run. NOTE: the guard is scoped by `(collectionId, epochId, kind)` — changing the
+collectionId or epoch id bypasses it (same scoping as the payment key).

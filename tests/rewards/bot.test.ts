@@ -6,7 +6,7 @@ import { computeEpoch, distributeChia } from "../../src/lib/rewards/engine";
 import { settleUnattributed } from "../../src/lib/rewards/settle";
 import { toSale, type RawSale } from "../../src/lib/rewards/detect";
 import type { BotDeps, LedgerStore, WalletRpc } from "../../src/lib/rewards/botDeps";
-import { paymentKey } from "../../src/lib/rewards/manifestGuard";
+import { paymentKey, manifestSentinelKey } from "../../src/lib/rewards/manifestGuard";
 
 const A = (c: string) => "xch1" + c.repeat(58);
 const verifySig = (h: string, sig: string) => sig === "sig:" + h;
@@ -48,7 +48,7 @@ test("happy path: signed + chain-verified reward manifest -> all sent, ledger re
   const r = await runBotPayout(m, deps(st.impl, w.impl), OPTS);
   assert.equal(r.status, "completed", r.haltReason);
   assert.equal(r.sent.length, m.recipients.length);
-  assert.equal(st.led.size, m.recipients.length);
+  assert.equal(st.led.size, m.recipients.length + 1); // recipients + the epoch sentinel
 });
 
 test("halts: missing signature, and a non-chain-verified reward manifest", async () => {
@@ -137,4 +137,32 @@ test("wallet pin: a passing preflight runs exactly once (pre-loop) and sends pro
   assert.equal(r.status, "completed", r.haltReason);
   assert.equal(probes, 1);
   assert.equal(w.sends.length, m.recipients.length);
+});
+
+// ---- Epoch sentinel: a one-time payout epoch can only ever be sent from ONE manifest.
+
+test("epoch sentinel: a DIFFERENT manifest for an already-started epoch halts (no over-emit on re-cut)", async () => {
+  const m = manifest();
+  const st = store([[manifestSentinelKey(m), "0000000000different0000000000"]]); // epoch started with another manifest
+  const w = wallet();
+  const r = await runBotPayout(m, deps(st.impl, w.impl), OPTS);
+  assert.equal(r.status, "halted");
+  assert.match(r.haltReason ?? "", /already started with a different manifest/);
+  assert.equal(w.sends.length, 0);
+});
+
+test("epoch sentinel: the SAME manifest resumes cleanly (hash matches) and pays the rest", async () => {
+  const m = manifest();
+  const st = store([[manifestSentinelKey(m), m.hash]]); // epoch already pinned to THIS manifest
+  const w = wallet();
+  const r = await runBotPayout(m, deps(st.impl, w.impl), OPTS);
+  assert.equal(r.status, "completed", r.haltReason);
+  assert.equal(w.sends.length, m.recipients.length);
+});
+
+test("epoch sentinel: a first run writes the sentinel = manifest hash", async () => {
+  const m = manifest();
+  const st = store();
+  await runBotPayout(m, deps(st.impl, wallet().impl), OPTS);
+  assert.equal(st.led.get(manifestSentinelKey(m)), m.hash);
 });

@@ -310,3 +310,15 @@ real payouts, and the roll-forward-vs-burn of an epoch with zero eligible holder
 NFTs must resolve to their xch1 address before LP lookup; **S8** the observe loop needs checkpointing for a very
 large roster under the 60s function cap. None of these can move funds while REWARDS_SHADOW is off; they're the checklist before the real on-chain LP
 provider replaces NullLpProvider.
+
+---
+
+## Bonus timing rule (locked) — deal at PURCHASE, never listing
+The deal bonus (buyer/seller, 2.5%) is decided by the deal score **at the moment of the buy**, using a fair
+value **frozen per sale** (`tagStore`, keyed by Dexie offer id) that is **never recomputed**. The listing-time
+deal badge is display-only and does NOT affect rewards.
+
+To keep "at purchase" precise, a newly-detected sale now has its fair value frozen on the **event-driven sale
+probe** (`freezeSaleTagsOnDetect`, fired from a collection view within ~minutes–hours of the sale) rather than
+only on the daily cron — minimizing drift between `soldAt` and the value we stamp. The daily cron still
+backstops. Both are flag-gated (`REWARDS_SHADOW`) and merge-safe (single logical writer via re-read + merge).

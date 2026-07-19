@@ -1,7 +1,7 @@
 // MisFitz Rewards — the LIVE detection bridge (network I/O). This is the ONE rewards file allowed to import
 // the app data layer (Dexie sales, MintGarden events, the comps model). It's kept SEPARATE from detect.ts so
 // the pure mapping stays unit-testable without dragging the heavy app graph into the test loader. Still
-// imported by NOTHING in the live app and moves ZERO funds / touches ZERO keys — it only assembles inputs for
+// moves ZERO funds / touches ZERO keys — it only assembles inputs for the shadow rewards pipeline. NOTE: the
 // the pure engine so a SHADOW epoch can run on real sales.
 //
 // Operator-confirmed decisions (MISFITZ-REWARDS.md §5):
@@ -9,7 +9,8 @@
 //   • Royalty  — TRUSTED from the marketplace record in shadow mode (royalty = 10% of price). On-chain
 //                royalty-coin verification is a REQUIRED gate before any real payout (NOT built here).
 //   • Deal tag — FROZEN at first detection: each sale's fair value is stamped once (offerId-keyed) and never
-//                recomputed, so a green buy stays green even if the floor moves (spec §5). Cron is the SOLE writer.
+//                recomputed, so a green buy stays green even if the floor moves (spec §5). Two writers now: the
+//                daily cron AND the on-view freezeSaleTagsOnDetect (both flag-gated); both go through the merge below.
 //   • Provenance (coin/spend/block) is intentionally NOT set — that's the chain re-verification step required
 //     before real payouts, not shadow mode.
 
@@ -22,7 +23,9 @@ import { freezeInto, pruneTags, type TagStore } from "./tagStore";
 import { computeEpoch } from "./engine";
 import { buildEpochInputs, FINALITY_MS, type ActiveListing, type RawSale } from "./detect";
 import { DEFAULT_CONFIG, type EpochResult, type RewardConfig } from "./types";
+import { isRewardsShadowEnabled } from "./flag";
 
+import { MISFITZ_COLLECTION_ID } from "./consts";
 export { MISFITZ_COLLECTION_ID } from "./consts";
 const DEXIE_BASE = "https://api.dexie.space/v1";
 
@@ -148,7 +151,7 @@ const TAGS_EX_S = 180 * 24 * 60 * 60;
 
 // FROZEN deal-tag fair-value lookup (spec §5). Reads the per-sale frozen store, stamps any NEW sale's current
 // fair value ONCE (only when the model resolves it — a cold run can't freeze a wrong tag), and returns the
-// frozen fv per sale. persist=true (the CRON, the SOLE writer) writes the store back when it changed;
+// frozen fv per sale. persist=true (the cron OR the on-view freeze) writes the store back when it changed;
 // persist=false (the CLI) is read-only. Also reports whether comps was available so a write-once FINAL run can
 // be DEFERRED when the valuation is down (rather than freezing everyone at "none").
 export async function resolveFvLookup(colId: string, raws: RawSale[], opts: { persist: boolean }): Promise<{ fvOf: (r: RawSale) => number | null; compsAvailable: boolean }> {
@@ -166,7 +169,8 @@ export async function resolveFvLookup(colId: string, raws: RawSale[], opts: { pe
   if (opts.persist && (frozen.changed || pruned.changed)) {
     try {
       // Merge-on-write: re-read in case another writer stamped concurrently, then UNION (existing wins on any
-      // conflict) so a concurrent stamp is never lost — the freeze-once guarantee holds across overlapping runs.
+      // conflict) so overlapping runs almost never lose a stamp. NOTE: a tiny read-modify-write window remains
+      // between the re-read and the write — acceptable in shadow; move to a versioned/CAS merge before tags are payout-bearing.
       let current: TagStore = {};
       try { const raw2 = await cacheGetLarge(TAGS_KEY(colId), TAGS_TTL_MS); if (raw2) current = JSON.parse(raw2) as TagStore; } catch { current = {}; }
       const merged = pruneTags({ ...pruned.store, ...current }, now);
@@ -177,6 +181,19 @@ export async function resolveFvLookup(colId: string, raws: RawSale[], opts: { pe
 }
 
 // Fetch active MisFitz Dexie listings as vest signals (listed-cheaper-than-purchase voids the buyer bonus).
+// Freeze the deal-tag fair value for any NEWLY-detected sale right now (≈ at the purchase), instead of waiting
+// for the daily shadow cron. This is what makes the bonus reflect the deal at the moment of the BUY (not the
+// listing, never recomputed later): the sooner after `soldAt` we stamp, the smaller the drift between the
+// purchase and the value we freeze. Flag-gated no-op; idempotent (freezeInto never re-stamps a frozen sale) and
+// merge-safe with the cron (the persist path re-reads + merges). Fire-and-forget from the collection sale probe.
+export async function freezeSaleTagsOnDetect(colId: string, lookbackMs = 3 * 24 * 60 * 60_000): Promise<void> {
+  if (!isRewardsShadowEnabled() || colId !== MISFITZ_COLLECTION_ID) return; // only the program collection — never scan/store other cols
+  const now = Date.now();
+  const raws = await fetchDexieEpochSales(colId, now - lookbackMs, now).catch(() => [] as RawSale[]);
+  if (!raws.length) return;
+  await resolveFvLookup(colId, raws, { persist: true }).catch(() => { /* best-effort; the daily cron still backstops */ });
+}
+
 export async function fetchActiveListings(colId: string): Promise<ActiveListing[]> {
   const now = Date.now();
   const out: ActiveListing[] = [];
@@ -212,7 +229,7 @@ export async function runShadowEpoch(
 ): Promise<EpochResult> {
   const raws = await fetchDexieEpochSales(colId, epochStart, epochEnd);
   await attributeCounterparties(raws, { fresh: true }); // fresh so a just-made buy resolves to the real wallet, not a placeholder
-  // Read-only against the frozen store (the CLI must never STAMP against prod Redis — cron is the sole writer).
+  // Read-only against the frozen store (the CLI must never STAMP against prod Redis — the cron/on-view path writes).
   const [fv, listings] = await Promise.all([resolveFvLookup(colId, raws, { persist: false }), fetchActiveListings(colId)]);
   const { sales, signals } = buildEpochInputs(raws, epochStart, epochEnd, fv.fvOf, listings);
   // payoutAt = now for a retro run (epochEnd in the past), else epochEnd. Otherwise every "listed cheaper"

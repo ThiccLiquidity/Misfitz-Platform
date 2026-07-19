@@ -94,6 +94,13 @@ export function verifyManifest(m: PayoutManifest, opts: VerifyOptions): VerifyRe
 // ── Idempotency ledger (amount-aware) ───────────────────────────────────────────
 export type Ledger = Map<string, string>;
 
+// Per-EPOCH sentinel key — distinct from any recipient key ("__manifest__" can never be a wallet). The bot
+// writes the manifest HASH here on first send; a later manifest for the SAME epoch with a DIFFERENT hash is a
+// re-cut (e.g. a re-frozen airdrop snapshot) and is refused, so a one-time payout can't over-emit across runs.
+export function manifestSentinelKey(m: PayoutManifest): string {
+  return JSON.stringify([m.collectionId ?? "", m.epochId, m.kind, "__manifest__"]);
+}
+
 export function paymentKey(m: PayoutManifest, r: ManifestRecipient): string {
   // collectionId prefix scopes the ledger per collection so two collections sharing an epoch id can't collide.
   // NOTE: this CHANGED the key format (added a leading element). No idempotency ledger is persisted yet and

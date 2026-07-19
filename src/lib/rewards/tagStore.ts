@@ -2,7 +2,7 @@
 // seller) is FROZEN at the moment a sale is first detected, not recomputed later — so a green buy stays green
 // even if the floor moves. We freeze the fair value per SALE (offerId), and the engine derives the tag from it
 // via bonusWinnerFor (single source of truth). Only a RESOLVED (non-null) valuation is stamped, so a cold run
-// can't freeze a wrong "none" — an unstamped sale simply retries next run. Single writer (the cron) — see
+// can't freeze a wrong "none" — an unstamped sale simply retries next run. Writers: the cron + the on-view freeze — see
 // resolveFvLookup in detectLive.ts. This module has no I/O; the live read/write lives in detectLive.
 
 import { type RawSale } from "./detect";

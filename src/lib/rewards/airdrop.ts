@@ -66,3 +66,26 @@ export function finalizeAirdropManifest(
 ): PayoutManifest {
   return finalizeDripManifest(GENESIS_AIRDROP_EPOCH, airdrop, tokenAssetId, sign, "$SNACKZ", collectionId);
 }
+
+// Human-readable preview of a genesis airdrop (no funds moved). Surfaces the safety signals up top so a
+// mis-formed exclusion or an empty snapshot is impossible to miss.
+export function formatAirdropReport(r: AirdropResult, symbol = "$SNACKZ"): string {
+  const L: string[] = [];
+  L.push(`=== MisFitz Rewards — GENESIS AIRDROP (one-time) ===`);
+  L.push(`PREVIEW — rarity-weighted per NFT · project wallets excluded · no funds moved.`);
+  L.push(`Airdrop total:   ${r.dripUnits.toString()} ${symbol} units`);
+  L.push(`Eligible:        ${r.holderCount} holders (${r.eligibleNftCount} NFTs)`);
+  L.push(`Excluded:        ${r.excludedNftCount} NFTs (project/mint wallets)`);
+  L.push(`Invalid owners:  ${r.invalidWalletNftCount} NFTs dropped`);
+  L.push(`Solvent:         ${r.solvent ? "YES (allocated === airdrop)" : "NO — BUG"}`);
+  if (r.unmatchedExcludes.length) {
+    L.push(`\n⚠  EXCLUDE ENTRIES THAT MATCHED NOTHING (wrong address form? HALT + fix before sending):`);
+    for (const w of r.unmatchedExcludes) L.push(`     ${w}`);
+  }
+  L.push(``);
+  L.push(`Top allocations:`);
+  for (const w of r.wallets.slice(0, 20)) {
+    L.push(`  ${w.wallet.padEnd(14)} ${w.tokenUnits.toString().padStart(16)} ${symbol}   (${w.nftCount} NFT${w.nftCount === 1 ? "" : "s"}, weight ${w.weight.toFixed(2)})`);
+  }
+  return L.join("\n");
+}
