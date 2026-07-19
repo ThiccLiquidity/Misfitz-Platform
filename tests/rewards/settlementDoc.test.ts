@@ -33,7 +33,7 @@ test("settlement doc: move breakdown equals the operator plan and is solvent (mo
   const move = BigInt(d.move.toDistributionWalletMojos);
   const artist = BigInt(d.move.artistCutMojos);
   assert.equal((move + artist).toString(), d.move.totalRoyaltyMojos);
-  assert.equal(BigInt(d.move.swapToChiaForRewardsMojos) + BigInt(d.move.buyChipsForBurnMojos), move);
+  assert.equal(BigInt(d.move.swapToChiaForRewardsMojos) + BigInt(d.move.buyTokenForBurnMojos), move);
   assert.equal(d.solvent, true);
 });
 
@@ -47,7 +47,7 @@ test("settlement doc: per-wallet reward table sums to the verified payout pot", 
   }
 });
 
-test("settlement doc: $CHIPS placeholder is flagged and carried into the drip manifest until minted", () => {
+test("settlement doc: $SNACKZ placeholder is flagged and carried into the drip manifest until minted", () => {
   const d = fixture();
   assert.equal(d.drip.tokenMinted, false);
   assert.equal(d.drip.manifest.asset.id, TOKEN_TAIL_TBD);

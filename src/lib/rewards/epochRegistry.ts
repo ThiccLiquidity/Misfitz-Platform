@@ -1,4 +1,4 @@
-// MisFitz/$CHIPS Rewards — EPOCH LIFECYCLE registry (SERVER-ONLY, Redis-backed). Tracks each epoch's state so
+// MisFitz/$SNACKZ Rewards — EPOCH LIFECYCLE registry (SERVER-ONLY, Redis-backed). Tracks each epoch's state so
 // the dashboard can show a "closed / manifest ready / paid" badge and the bot can post receipts back. Moves no
 // funds; this is bookkeeping only. All writes are guarded (fall back silently if Redis is unavailable).
 //

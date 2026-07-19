@@ -1,4 +1,4 @@
-// $CHIPS payout bot — file-backed idempotency LEDGER (operator machine only). Implements LedgerStore for the
+// $SNACKZ payout bot — file-backed idempotency LEDGER (operator machine only). Implements LedgerStore for the
 // keyless orchestrator (bot.ts). Safety properties:
 //  - EXCLUSIVE LOCK: one bot at a time (O_EXCL lock file). Concurrent runs would double-pay + clobber each other's
 //    in-flight "intended" entries, blinding crash-recovery — so we refuse to start if a lock exists.

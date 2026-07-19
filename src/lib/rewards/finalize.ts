@@ -54,7 +54,7 @@ export function finalizeDripManifest(
   drip: DripResult,
   tokenAssetId: string,
   sign: (hashHex: string) => string,
-  symbol = "$TOKEN",
+  symbol = "$SNACKZ",
   collectionId?: string, // REQUIRED for the payout bot (it halts on a manifest with no collectionId — the
                          // paymentKey is scoped by it, so omitting it risks a cross-collection ledger collision).
 ): PayoutManifest {

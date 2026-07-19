@@ -1,4 +1,4 @@
-// $CHIPS payout bot — human confirmation GATE (terminal). The orchestrator shows the operator a dry-run summary
+// $SNACKZ payout bot — human confirmation GATE (terminal). The orchestrator shows the operator a dry-run summary
 // and only proceeds if this returns true. Requires the operator to type the exact word "SEND" — no bare "y", so
 // an accidental keypress can't broadcast real payments.
 import { createInterface } from "node:readline";

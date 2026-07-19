@@ -114,12 +114,12 @@ export async function computeRewardsSnapshot(colId: string, opts: ComputeOpts): 
   const dto = toSnapshotDTO({ colId, epoch: opts.epoch, status: opts.status, computedAt, epochResult, settlement, drip, truncated, profiles });
   const opsDto = toOperatorDTO({ colId, epoch: opts.epoch, status: opts.status, computedAt, operator });
   const walletMap = buildWalletMap(drip, settlement);
-  // Operator-only combined settlement document (XCH move breakdown + $CHIPS drip + per-wallet table + hash).
-  // Served by the authed /api/rewards/manifest route. $CHIPS asset id defaults to the placeholder until minted.
+  // Operator-only combined settlement document (XCH move breakdown + $SNACKZ drip + per-wallet table + hash).
+  // Served by the authed /api/rewards/manifest route. $SNACKZ asset id defaults to the placeholder until minted.
   const settleDoc = buildSettlementDoc({
     collectionId: colId, epochId: opts.epoch, status: opts.status, generatedAt: computedAt, truncated,
     epochResult, settlement, operator, drip,
-    tokenAssetId: process.env.CHIPS_ASSET_ID || undefined,
+    tokenAssetId: process.env.TOKEN_ASSET_ID || undefined,
   });
   await cachePutLargeAsync(SETTLE_KEY(colId, opts.epoch), JSON.stringify(settleDoc), EX_S);
   await cachePutLargeAsync(SNAP_KEY(colId, opts.epoch), JSON.stringify(dto), EX_S);

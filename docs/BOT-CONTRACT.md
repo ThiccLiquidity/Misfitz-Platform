@@ -1,4 +1,4 @@
-# $CHIPS payout bot — operator runbook
+# $SNACKZ payout bot — operator runbook
 
 The bot is a **local CLI you run on your own machine**. It reads the epoch's settlement manifest from the site,
 shows you exactly what would move/pay, and (when you say so) pays out the CATs through your **Sage** wallet. It
@@ -19,7 +19,7 @@ ledger makes a crash unable to double-pay.
    - `sage.rpcUrl` — your local Sage wallet RPC endpoint (+ `apiKey` if Sage needs one).
    - `fundingCapUnits` — a hard per-run total cap in base units (the bot refuses to send more). Start from what a
      real shadow epoch showed × ~1.25.
-   - `allowedAssets` — keep the `$CHIA` CAT id; add the **$CHIPS tail id once minted**. Never add the placeholder.
+   - `allowedAssets` — keep the `$CHIA` CAT id; add the **$SNACKZ tail id once minted**. Never add the placeholder.
 2. Make sure your fresh **distribution wallet** is loaded in Sage and funded per-epoch from the manifest's move total.
 
 ## Monthly flow
@@ -28,14 +28,14 @@ ledger makes a crash unable to double-pay.
    ```
    REWARDS_OPS_SECRET=... npm run bot -- preview --epoch 2026-06
    ```
-   It prints: how much XCH to move & swap (broken out by purpose), the $CHIPS drip table, and the per-wallet
+   It prints: how much XCH to move & swap (broken out by purpose), the $SNACKZ drip table, and the per-wallet
    $CHIA-owed table. Sanity-check the totals against Dexie.
 3. **Do the swap by hand:** move the manifest's `move` XCH to your distribution wallet, swap the reward slice
    XCH→$CHIA yourself, and note the **actual $CHIA received**.
 4. **Finalize the reward manifest** with that received amount → a signed/finalized `reward` PayoutManifest
    (`finalizeRewardManifest`, saved to a file). *(This finalize step is the next thing to wire as a small
    endpoint/tool; until then the reward leg is built manually from the doc.)*
-5. **Pay $CHIPS drip** (once $CHIPS is minted and its tail is in `allowedAssets`):
+5. **Pay $SNACKZ drip** (once $SNACKZ is minted and its tail is in `allowedAssets`):
    ```
    REWARDS_OPS_SECRET=... npm run bot -- send --epoch 2026-06 --kind drip
    ```
@@ -55,7 +55,7 @@ ledger makes a crash unable to double-pay.
   RoyaltyChainProvider before flipping `REWARDS_LAUNCH`.
 
 ## Still owner-blocked (see QUESTIONS.md)
-Fresh distribution wallet fingerprint + Sage RPC details; the $CHIPS tail id (mint it); the funding caps; and the
+Fresh distribution wallet fingerprint + Sage RPC details; the $SNACKZ tail id (mint it); the funding caps; and the
 on-chain royalty gate + manifest signing before real rewards go live. Until then: `preview` works today on real
 shadow data; live `send` is correctly refused by the guards.
 
@@ -70,7 +70,7 @@ shadow data; live `send` is correctly refused by the guards.
 - **Pin the manifest.** `preview` prints the drip manifest hash; a live `send` requires `--expect-hash <that>` and
   refuses if the freshly-downloaded manifest doesn't match — so a server/transport swap between preview and send
   can't slip a different payout through. The ops secret is sent as a Bearer header, never in the URL.
-- **Kind is bound to asset.** A "drip" manifest may only pay the $CHIPS asset, a "reward" only $CHIA. A tampered
+- **Kind is bound to asset.** A "drip" manifest may only pay the $SNACKZ asset, a "reward" only $CHIA. A tampered
   manifest that keeps kind "drip" but sets the asset to $CHIA is rejected.
 - **Crash recovery confirms.** A recovered in-flight tx is re-checked on-chain (`waitConfirmed`) before it's
   marked paid — a failed/evicted tx never gets recorded as a payment. The bot never auto-resends; it halts.
@@ -110,3 +110,38 @@ is a hard **fingerprint pin**, plus physical isolation:
 4. First live run ever: do a tiny **canary send** to a wallet you control and verify it on-chain (this also
    confirms Sage's amount-units + the `get_key` fingerprint method — the two `TODO-CONFIRM`s).
 5. NEVER auto-login to "fix" a fingerprint mismatch, and never keep more than one epoch's funds in the wallet.
+
+---
+
+## Genesis airdrop runbook (the one-time 100M $SNACKZ launch drop)
+
+Fires ONCE, after Misfitz is fully distributed. Waits on: $SNACKZ minted (tail id in `tokenAssetId`), the
+project/mint wallet address(es) to exclude, and the distribution wallet funded with the 100M + its fingerprint
+set as the bot's wallet-pin.
+
+1. **Freeze the snapshot.** Fresh full scan of Misfitz holders → one `{wallet, rank, supply}` entry per held NFT.
+   Save the exact list (this is the immutable airdrop roster).
+2. **Allocate.** `buildLaunchAirdrop({ holders, airdropUnits: MISFITZ_TOKEN.airdropUnits, excludeWallets: [<project wallet(s)>] })`.
+   Rarity-weighted per NFT, project wallets removed, exact bigint split (solvent: sum === 100M).
+3. **Cut the manifest.** `finalizeAirdropManifest(result, tokenAssetId, sign, collectionId)` → a drip-kind
+   manifest on the fixed `genesis-airdrop` epoch id (the bot ledger guarantees it can only ever send once).
+4. **Dry-run the bot** (`preview`) — eyeball the per-wallet table + total (must equal 100M) + that no project
+   wallet appears. Verify the funding cap covers exactly the 100M.
+5. **Live send** (`send`) — sequential, write-ahead ledger, wallet-pin enforced (spends only from the
+   designated distribution wallet). Any halt is fail-closed; already-sent rows are never re-sent.
+
+### Genesis airdrop — safety guards (from the Fable review)
+- **Build the exclude list from a dry-run of the SAME frozen snapshot.** Copy the project/mint wallet
+  string(s) exactly as they appear in the snapshot. `buildLaunchAirdrop` returns `unmatchedExcludes` — if it
+  is non-empty, an exclude entry matched ZERO NFTs (likely a wrong address form / DID). **HALT and fix** — a
+  mis-formed exclude means the project wallet could still be getting paid.
+- **Freeze once, never re-cut.** The manifest uses a fixed `genesis-airdrop` epoch id. The ledger blocks
+  per-wallet double-pays, but re-cutting a NEW snapshot for the same epoch after a partial send can over-emit
+  in aggregate. So: cut the manifest ONCE, pin its hash, and always resume with `--expect-hash <hash>`
+  (botCli supports it). If holdings changed and you truly must re-cut, start a FRESH ledger and reconcile by
+  hand.
+- **Concentration:** a whale of many rares may trip the guard's soft 25% share warning (fine, proceeds). A
+  hard 90% halt on a fully-distributed collection almost always means the exclude list missed the project
+  wallet — do NOT override; fix the exclusion.
+- **Zero recipients:** `buildLaunchAirdrop` THROWS if the eligible set is empty with a positive bucket
+  (empty snapshot or over-broad exclusion) — never emits a 0-recipient "100M distributed" manifest.

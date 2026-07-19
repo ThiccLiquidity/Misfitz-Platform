@@ -1,6 +1,6 @@
-// MisFitz/$CHIPS Rewards — SETTLEMENT DOCUMENT builder (PURE, no I/O). Assembles ONE labeled, hash-stamped JSON
+// MisFitz/$SNACKZ Rewards — SETTLEMENT DOCUMENT builder (PURE, no I/O). Assembles ONE labeled, hash-stamped JSON
 // that the operator downloads at epoch close: exactly how much XCH to move to the fresh distribution wallet
-// (broken out by purpose), how much $CHIPS to drip from treasury, and the full per-wallet distribution table.
+// (broken out by purpose), how much $SNACKZ to drip from treasury, and the full per-wallet distribution table.
 // Traitfolio only PUBLISHES this — it never signs or sends. The local bot consumes the manifests inside it.
 //
 // Money is bigint mojos / base units end to end; serialized as decimal strings so the hash is stable and there
@@ -34,11 +34,11 @@ export interface SettlementDoc {
   move: {
     toDistributionWalletMojos: string;  // fund the distribution wallet with exactly this (reward + burn pots)
     swapToChiaForRewardsMojos: string;  //   ├─ swap this XCH -> $CHIA, then split across traders
-    buyChipsForBurnMojos: string;       //   └─ swap this XCH -> $CHIPS and burn
+    buyTokenForBurnMojos: string;       //   └─ swap this XCH -> $SNACKZ and burn
     artistCutMojos: string;             // stays as XCH in the royalty wallet (do NOT move/swap)
     totalRoyaltyMojos: string;          // = toDistributionWallet + artistCut (sanity; must equal epoch royalty)
   };
-  // $CHIPS drip from treasury (deterministic — no swap). manifest.asset.id is TOKEN_TAIL_TBD until $CHIPS mints.
+  // $SNACKZ drip from treasury (deterministic — no swap). manifest.asset.id is TOKEN_TAIL_TBD until $SNACKZ mints.
   drip: {
     tokenUnits: string;
     holderCount: number;
@@ -75,14 +75,14 @@ export interface BuildSettlementDocInput {
   settlement: Settlement;
   operator: OperatorPlan;
   drip: DripResult;
-  tokenAssetId?: string;        // set once $CHIPS is minted; defaults to the placeholder
+  tokenAssetId?: string;        // set once $SNACKZ is minted; defaults to the placeholder
   tokenSymbol?: string;
 }
 
 export function buildSettlementDoc(input: BuildSettlementDocInput): SettlementDoc {
   const { collectionId, epochId, status, generatedAt, truncated, epochResult, settlement, operator, drip } = input;
   const tokenAssetId = input.tokenAssetId ?? TOKEN_TAIL_TBD;
-  const tokenSymbol = input.tokenSymbol ?? "$CHIPS";
+  const tokenSymbol = input.tokenSymbol ?? "$SNACKZ";
 
   const rewardRows: SettlementRewardRow[] = settlement.payable
     .map((p) => ({
@@ -112,7 +112,7 @@ export function buildSettlementDoc(input: BuildSettlementDocInput): SettlementDo
     move: {
       toDistributionWalletMojos: operator.moveToHotWalletMojos.toString(),
       swapToChiaForRewardsMojos: operator.forRewardMojos.toString(),
-      buyChipsForBurnMojos: operator.forBurnMojos.toString(),
+      buyTokenForBurnMojos: operator.forBurnMojos.toString(),
       artistCutMojos: operator.keepArtistMojos.toString(),
       totalRoyaltyMojos: operator.totalRoyaltyMojos.toString(),
     },
@@ -135,8 +135,8 @@ export function buildSettlementDoc(input: BuildSettlementDocInput): SettlementDo
     notes: [
       "PRE-SWAP document. Step 1: fund the fresh distribution wallet with move.toDistributionWalletMojos.",
       "Step 2: swap move.swapToChiaForRewardsMojos XCH -> $CHIA and enter the ACTUAL $CHIA received; the split absorbs slippage.",
-      "Step 3: swap move.buyChipsForBurnMojos XCH -> $CHIPS and burn. Step 4: run the drip manifest for the $CHIPS holder drip.",
-      tokenMinted ? "$CHIPS asset id is set." : "$CHIPS NOT minted yet — drip manifest uses a placeholder asset id and the bot will refuse to send it.",
+      "Step 3: swap move.buyTokenForBurnMojos XCH -> $SNACKZ and burn. Step 4: run the drip manifest for the $SNACKZ holder drip.",
+      tokenMinted ? "$SNACKZ asset id is set." : "$SNACKZ NOT minted yet — drip manifest uses a placeholder asset id and the bot will refuse to send it.",
       truncated ? "WARNING: holder roster was incomplete — drip allocation is approximate. Do not pay drips from this doc." : "Holder roster complete.",
     ],
   };
@@ -147,9 +147,9 @@ export function formatSettlementDoc(d: SettlementDoc): string {
   const xch = (mojos: string) => (Number(BigInt(mojos)) / 1e12).toFixed(4);
   const L: string[] = [];
   L.push(`=== Settlement ${d.collectionId.slice(0, 10)}… epoch ${d.epochId} [${d.status}] ===`);
-  L.push(`move to distribution wallet: ${xch(d.move.toDistributionWalletMojos)} XCH  (reward ${xch(d.move.swapToChiaForRewardsMojos)} + burn ${xch(d.move.buyChipsForBurnMojos)})`);
+  L.push(`move to distribution wallet: ${xch(d.move.toDistributionWalletMojos)} XCH  (reward ${xch(d.move.swapToChiaForRewardsMojos)} + burn ${xch(d.move.buyTokenForBurnMojos)})`);
   L.push(`artist cut (keep as XCH): ${xch(d.move.artistCutMojos)} XCH`);
-  L.push(`drip: ${d.drip.tokenUnits} ${d.drip.tokenMinted ? "$CHIPS" : "$CHIPS(placeholder)"} to ${d.drip.holderCount} holders`);
+  L.push(`drip: ${d.drip.tokenUnits} ${d.drip.tokenMinted ? "$SNACKZ" : "$SNACKZ(placeholder)"} to ${d.drip.holderCount} holders`);
   L.push(`reward recipients: ${d.totals.rewardRecipients} · sales ${d.totals.saleCount} · solvent ${d.solvent}`);
   L.push(`recipient-list hash: ${d.recipientListHash}`);
   return L.join("\n");

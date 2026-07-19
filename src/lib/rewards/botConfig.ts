@@ -1,4 +1,4 @@
-// $CHIPS payout bot — CONFIG (operator machine). Loaded from a JSON file (path via --config or ./bot-config.json)
+// $SNACKZ payout bot — CONFIG (operator machine). Loaded from a JSON file (path via --config or ./bot-config.json)
 // with env-var overrides. Holds NO private keys. Assets are bound PER KIND so a tampered manifest can't cross
 // them (a "drip" can never pay $CHIA). The ops secret authorises manifest download + receipts (sent as a Bearer
 // header, never a URL param).
@@ -11,7 +11,7 @@ export interface BotConfig {
   opsSecret: string;
   ledgerPath: string;           // resolved absolute (against the CONFIG file's dir, not the cwd)
   chiaAssetId: string;          // $CHIA reward CAT
-  chipsAssetId: string;         // $CHIPS tail (TOKEN_TAIL_TBD until minted)
+  tokenAssetId: string;         // $SNACKZ tail (TOKEN_TAIL_TBD until minted)
   allowedAssets: string[];      // DERIVED: the assets the bot may send (never the placeholder)
   assetForKind: { reward: string; drip: string }; // DERIVED: binds kind -> its only permitted asset
   fundingCapUnits: string;      // hard per-run total cap (base units) — MANDATORY, stricter than the manifest
@@ -28,7 +28,7 @@ export interface BotConfig {
 
 interface RawConfig {
   siteUrl?: string; opsSecret?: string; ledgerPath?: string;
-  chiaAssetId?: string; chipsAssetId?: string;
+  chiaAssetId?: string; tokenAssetId?: string;
   fundingCapUnits?: string; maxSends?: number; confirmTimeoutMs?: number; feeMojos?: string;
   sage?: { rpcUrl?: string; apiKey?: string; fingerprint?: string | number }; requireSignature?: boolean;
 }
@@ -40,8 +40,8 @@ export function loadConfig(configPath = "./bot-config.json"): BotConfig {
     catch { throw new Error(`bot config at ${configPath} is not valid JSON`); }
   }
   const chiaAssetId = raw.chiaAssetId || CHIA_ASSET_ID;
-  const chipsAssetId = raw.chipsAssetId || TOKEN_TAIL_TBD;
-  const allowedAssets = [chiaAssetId, chipsAssetId].filter((a) => a && a !== TOKEN_TAIL_TBD);
+  const tokenAssetId = raw.tokenAssetId || TOKEN_TAIL_TBD;
+  const allowedAssets = [chiaAssetId, tokenAssetId].filter((a) => a && a !== TOKEN_TAIL_TBD);
   const rawLedger = raw.ledgerPath || "./bot-ledger.json";
   const ledgerPath = isAbsolute(rawLedger) ? rawLedger : resolve(dirname(resolve(configPath)), rawLedger);
 
@@ -50,9 +50,9 @@ export function loadConfig(configPath = "./bot-config.json"): BotConfig {
     opsSecret: process.env.REWARDS_OPS_SECRET ?? raw.opsSecret ?? "",
     ledgerPath,
     chiaAssetId,
-    chipsAssetId,
+    tokenAssetId,
     allowedAssets,
-    assetForKind: { reward: chiaAssetId, drip: chipsAssetId },
+    assetForKind: { reward: chiaAssetId, drip: tokenAssetId },
     fundingCapUnits: raw.fundingCapUnits ?? "0",
     maxSends: raw.maxSends ?? 500,
     confirmTimeoutMs: raw.confirmTimeoutMs ?? 180_000,

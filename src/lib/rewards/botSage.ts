@@ -1,4 +1,4 @@
-// $CHIPS payout bot — Sage wallet ADAPTER (live send only; the operator's machine). Implements WalletRpc by
+// $SNACKZ payout bot — Sage wallet ADAPTER (live send only; the operator's machine). Implements WalletRpc by
 // talking to the local Sage wallet RPC. Holds NO keys itself — Sage holds the keys and signs; this only asks it
 // to send a CAT to an address and reports back the transaction id.
 //

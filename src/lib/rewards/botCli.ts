@@ -1,4 +1,4 @@
-/* $CHIPS payout bot — operator CLI (runs on YOUR machine; holds no keys).
+/* $SNACKZ payout bot — operator CLI (runs on YOUR machine; holds no keys).
  *
  *   npm run bot -- preview  --epoch 2026-06                 # dry-run: download the settlement doc, print what
  *                                                           # would move/pay. Sends nothing. No wallet needed.
@@ -8,7 +8,7 @@
  *   npm run bot -- receipts --epoch 2026-06 --kind drip    # re-post receipts from the ledger (dashboard stuck un-paid)
  *
  * Flags: --config <path>, --col <id>, --site <url>, --new-ledger (genuine first run only).
- * v1: manual swap, HASH-ONLY trust, $CHIPS not minted (drips guard-blocked until its tail is in the config).
+ * v1: manual swap, HASH-ONLY trust, $SNACKZ not minted (drips guard-blocked until its tail is in the config).
  */
 import { readFileSync } from "node:fs";
 import { loadConfig, type BotConfig } from "./botConfig";
@@ -58,10 +58,10 @@ function printPreview(doc: SettlementDoc, cfg: BotConfig): void {
   console.log(`\n1) MOVE to your fresh distribution wallet, then swap:`);
   console.log(`   total:               ${xch(doc.move.toDistributionWalletMojos)} XCH`);
   console.log(`     ├─ swap -> $CHIA:   ${xch(doc.move.swapToChiaForRewardsMojos)} XCH   (buy $CHIA, then split to traders)`);
-  console.log(`     └─ buy&burn $CHIPS: ${xch(doc.move.buyChipsForBurnMojos)} XCH`);
+  console.log(`     └─ buy&burn $SNACKZ: ${xch(doc.move.buyTokenForBurnMojos)} XCH`);
   console.log(`   artist cut (keep):    ${xch(doc.move.artistCutMojos)} XCH   (stays as XCH in your royalty wallet)`);
-  console.log(`\n2) $CHIPS DRIP (from treasury, deterministic):`);
-  console.log(`   ${doc.drip.tokenUnits} units to ${doc.drip.holderCount} holders${doc.drip.tokenMinted ? "" : "  [PLACEHOLDER tail — will NOT send until $CHIPS is minted + whitelisted]"}`);
+  console.log(`\n2) $SNACKZ DRIP (from treasury, deterministic):`);
+  console.log(`   ${doc.drip.tokenUnits} units to ${doc.drip.holderCount} holders${doc.drip.tokenMinted ? "" : "  [PLACEHOLDER tail — will NOT send until $SNACKZ is minted + whitelisted]"}`);
   const dv = verifyManifest(doc.drip.manifest, { allowedAssets: [doc.drip.manifest.asset.id], allowPlaceholderAsset: true });
   console.log(`   ${dv.ok ? "internally consistent" : "PROBLEMS: " + dv.errors.join("; ")}`);
   console.log(formatManifest(doc.drip.manifest, 5).split("\n").map((l) => "   " + l).join("\n"));
@@ -71,7 +71,7 @@ function printPreview(doc: SettlementDoc, cfg: BotConfig): void {
   for (const w of doc.rewards.wallets.slice(0, 5)) console.log(`     ${w.wallet.padEnd(16)} owed ${xch(w.owedMojos)} XCH`);
   if (doc.rewards.wallets.length > 5) console.log(`     … +${doc.rewards.wallets.length - 5} more`);
   console.log(`\n   recipient-list hash ${doc.recipientListHash}`);
-  console.log(`\n(dry-run — nothing sent. allowedAssets: ${cfg.allowedAssets.join(", ") || "(none — drips blocked until $CHIPS minted)"} )\n`);
+  console.log(`\n(dry-run — nothing sent. allowedAssets: ${cfg.allowedAssets.join(", ") || "(none — drips blocked until $SNACKZ minted)"} )\n`);
 }
 
 async function postReceipts(cfg: BotConfig, col: string, epoch: string, kind: "reward" | "drip", sent: { assetId: string; amountUnits: string; txId: string }[]): Promise<boolean> {

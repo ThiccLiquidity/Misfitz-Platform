@@ -1,10 +1,10 @@
 # Token & Airdrop System — Audit (as of 2026-07-14)
 
-Purpose: map what the $CHIPS reward + airdrop pipeline already has vs. what still has to be built, so the
+Purpose: map what the $SNACKZ reward + airdrop pipeline already has vs. what still has to be built, so the
 end-to-end operator workflow (track → operator closes epoch → download one manifest → local bot pays out) can
-be finished without the token existing yet. Nothing here moves funds or depends on $CHIPS being minted.
+be finished without the token existing yet. Nothing here moves funds or depends on $SNACKZ being minted.
 
-**Token status:** name finalized as **$CHIPS**, NOT yet minted. Everywhere the tail id is needed the code uses
+**Token status:** name finalized as **$SNACKZ**, NOT yet minted. Everywhere the tail id is needed the code uses
 the placeholder `TOKEN_TAIL_TBD` (`src/lib/rewards/manifest.ts`), and the manifest guard hard-blocks any send
 against that placeholder — so the whole system is buildable and testable now and only the final "send drip"
 step is gated on the mint.
@@ -81,7 +81,7 @@ routes), `REWARDS_LAUNCH` (gates real payout intent). Shadow-first is fully wire
    drip allocation + hashing) but nothing assembles them into ONE labeled JSON the operator downloads. Need a
    pure `settlementDoc.ts` builder + an operator-authed `GET /api/rewards/manifest?col&epoch` that returns:
    XCH to move to the fresh distribution wallet broken out by purpose (swap→$CHIA / swap→buy&burn / artist
-   cut), $CHIPS from treasury for the holder drip, the full per-wallet distribution table (address, amounts,
+   cut), $SNACKZ from treasury for the holder drip, the full per-wallet distribution table (address, amounts,
    reason breakdown), epoch id + totals + a hash of the recipient list.
 
 3. **Epoch lifecycle / paid state.** No registry of epoch status (open → closed → manifest-generated → paid)

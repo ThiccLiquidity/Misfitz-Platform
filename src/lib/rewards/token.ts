@@ -28,7 +28,7 @@ const T = (tokens: number): bigint => BigInt(tokens) * UNITS_PER_TOKEN;
 // 1,000,000,000 $TOKEN — 10% airdrop / 67% drip / 5% LP seed / 15% LP rewards / 3% team. burnAddress + symbol
 // are placeholders until the TAIL is minted and the token is named.
 export const MISFITZ_TOKEN: TokenConfig = {
-  symbol: "$TOKEN",
+  symbol: "$SNACKZ",
   burnAddress: "xch1__UNSPENDABLE_BURN_ADDRESS_TBD__",
   dripRateBps: 500,
   totalSupplyUnits: T(1_000_000_000),

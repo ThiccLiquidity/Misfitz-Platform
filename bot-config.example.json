@@ -2,7 +2,7 @@
   "_comment": "Copy to bot-config.json and fill in. Holds NO private keys — Sage holds the keys. Do NOT commit the real file. Prefer setting REWARDS_OPS_SECRET as an env var over putting it here.",
   "siteUrl": "https://YOUR-SITE.vercel.app",
   "chiaAssetId": "69326954fe16117cd6250e929748b2a1ab916347598bc8180749279cfae21ddb",
-  "chipsAssetId": "TOKEN_TAIL_TBD — replace with the real $CHIPS tail id once minted (drips stay blocked until then)",
+  "tokenAssetId": "TOKEN_TAIL_TBD — replace with the real $SNACKZ tail id once minted (drips stay blocked until then)",
   "ledgerPath": "./bot-ledger.json",
   "fundingCapUnits": "0",
   "maxSends": 500,

@@ -5,7 +5,7 @@ import { MISFITZ_COLLECTION_ID } from "@/lib/rewards/consts";
 import { opsSecretMatches } from "@/lib/rewards/opsAuth";
 import { advanceEpoch } from "@/lib/rewards/epochRegistry";
 
-// OPERATOR-ONLY: download the SINGLE combined settlement document for an epoch (XCH move breakdown + $CHIPS drip
+// OPERATOR-ONLY: download the SINGLE combined settlement document for an epoch (XCH move breakdown + $SNACKZ drip
 // + full per-wallet table + recipient-list hash). This is the artifact the operator hands to the local bot.
 // Authed with REWARDS_OPS_SECRET; 404s on a bad/missing key or flag off (indistinguishable from nonexistent).
 // Downloading records the epoch as "manifest" (with the hash) so the dashboard shows it's been pulled.
