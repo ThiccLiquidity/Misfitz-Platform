@@ -166,19 +166,13 @@ export function SoldShowcase({ sale, onClose }: { sale: SoldShowcaseData; onClos
   // to a share page whose OG image IS this exact SOLD card, so X unfurls the branded card. No login/OAuth on
   // our side (stays no-login) — the user just hits Post. The Save/Copy buttons remain for the full-res image.
   const shareToX = () => {
-    const p = new URLSearchParams();
-    p.set("name", sale.name);
-    if (sale.collectionName) p.set("coll", sale.collectionName);
-    if (sale.imageUrl) p.set("img", sale.imageUrl);
-    if (sale.rank != null) p.set("rank", String(sale.rank));
-    if (sale.totalSupply != null) p.set("supply", String(sale.totalSupply));
-    p.set("price", String(sale.priceXch));
-    if (usd != null) p.set("usd", String(Math.round(usd * 100) / 100));
-    if (sale.date) p.set("date", sale.date);
-    for (const t of chips) p.append("trait", `${t.type}:${t.value}`);
-    const shareUrl = `${window.location.origin}/s/${sale.launcherId ?? "sale"}?${p.toString()}`;
+    // CLEAN share link: just /s/<launcherId>. The share page fetches the sale server-side from that id and
+    // emits OG/Twitter-card metadata whose image IS this SOLD card, so X unfurls the branded card — no giant
+    // query string in the tweet. Caption stays short (name + price + rank). No OAuth: user hits Post themself.
     const text = `${sale.name} sold for ${formatXch(sale.priceXch)}${tier.rank ? ` \u00b7 Rank #${tier.rank}` : ""} on Traitfolio \u25c8`;
-    const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
+    const params = new URLSearchParams({ text });
+    if (sale.launcherId) params.set("url", `${window.location.origin}/s/${sale.launcherId}`);
+    const intent = `https://x.com/intent/post?${params.toString()}`;
     window.open(intent, "_blank", "noopener,noreferrer");
   };
 

@@ -19,6 +19,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const apply = (m: ThemeMode) => {
     window.localStorage.setItem(STORAGE_KEY, m);
     document.documentElement.style.colorScheme = isNight(m) ? "dark" : "light";
+    // Keep <html data-theme> in lockstep with the active mode. <html> owns the page-desk background
+    // (globals.css html[data-theme=...]) and the pre-paint script sets it for frame 0; this line keeps
+    // it correct on every toggle so day/night backgrounds always switch immediately.
+    document.documentElement.setAttribute("data-theme", m);
     setMode(m);
   };
 

@@ -76,6 +76,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             if (t === 'dark') t = 'nostalgia-night';
             if (t === 'light') t = 'nostalgia';
             document.documentElement.style.colorScheme = (t === 'nostalgia-night') ? 'dark' : 'light';
+            // Paint the correct theme from frame 0: <html> owns the page desk background (see globals.css
+            // html[data-theme=...]). ThemeProvider re-sets this same attribute on every toggle so it stays
+            // in sync — that sync is what keeps switching working (the earlier static version did not).
+            document.documentElement.setAttribute('data-theme', t);
           } catch(e) {}
         `}} />
         <script defer src="/_vercel/insights/script.js" />

@@ -28,13 +28,21 @@
 }
 
 body {
-  background-color: var(--vault-bg);
+  /* Transparent: the page-desk background is owned by <html> (see html[data-theme=...] blocks below) so
+     the correct theme paints from the first frame. body/AppShell must not cover it with a solid fill. */
+  background-color: transparent;
   color: var(--title);
   /* Crisp light-on-dark text — without this, the UI font renders heavy/glowy on dark backgrounds. */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
+
+/* AppShell root div carries the tailwind `bg-vault-bg` utility (a solid theme fill). We make it
+   transparent so the theme desk painted on <html> (which is correct from frame 0 via the pre-paint
+   script) shows through on every page. Without this, the SSR default-day fill would flash over a
+   night user's correct <html> background until React hydrated. */
+.bg-vault-bg { background-color: transparent !important; }
 
 /* ================================================================
    TCG CARD SYSTEM V2 — Full-bleed art, spinning tier borders
@@ -1929,8 +1937,7 @@ body {
   --rc-ink: #402a18;
   --rc-divider: rgba(64,42,24,0.20);
 }
-[data-theme="nostalgia"],
-[data-theme="nostalgia"] .bg-vault-bg {
+html[data-theme="nostalgia"] {
   background-color: #b98c4f !important;
   /* Single top-down desk scene (toys baked in around the edges, open center for
      content). Fixed to the viewport + cover so it never tiles or repeats the props;
@@ -2570,7 +2577,7 @@ body {
 
 /* Home page: the landing paints its own bg over the AppShell desk — swap in the
    desk scene for nostalgia and hide the dark-theme paper texture + gold dust. */
-[data-theme="nostalgia"] .tf-land-bg {
+html[data-theme="nostalgia"] .tf-land-bg {
   background-color: #b98c4f !important;
   background-image:
     linear-gradient(180deg, rgba(247,236,210,0.32) 0%, rgba(233,196,138,0.20) 55%, rgba(201,159,99,0.24) 100%),
@@ -2766,9 +2773,8 @@ body {
 
 /* Mobile: bias the desk scene to the left so the toys show (cover crops the center away) */
 @media (max-width: 640px) {
-  [data-theme="nostalgia"],
-  [data-theme="nostalgia"] .bg-vault-bg,
-  [data-theme="nostalgia"] .tf-land-bg {
+  html[data-theme="nostalgia"],
+  html[data-theme="nostalgia"] .tf-land-bg {
     background-position: center, left center, top left !important;
   }
 }
@@ -2783,8 +2789,7 @@ body {
   --rc-ink: #dfe8f5;
   --rc-divider: rgba(223,232,245,0.20);
 }
-[data-theme="nostalgia-night"],
-[data-theme="nostalgia-night"] .bg-vault-bg {
+html[data-theme="nostalgia-night"] {
   background-color: #070c18 !important;
   /* Single top-down desk scene (toys baked in around the edges, open center for
      content). Fixed to the viewport + cover so it never tiles or repeats the props;
@@ -3422,7 +3427,7 @@ body {
 
 /* Home page: the landing paints its own bg over the AppShell desk — swap in the
    desk scene for nostalgia and hide the dark-theme paper texture + gold dust. */
-[data-theme="nostalgia-night"] .tf-land-bg {
+html[data-theme="nostalgia-night"] .tf-land-bg {
   background-color: #070c18 !important;
   background-image:
     linear-gradient(180deg, rgba(11,17,32,0.32) 0%, rgba(7,12,24,0.20) 55%, rgba(4,8,17,0.24) 100%),
@@ -3610,9 +3615,8 @@ body {
 
 /* Mobile: bias the desk scene to the left so the toys show (cover crops the center away) */
 @media (max-width: 640px) {
-  [data-theme="nostalgia-night"],
-  [data-theme="nostalgia-night"] .bg-vault-bg,
-  [data-theme="nostalgia-night"] .tf-land-bg {
+  html[data-theme="nostalgia-night"],
+  html[data-theme="nostalgia-night"] .tf-land-bg {
     background-position: center, left center, top left !important;
   }
 }
