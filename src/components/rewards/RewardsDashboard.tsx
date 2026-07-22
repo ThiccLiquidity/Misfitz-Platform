@@ -208,7 +208,7 @@ export function RewardsDashboard({ colId, opsKey }: { colId: string; opsKey?: st
     : [];
 
   return (
-    <section className="mt-8 overflow-hidden rounded-3xl border border-amber-400/25 bg-amber-400/[0.04]">
+    <section className="tf-rewards mt-8 overflow-hidden rounded-3xl border border-amber-400/25 bg-amber-400/[0.04]">
       {/* Header band */}
       <div className="border-b border-amber-400/15 bg-amber-400/[0.06] px-5 py-4 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">

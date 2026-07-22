@@ -35,7 +35,7 @@ export function FreshnessBadge({ asOf, light = false }: { asOf?: number | null; 
   return (
     <span
       title="Values refresh automatically as new sales land on Dexie. This shows when they were last recomputed."
-      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+      className="tf-fresh inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
       style={{ background: bg, color: text, border: `1px solid ${border}` }}
     >
       <span className="relative flex h-1.5 w-1.5">

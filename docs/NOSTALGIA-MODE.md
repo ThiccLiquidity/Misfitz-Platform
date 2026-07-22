@@ -73,3 +73,12 @@ The manila/cream page palette failed AA on two status colors used as text: `good
 trapper-keeper red stays on borders (3:1 UI-component bar, fine). **Remaining before user-facing:** a quick
 audit that no subtle text renders directly on the dark wood desk (`vaultBg #7c5236`) — inside-the-binder text
 is all on light pages, but confirm nav/chrome once the toggle is exposed.
+
+## Redesigned as a true theme (this session)
+Reframed per owner: nostalgia must be a RESKIN that keeps light/dark's structure/layout — not a
+scene. Implemented as a **light theme** (Fable design): sun-bleached honey-oak desk (subtle tiled
+desk.png), manila trapper-keeper binder, cream index-card surfaces, espresso ink, with dark walnut
+`.tf-panel` chrome mirroring light mode's dark-sidebar split (tokens re-pointed locally). Every
+`[data-theme="nostalgia"]` rule is scoped; light/dark untouched; AA throughout. The toy cutouts +
+frosted sleeve are retired from app chrome (parked for a marketing splash). Still to verify live:
+CollectionCard text on the cream tiles, and the NftDetailModal backdrop, at desktop + ~390px.

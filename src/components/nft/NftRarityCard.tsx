@@ -129,7 +129,7 @@ function NftRarityCardImpl({
           {tier.rank !== null && (
             <div className={`tcg-rank-tag tcg-rank-tag-${id}`}>
               <span className="tcg-rank-lbl">Rank</span>
-              <span className="tcg-rank-num">{nft.rankEstimated ? "≈#" : "#"}{tier.rank}</span>
+              <span className="tcg-rank-num">#{tier.rank}</span>
             </div>
           )}
         </div>
@@ -145,14 +145,25 @@ function NftRarityCardImpl({
             aria-label={onArtClick ? "View full image" : undefined}
           >
             {nft.imageUrl ? (
-              <Image
-                src={nft.imageUrl}
-                alt={nft.name}
-                fill
-                className="object-contain"
-                sizes={isDetail ? "380px" : "260px"}
-                unoptimized
-              />
+              <>
+                <Image
+                  src={nft.imageUrl}
+                  alt=""
+                  aria-hidden
+                  fill
+                  className="tcg-art-blurfill object-cover"
+                  sizes={isDetail ? "380px" : "260px"}
+                  unoptimized
+                />
+                <Image
+                  src={nft.imageUrl}
+                  alt={nft.name}
+                  fill
+                  className="object-contain"
+                  sizes={isDetail ? "380px" : "260px"}
+                  unoptimized
+                />
+              </>
             ) : (
               <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.05)" }} aria-hidden />
             )}

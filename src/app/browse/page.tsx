@@ -23,10 +23,10 @@ export default async function BrowsePage() {
           <span className="tf-eyebrow inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]">
             The Vault Floor · Every Chia collection
           </span>
-          <h1 className="text-title mt-2 text-2xl font-black tracking-tight sm:text-3xl">
+          <h1 className="tf-browse-title text-title mt-2 text-2xl font-black tracking-tight sm:text-3xl">
             Browse <span className="tf-foil">Collections</span>
           </h1>
-          <p className="text-subtle mt-1 max-w-2xl text-sm">
+          <p className="tf-browse-sub text-subtle mt-1 max-w-2xl text-sm">
             Every NFT collection on Chia. Tap one to open it as a binder — sorted by rarity, with live values.
           </p>
         </div>

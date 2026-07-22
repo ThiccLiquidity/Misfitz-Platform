@@ -53,25 +53,40 @@ const BASE_THEMES: Record<ThemeMode, ThemeTokens> = {
     fair: "#b86200",
     bad: "#c42020",
   },
-  // HIDDEN prototype skin — 90s Saturday-morning: an open binder on a wood table, manila pages, chunky
-  // primary-color accents. CSS-only for now (see [data-theme="nostalgia"] in globals.css); commissioned art
-  // drops in via the --nostalgia-* CSS vars without touching this palette. Not in the visible theme toggle.
+  // HIDDEN theme — "nostalgia": a true reskin, sibling of light/dark. 90s Saturday-morning warmth: a
+  // sun-bleached honey-oak desk (subtle /nostalgia/desk.png texture wash — see [data-theme="nostalgia"]
+  // in globals.css), manila pages, brick-red trapper-keeper trim, espresso marker ink. This is a LIGHT
+  // theme (dark ink on warm light surfaces) so the same token contract as light mode holds; dark leather
+  // chrome panels (.tf-panel) re-point these vars locally in CSS. All text tokens pass WCAG AA.
   nostalgia: {
-    vaultBg: "#7c5236",    // wood table / desk
-    pageBg: "#fdf3d8",     // manila binder page
-    pageBorder: "#c0392b", // bold retro red trapper-keeper trim
-    cardBg: "#fffdf5",
-    cardBorder: "#2e7bc0", // primary crayon blue
-    glow: "0 2px 0 rgba(70,40,10,0.25)",
-    artBg: "#ffe8b0",
-    artIcon: "#c0392b",
-    title: "#3a2416",      // brown marker ink
-    // Contrast pass (AA on the manila/cream pages): good/fair failed as text (3.1:1 / 2.0:1) — darkened. The
-    // vibrant trapper-keeper red stays on BORDERS (pageBorder / the CSS block); these tokens are TEXT only.
-    sub: "#6a4a2a",        // 7.2:1
-    good: "#1b6e2e",       // 5.7:1 (was #2f9e44, 3.1:1 — fail)
-    fair: "#8a5500",       // 5.6:1 (was #e8a020, 2.0:1 — fail)
-    bad: "#a82a1e",        // 6.3:1 (text; border trim keeps #c0392b)
+    vaultBg: "#c99f63",     // sun-bleached honey oak (desk.png texture layers over this)
+    pageBg: "#f7ecd2",      // manila binder page
+    pageBorder: "#b23a28",  // brick-red trapper-keeper trim (borders only, never body text)
+    cardBg: "#fffaf0",      // warm index-card white
+    cardBorder: "#b5773f",  // toffee/caramel
+    glow: "0 2px 6px rgba(93,58,26,0.28)",
+    artBg: "#f3e2ba",
+    artIcon: "#a3703a",
+    title: "#402a18",       // espresso marker ink (9.8:1 on pageBg)
+    sub: "#4a2f16",         // espresso, 5.1:1 on desk / 10.5:1 on manila (AA everywhere)
+    good: "#1b6e2e",        // kelly green (5.1:1 AA)
+    fair: "#8a5500",        // deep amber (5.4:1 AA)
+    bad: "#a82a1e",         // ketchup red (6.1:1 AA)
+  },
+  "nostalgia-night": {
+    vaultBg: "#070c18",
+    pageBg: "#10182b",
+    pageBorder: "#c9a227",
+    cardBg: "#141d33",
+    cardBorder: "#6f83ab",
+    glow: "0 2px 10px rgba(3,6,14,0.55)",
+    artBg: "#0e1728",
+    artIcon: "#6f83ab",
+    title: "#dfe8f5",
+    sub: "#a9bad6",
+    good: "#8fce6b",
+    fair: "#d9b35c",
+    bad: "#e08a6f",
   },
 };
 

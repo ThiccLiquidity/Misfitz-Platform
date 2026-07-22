@@ -21,9 +21,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const recentSales = await getCollectionRecentSales(params.id, r.nfts).catch(() => []);
     // User-agnostic, so let Vercel's EDGE cache serve repeat opens (~100ms, zero function) via s-maxage.
     // Don't pin a still-"warming" payload at the edge — serve those no-store so the warmed data appears next.
+    // An EMPTY recent-sales rail must NOT get pinned at the edge for 30min/24h either: on a cold origin the
+    // `sales:{col}` blob can still be warming when this first serves, and the long s-maxage then froze a
+    // sale-less payload (the "recent sales don't show up like they used to" regression). Serve empties with
+    // a short edge window so the next open reconverges once the sales blob is warm.
     const cache = r.warming || force
       ? "no-store"
-      : "public, max-age=60, s-maxage=1800, stale-while-revalidate=86400"; // 30min edge — big cut to cold-origin roster/rarity/comps blob reads; values still converge via /api/values
+      : recentSales.length === 0
+        ? "public, max-age=30, s-maxage=120, stale-while-revalidate=600"
+        : "public, max-age=60, s-maxage=1800, stale-while-revalidate=86400"; // 30min edge — big cut to cold-origin roster/rarity/comps blob reads; values still converge via /api/values
     return NextResponse.json({ ...r, recentSales }, { headers: { "Cache-Control": cache } });
   } catch {
     return NextResponse.json({ error: "upstream unavailable" }, { status: 502 });

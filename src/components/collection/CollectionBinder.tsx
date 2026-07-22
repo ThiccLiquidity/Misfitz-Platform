@@ -363,7 +363,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         label={indexing ? "Loading collection…" : enriching ? "Refining rarity & sales…" : "Building sales model…"}
       />
       {/* Collection header */}
-      <div className="relative mb-4 overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-card-bg px-5 py-4">
+      <div className="tf-colhead relative mb-4 overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-card-bg px-5 py-4">
         <div className="flex items-center gap-4">
           {view.imageUrl && (
             <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl">
@@ -404,7 +404,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           ] as const).map((st) => (
             <div
               key={st.label}
-              className="rounded-xl px-4 py-2.5"
+              className={`tf-colstat${st.hero ? " tf-colstat--hero" : ""} rounded-xl px-4 py-2.5`}
               style={st.hero
                 ? { background: "color-mix(in srgb, var(--gold) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--gold) 35%, transparent)", boxShadow: statLight ? undefined : "inset 0 0 24px rgba(255,224,106,0.07)" }
                 : { background: "color-mix(in srgb, var(--card-border) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--card-border) 25%, transparent)" }}

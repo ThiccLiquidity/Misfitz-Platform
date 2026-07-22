@@ -1589,20 +1589,24 @@ body {
 
 /* Rubber-stamp "SOLD" for the shareable sale card (SoldShowcase). Rotated gold seal over the art. */
 .tf-sold-stamp {
+  /* Diagonal gold ribbon wrapping the art's top-right corner. A fixed-width band centered over the
+     corner and rotated 45° so BOTH ends run past the card edge and clip into a clean triangular wrap
+     (matches the server-rendered card in soldCard.tsx). Never covers the NFT itself. The parent
+     (#tf-sold-card art container) is overflow:hidden + rounded, so the ends clip into the corner. */
   position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%) rotate(-14deg);
-  padding: 0.1em 0.35em;
+  top: 22px; right: -54px;
+  width: 190px;
+  transform: rotate(45deg);
+  text-align: center;
+  padding: 6px 0;
   font-weight: 900;
-  font-size: clamp(2.4rem, 12vw, 3.6rem);
-  letter-spacing: 0.08em;
-  color: #ffe577;
-  border: 4px solid #ffe577;
-  border-radius: 10px;
-  background: rgba(6,13,24,0.22);
-  text-shadow: 0 2px 10px rgba(0,0,0,0.55);
-  box-shadow: 0 2px 14px rgba(0,0,0,0.45), inset 0 0 18px rgba(255,224,106,0.18);
-  opacity: 0.92;
+  font-size: 1rem;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  color: #241200;
+  background: linear-gradient(180deg, #ffe577 0%, #f0c000 100%);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.45);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.25);
   pointer-events: none;
   text-transform: uppercase;
 }
@@ -1908,60 +1912,1707 @@ body {
 }
 
 /* ============================================================================
-   NOSTALGIA MODE — [data-theme="nostalgia"]   (HIDDEN PROTOTYPE)
-   A 90s-childhood skin: an open binder on a wood table, manila pages, chunky
-   crayon-primary accents. CSS-only — no image assets required to preview it.
-   Commissioned art drops in via the --nostalgia-* vars below with no code change.
-   Activate: append ?nostalgia=1 to any URL (clear with ?nostalgia=0). Not in the
-   visible theme toggle yet. See docs/NOSTALGIA-MODE.md.
+   NOSTALGIA MODE — [data-theme="nostalgia"]   (HIDDEN THEME)
+   A true reskin, sibling of light/dark: same components, same layout — only the
+   look changes. 90s Saturday-morning warmth: a sun-bleached honey-oak desktop
+   (subtle tiled texture, NOT a scene), manila trapper-keeper binder with brick-
+   red trim, cream index-card surfaces, espresso marker ink. This is a LIGHT
+   theme (dark ink on warm light surfaces). Dark walnut "leather" chrome panels
+   (.tf-panel) mirror light mode's dark-sidebar/light-content split and re-point
+   the theme tokens locally so every hardcoded dark-branch inline style keeps
+   working. One asset: /nostalgia/desk.png (seamless tile, low prominence).
+   Activate: ?nostalgia=1 (clear with ?nostalgia=0). See docs/NOSTALGIA-MODE.md.
    ========================================================================== */
 [data-theme="nostalgia"] {
-  /* Art seams — override these once assets are commissioned (owner handles art). */
-  --nostalgia-table-image: none;     /* e.g. url(/nostalgia/wood-table.jpg) — the desk surface */
-  --nostalgia-paper-image: none;     /* e.g. url(/nostalgia/manila-paper.png) — page texture */
-  --nostalgia-sticker-image: none;   /* e.g. url(/nostalgia/pog-sticker.png) — corner flair */
   color-scheme: light;
+  --gold: #b23a28;
+  --rc-ink: #402a18;
+  --rc-divider: rgba(64,42,24,0.20);
 }
-
-/* The desk: a warm wood-grain gradient stands in until a photo/illustration is dropped in. */
+[data-theme="nostalgia"],
 [data-theme="nostalgia"] .bg-vault-bg {
-  background-color: #7c5236 !important;
+  background-color: #b98c4f !important;
+  /* Single top-down desk scene (toys baked in around the edges, open center for
+     content). Fixed to the viewport + cover so it never tiles or repeats the props;
+     faint warm wash unifies it with the manila UI. desk.png tile kept as the fallback
+     backdrop behind the scene on ultra-tall/edge cases. */
   background-image:
-    var(--nostalgia-table-image),
-    repeating-linear-gradient(96deg, rgba(60,34,14,0.22) 0 3px, rgba(120,80,40,0.10) 3px 26px),
-    linear-gradient(180deg, #8a5f38 0%, #6f4a2c 100%) !important;
-  background-size: cover, auto, auto !important;
-  background-blend-mode: multiply, normal, normal !important;
+    linear-gradient(180deg, rgba(247,236,210,0.32) 0%, rgba(233,196,138,0.20) 55%, rgba(201,159,99,0.24) 100%),
+    url(/nostalgia/desk-scene-3.png),
+    url(/nostalgia/desk.png) !important;
+  background-size: auto, cover, 620px 620px !important;
+  background-position: center top, center center, top left !important;
+  background-repeat: no-repeat, no-repeat, repeat !important;
+  background-attachment: fixed, fixed, fixed !important;
+}
+[data-theme="nostalgia"] .tcg-binder-shell {
+  background: linear-gradient(180deg, #f7ecd2 0%, #eedcb2 100%) !important;
+  border: 3px solid #b23a28 !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 14px 32px rgba(93,58,26,0.35),
+    0 0 34px rgba(255,190,100,0.30),
+    inset 0 0 0 2px rgba(255,255,255,0.55) !important;
+}
+[data-theme="nostalgia"] .tcg-binder-shell::before,
+[data-theme="nostalgia"] .tcg-binder-shell::after {
+  background-image: repeating-linear-gradient(90deg, rgba(178,58,40,0.45) 0 3px, transparent 3px 8px);
+  opacity: 0.5;
 }
 
-/* Manila binder pages with a chunky red trapper-keeper trim + spiral-binding hint on the left. */
-[data-theme="nostalgia"] .tcg-binder-shell {
-  background: var(--nostalgia-paper-image), linear-gradient(180deg, #fdf3d8 0%, #f6e7bf 100%) !important;
-  background-size: cover, auto !important;
-  border: 3px solid #c0392b !important;
-  border-radius: 14px !important;
-  box-shadow: 0 18px 40px rgba(40,22,8,0.45), inset 0 0 0 2px rgba(255,255,255,0.5) !important;
-}
 [data-theme="nostalgia"] .tcg-binder-page {
-  background: linear-gradient(180deg, #fffdf5 0%, #fbf0d2 100%) !important;
+  background: linear-gradient(175deg, #fffaf0 0%, #f5e8c6 100%) !important;
+  border: 1px solid rgba(154,100,40,0.35) !important;
   border-radius: 10px !important;
+  box-shadow: inset 0 0 24px rgba(154,100,40,0.10), 0 1px 4px rgba(93,58,26,0.18) !important;
 }
-/* Card sleeves get a plasticky sheen, like real 9-pocket pages. */
+
 [data-theme="nostalgia"] .tcg-sleeve {
-  background: linear-gradient(160deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.08) 45%, rgba(180,200,220,0.14) 100%) !important;
-  border: 1px solid rgba(46,123,192,0.35) !important;
-  box-shadow: inset 0 1px 3px rgba(255,255,255,0.7) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.65) 0%, rgba(222,196,144,0.40) 100%) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.8),
+    inset 0 -2px 5px rgba(154,100,40,0.18),
+    0 0 0 1px rgba(154,100,40,0.28) !important;
 }
-/* Chunky rounded headings in a friendly marker-ink brown. */
-[data-theme="nostalgia"] .text-title,
-[data-theme="nostalgia"] h1, [data-theme="nostalgia"] h2 {
-  color: #3a2416 !important;
-  text-shadow: 1px 1px 0 rgba(255,255,255,0.4) !important;
+
+/* ── NOSTALGIA RARITY CARDS — vintage colored card stock ────────────────────
+   Each tier's BODY is a dusty mid-tone wash of its rarity color (well-loved
+   trading-card stock): mythic plum, legendary aged gold, epic dusty denim,
+   rare faded brick, uncommon olive, common kraft. Mid-brightness, never neon,
+   never cream, never black. Ink flips per tier: CREAM ink on the darker stocks
+   (mythic/epic/rare), ESPRESSO ink on the lighter stocks (legendary/uncommon/
+   common). The top-right rank tab is a manila sticker on every tier so the
+   rank number always pops. Mythic/legendary keep a slow warm foil-edge spin. */
+[data-theme="nostalgia"] .tcg-outer-mythic {
+  background: conic-gradient(from var(--angle), #ff0090, #ff3300, #ffcc00, #00ff66, #00ccff, #9900ff, #ff00cc, #ff0090) !important;
+  animation: border-spin 2s linear infinite, mythic-glow 3s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(60,30,50,0.5), 0 0 0 1px rgba(255,0,180,0.9), 0 0 18px 5px rgba(255,0,150,0.85), 0 0 42px 14px rgba(140,0,255,0.6), 0 0 80px 26px rgba(0,210,255,0.3);
 }
-/* Optional corner sticker flair (pog/holographic) — hidden until an asset is set. */
-[data-theme="nostalgia"] .tcg-binder-shell::before {
-  content: "";
-  background-image: var(--nostalgia-sticker-image);
-  background-size: contain;
-  background-repeat: no-repeat;
+[data-theme="nostalgia"] .tcg-outer-legendary {
+  background: conic-gradient(from var(--angle), #ffe566, #b87d00, #ffe566, #ffc200, #fff4a0, #b87d00, #ffe566) !important;
+  animation: border-spin 3s linear infinite, gold-glow 2.5s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(60,40,10,0.5), 0 0 0 1px rgba(255,190,0,0.9), 0 0 18px 5px rgba(255,170,0,0.8), 0 0 40px 13px rgba(255,140,0,0.5), 0 0 75px 24px rgba(255,200,50,0.28);
+}
+[data-theme="nostalgia"] .tcg-outer-epic {
+  background: conic-gradient(from var(--angle), #ffffff, #c8d8ff, #6090e0, #ffffff, #e8efff, #ffffff, #90b8ff, #d8e8ff, #ffffff) !important;
+  animation: border-spin 2.5s linear infinite, silver-glow 2.5s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(30,40,60,0.5), 0 0 0 1px rgba(240,248,255,0.95), 0 0 18px 5px rgba(210,230,255,0.85), 0 0 42px 13px rgba(150,195,255,0.55), 0 0 78px 25px rgba(120,170,255,0.3);
+}
+[data-theme="nostalgia"] .tcg-outer-rare {
+  background: conic-gradient(from var(--angle), #ff8a1f, #b81800, #ffb347, #e83000, #ff9a33, #8b0e00, #ff5a1f, #ff8a1f) !important;
+  animation: border-spin 3s linear infinite, red-glow 2.5s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(60,25,10,0.5), 0 0 0 1px rgba(255,110,40,0.9), 0 0 16px 5px rgba(255,90,25,0.7), 0 0 38px 12px rgba(220,60,0,0.5), 0 0 70px 22px rgba(255,150,50,0.28);
+}
+[data-theme="nostalgia"] .tcg-outer-uncommon {
+  background: linear-gradient(160deg, #4ecf6e 0%, #2c9a4c 100%) !important;
+  animation: none !important;
+  box-shadow: 0 4px 12px rgba(45,40,20,0.45), 0 0 0 1px rgba(80,220,120,0.75), 0 0 14px 4px rgba(63,190,100,0.5), 0 0 32px 10px rgba(40,160,80,0.22);
+}
+[data-theme="nostalgia"] .tcg-outer-common {
+  background: linear-gradient(160deg, #5a8ce0 0%, #3763bd 100%) !important;
+  animation: none !important;
+  box-shadow: 0 4px 12px rgba(30,35,55,0.45), 0 0 0 1px rgba(90,140,255,0.7), 0 0 14px 4px rgba(80,130,230,0.45), 0 0 30px 10px rgba(60,110,210,0.2);
+}
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-outer-mythic,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-outer-legendary,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-outer-epic,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-outer-rare { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="nostalgia"] .tcg-outer-mythic,
+  [data-theme="nostalgia"] .tcg-outer-legendary,
+  [data-theme="nostalgia"] .tcg-outer-epic,
+  [data-theme="nostalgia"] .tcg-outer-rare { animation: none !important; }
+}
+
+/* ── NOSTALGIA CARDS — radioactive neon (dark-theme parity) + warm sticker accents ── */
+[data-theme="nostalgia"] .tcg-body-mythic    { background: linear-gradient(180deg, #170420 0%, #0c0214 55%, #110318 100%) !important; }
+[data-theme="nostalgia"] .tcg-body-legendary { background: linear-gradient(180deg, #171001 0%, #0d0900 55%, #120c01 100%) !important; }
+[data-theme="nostalgia"] .tcg-body-epic      { background: linear-gradient(180deg, #060b1c 0%, #030614 55%, #050918 100%) !important; }
+[data-theme="nostalgia"] .tcg-body-rare      { background: linear-gradient(180deg, #190401 0%, #0e0200 55%, #140301 100%) !important; }
+[data-theme="nostalgia"] .tcg-body-uncommon  { background: linear-gradient(180deg, #06130a 0%, #030b05 55%, #051008 100%) !important; }
+[data-theme="nostalgia"] .tcg-body-common    { background: linear-gradient(180deg, #070a18 0%, #040610 55%, #060814 100%) !important; }
+
+[data-theme="nostalgia"] .tcg-art-bg-mythic    { background: radial-gradient(ellipse at 40% 45%, #3a0c64 0%, #1c0640 65%, #0a0120 100%) !important; animation: none !important; }
+[data-theme="nostalgia"] .tcg-art-bg-legendary { background: radial-gradient(ellipse at 40% 45%, #4a2e06 0%, #241604 65%, #0b0600 100%) !important; animation: none !important; }
+[data-theme="nostalgia"] .tcg-art-bg-epic      { background: radial-gradient(ellipse at 40% 45%, #10285e 0%, #081a42 65%, #02081c 100%) !important; animation: none !important; }
+[data-theme="nostalgia"] .tcg-art-bg-rare      { background: radial-gradient(ellipse at 50% 112%, #e04512 0%, #7c1a00 34%, #2a0900 68%, #100300 100%) !important; animation: none !important; }
+[data-theme="nostalgia"] .tcg-art-bg-uncommon  { background: radial-gradient(ellipse at 40% 45%, #123a1a 0%, #081f0c 65%, #020a04 100%) !important; animation: none !important; }
+[data-theme="nostalgia"] .tcg-art-bg-common    { background: radial-gradient(ellipse at 40% 45%, #0d1f46 0%, #06122c 65%, #020510 100%) !important; animation: none !important; }
+[data-theme="nostalgia"] .tcg-art-clean-label { background: rgba(28,14,8,0.55) !important; color: rgba(250,240,222,0.85) !important; border-color: rgba(250,240,222,0.30) !important; }
+
+[data-theme="nostalgia"] .tcg-rank-tag {
+  background: linear-gradient(180deg, #fdf6e2 0%, #f2e4c4 100%) !important;
+  box-shadow: 0 2px 4px rgba(50,25,10,0.35), inset 0 1px 0 rgba(255,255,255,0.7) !important;
+  transform: rotate(-2deg);
+  padding: 4px 9px 5px !important;
+  border-radius: 6px;
+}
+[data-theme="nostalgia"] .tcg-rank-tag-mythic    { border: 1px solid #58254a !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-legendary { border: 1px solid #7c5c14 !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-epic      { border: 1px solid #2c4358 !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-rare      { border: 1px solid #7a2c1c !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-uncommon  { border: 1px solid #4d5c26 !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-common    { border: 1px solid #6b5433 !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-mythic    .tcg-rank-lbl { color: #702355 !important; opacity: 1; }
+[data-theme="nostalgia"] .tcg-rank-tag-legendary .tcg-rank-lbl { color: #6b4a00 !important; opacity: 1; }
+[data-theme="nostalgia"] .tcg-rank-tag-epic      .tcg-rank-lbl { color: #2e5580 !important; opacity: 1; }
+[data-theme="nostalgia"] .tcg-rank-tag-rare      .tcg-rank-lbl { color: #8c2c18 !important; opacity: 1; }
+[data-theme="nostalgia"] .tcg-rank-tag-uncommon  .tcg-rank-lbl { color: #3f511b !important; opacity: 1; }
+[data-theme="nostalgia"] .tcg-rank-tag-common    .tcg-rank-lbl { color: #5c4423 !important; opacity: 1; }
+[data-theme="nostalgia"] .tcg-rank-tag-mythic    .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #702355 !important; color: #702355 !important; text-shadow: none !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-legendary .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #6b4a00 !important; color: #6b4a00 !important; text-shadow: none !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-epic      .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #2e5580 !important; color: #2e5580 !important; text-shadow: none !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-rare      .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #8c2c18 !important; color: #8c2c18 !important; text-shadow: none !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-uncommon  .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #3f511b !important; color: #3f511b !important; text-shadow: none !important; }
+[data-theme="nostalgia"] .tcg-rank-tag-common    .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #5c4423 !important; color: #5c4423 !important; text-shadow: none !important; }
+
+[data-theme="nostalgia"] .tcg-traits-pill-mythic    { background: rgba(253,246,226,0.92) !important; border-color: #58254a !important; color: #702355 !important; }
+[data-theme="nostalgia"] .tcg-traits-pill-legendary { background: rgba(253,246,226,0.92) !important; border-color: #7c5c14 !important; color: #6b4a00 !important; }
+[data-theme="nostalgia"] .tcg-traits-pill-epic      { background: rgba(253,246,226,0.92) !important; border-color: #2c4358 !important; color: #2e5580 !important; }
+[data-theme="nostalgia"] .tcg-traits-pill-rare      { background: rgba(253,246,226,0.92) !important; border-color: #7a2c1c !important; color: #8c2c18 !important; }
+[data-theme="nostalgia"] .tcg-traits-pill-uncommon  { background: rgba(253,246,226,0.92) !important; border-color: #4d5c26 !important; color: #3f511b !important; }
+[data-theme="nostalgia"] .tcg-traits-pill-common    { background: rgba(253,246,226,0.92) !important; border-color: #6b5433 !important; color: #5c4423 !important; }
+
+[data-theme="nostalgia"] .tcg-tier-banner-mythic    { background: rgba(200,60,255,0.16) !important; border-color: rgba(224,100,255,0.7) !important; color: #ee9aff !important; box-shadow: 0 0 12px rgba(200,60,255,0.45), inset 0 0 8px rgba(200,60,255,0.18); text-shadow: 0 0 8px rgba(224,128,255,0.6); }
+[data-theme="nostalgia"] .tcg-tier-banner-legendary { background: rgba(255,190,0,0.14) !important;  border-color: rgba(255,200,40,0.7) !important;  color: #ffd75e !important; box-shadow: 0 0 12px rgba(255,180,0,0.45),  inset 0 0 8px rgba(255,180,0,0.16);  text-shadow: 0 0 8px rgba(255,200,60,0.55); }
+[data-theme="nostalgia"] .tcg-tier-banner-epic      { background: rgba(180,215,255,0.14) !important; border-color: rgba(210,235,255,0.75) !important; color: #dceeff !important; box-shadow: 0 0 12px rgba(160,200,255,0.5),  inset 0 0 8px rgba(160,200,255,0.16); text-shadow: 0 0 8px rgba(200,230,255,0.6); }
+[data-theme="nostalgia"] .tcg-tier-banner-rare      { background: rgba(255,60,20,0.14) !important;   border-color: rgba(255,110,60,0.7) !important;  color: #ff8a66 !important; box-shadow: 0 0 12px rgba(255,80,30,0.45),   inset 0 0 8px rgba(255,80,30,0.16);   text-shadow: 0 0 8px rgba(255,120,70,0.55); }
+[data-theme="nostalgia"] .tcg-tier-banner-uncommon  { background: rgba(63,200,100,0.12) !important;  border-color: rgba(80,210,120,0.6) !important;  color: #7fe89a !important; box-shadow: 0 0 8px rgba(63,190,100,0.3); }
+[data-theme="nostalgia"] .tcg-tier-banner-common    { background: rgba(80,130,230,0.12) !important;  border-color: rgba(100,150,240,0.6) !important; color: #8fb4f0 !important; box-shadow: 0 0 8px rgba(80,130,230,0.3); }
+
+/* Light ink on the dark bodies (all six tiers) */
+[data-theme="nostalgia"] .tcg-body-mythic,    [data-theme="nostalgia"] .tcg-panel-mythic,
+[data-theme="nostalgia"] .tcg-body-legendary, [data-theme="nostalgia"] .tcg-panel-legendary,
+[data-theme="nostalgia"] .tcg-body-epic,      [data-theme="nostalgia"] .tcg-panel-epic,
+[data-theme="nostalgia"] .tcg-body-rare,      [data-theme="nostalgia"] .tcg-panel-rare,
+[data-theme="nostalgia"] .tcg-body-uncommon,  [data-theme="nostalgia"] .tcg-panel-uncommon,
+[data-theme="nostalgia"] .tcg-body-common,    [data-theme="nostalgia"] .tcg-panel-common {
+  --rc-ink: #f6ecda; --rc-divider: rgba(246,236,218,0.28);
+  --good: #7dffa8; --fair: #ffd77a; --bad: #ff9a80;
+}
+[data-theme="nostalgia"] .tcg-lbl-mythic,    [data-theme="nostalgia"] .tcg-lbl-legendary,
+[data-theme="nostalgia"] .tcg-lbl-epic,      [data-theme="nostalgia"] .tcg-lbl-rare,
+[data-theme="nostalgia"] .tcg-lbl-uncommon,  [data-theme="nostalgia"] .tcg-lbl-common {
+  color: rgba(255,246,230,0.72) !important;
+}
+[data-theme="nostalgia"] .tcg-stat-val { color: #fff8ec !important; }
+[data-theme="nostalgia"] .tcg-sub-mythic,   [data-theme="nostalgia"] .tcg-sub-legendary,
+[data-theme="nostalgia"] .tcg-sub-epic,     [data-theme="nostalgia"] .tcg-sub-rare,
+[data-theme="nostalgia"] .tcg-sub-uncommon, [data-theme="nostalgia"] .tcg-sub-common {
+  color: rgba(255,246,230,0.62) !important; font-weight: 700 !important; text-shadow: 0 1px 2px rgba(0,0,0,0.7) !important;
+}
+[data-theme="nostalgia"] .tcg-trait-val  { color: #fff8ec !important; font-weight: 700 !important; }
+[data-theme="nostalgia"] .tcg-trait-type { color: rgba(255,246,230,0.62) !important; }
+[data-theme="nostalgia"] .tcg-trait-more { color: rgba(255,246,230,0.55) !important; }
+[data-theme="nostalgia"] .tcg-trait-pct  { filter: brightness(1.5) saturate(1.15); font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+[data-theme="nostalgia"] .tcg-cname { filter: brightness(1.2) saturate(1.15) drop-shadow(0 0 5px rgba(0,0,0,0.55)); }
+
+[data-theme="nostalgia"] .tf-panel {
+  background: linear-gradient(175deg, rgba(66,42,22,0.94), rgba(40,25,12,0.97));
+  border: 1px solid rgba(201,150,60,0.40);
+  box-shadow: 0 6px 20px rgba(60,35,12,0.35), inset 0 1px 0 rgba(255,229,150,0.08);
+  --title: #f0deb0;  --subtle: #c9a878;  --gold: #ffd479;
+  --good: #8fce6b;   --fair: #e0b45c;    --bad: #e08a6f;
+  --card-bg: #3a2a16; --card-border: #c9964a;
+  --rc-ink: #f6ead0; --rc-divider: rgba(255,255,255,0.16);
+}
+
+[data-theme="nostalgia"] .tf-search,
+[data-theme="nostalgia"] .tf-select {
+  background: #fffaf0; border-color: rgba(154,100,40,0.55);
+  color: #402a18; caret-color: #b23a28;
+}
+[data-theme="nostalgia"] .tf-search::placeholder,
+[data-theme="nostalgia"] .tf-select::placeholder { color: rgba(74,47,22,0.85); }
+
+[data-theme="nostalgia"] .tf-pill {
+  background: #fffaf0; border-color: rgba(154,100,40,0.50); color: #57381c;
+}
+[data-theme="nostalgia"] .tf-pill:hover { background: #fffaf0; color: #402a18; }
+
+[data-theme="nostalgia"] .tf-tabbar { border-bottom-color: rgba(154,100,40,0.55); }
+[data-theme="nostalgia"] .tf-tab {
+  color: #57381c; background: #f2e4c4 !important; border-color: rgba(154,100,40,0.45);
+}
+[data-theme="nostalgia"] .tf-tab:hover { background: #fffaf0 !important; color: #402a18; }
+[data-theme="nostalgia"] .tf-tab--active {
+  background: var(--page-bg); color: #402a18; border-color: rgba(154,100,40,0.60);
+}
+[data-theme="nostalgia"] .tf-tab-panel { border-color: rgba(154,100,40,0.60); }
+
+[data-theme="nostalgia"] .tf-tile {
+  background: linear-gradient(180deg, #fffaf0, #f5e8c6);
+  border-color: rgba(154,100,40,0.50);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 2px 6px rgba(93,58,26,0.18);
+}
+[data-theme="nostalgia"] .tf-tile:hover { border-color: #b23a28; box-shadow: 0 8px 20px rgba(93,58,26,0.30); }
+[data-theme="nostalgia"] .tf-tile-foot { border-top-color: rgba(154,100,40,0.30); }
+
+[data-theme="nostalgia"] .tf-hairline { background: linear-gradient(90deg, transparent, rgba(154,100,40,0.55), transparent); }
+[data-theme="nostalgia"] .tf-browse-tex,
+[data-theme="nostalgia"] .tf-land-paper {
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(154,100,40,0.10) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(-45deg, rgba(178,58,40,0.07)  0 2px, transparent 2px 10px);
+}
+[data-theme="nostalgia"] .tf-foot { border-top-color: rgba(154,100,40,0.35); }
+[data-theme="nostalgia"] .tf-deal-chip { color: #f2ffe8; }
+
+[data-theme="nostalgia"] .tf-foil {
+  background: linear-gradient(105deg, #6e2410 0%, #a3341e 25%, #c9531f 45%, #8a3d10 60%, #b23a28 80%, #7a2a14 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+
+[data-theme="nostalgia"] .ch-title {
+  background: linear-gradient(180deg, #7a2a14 0%, #b23a28 45%, #8a3d10 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(255,246,224,0.85));
+}
+[data-theme="nostalgia"] .ch-stripe { background: linear-gradient(180deg, #b23a28, #e8862a) !important; }
+[data-theme="nostalgia"] .ch-badge  { background: linear-gradient(120deg, #b23a28, #e8862a) !important; }
+[data-theme="nostalgia"] .ch-desc   { color: rgba(64,42,24,0.92) !important; }
+
+[data-theme="nostalgia"] .tf-land-bg {
+  --title: #402a18; --subtle: #6d4a26; --card-bg: #fffaf0; --card-border: #b5773f;
+  background:
+    radial-gradient(120% 55% at 50% -6%, rgba(255,232,170,0.55), transparent 60%),
+    linear-gradient(180deg, #d8b078 0%, #c99f63 100%);
+}
+
+/* ── Nostalgia: warm focus ring (the global sky-blue clashes on manila) ────── */
+[data-theme="nostalgia"] :focus-visible { outline-color: #b23a28 !important; }
+
+/* ── Nostalgia handwriting ─────────────────────────────────────────────────
+   Shantell Sans = neat handwriting for body + readable numbers (real 300-800
+   weights). Caveat = marker script for display moments only. Micro-type
+   (6-9px grid-card stats/traits) + form controls stay Inter — handwriting is
+   illegible there; prices/ranks/% must never be squint-work. */
+[data-theme="nostalgia"] {
+  font-family: var(--font-shantell), var(--font-inter), sans-serif;
+}
+[data-theme="nostalgia"] .tcg-stat-lbl,
+[data-theme="nostalgia"] .tcg-stat-val,
+[data-theme="nostalgia"] .tcg-stat-sub,
+[data-theme="nostalgia"] .tcg-trait-type,
+[data-theme="nostalgia"] .tcg-trait-val,
+[data-theme="nostalgia"] .tcg-trait-pct,
+[data-theme="nostalgia"] .tcg-trait-more,
+[data-theme="nostalgia"] .tcg-rank-lbl,
+[data-theme="nostalgia"] .tf-search,
+[data-theme="nostalgia"] .tf-select {
+  font-family: var(--font-inter), sans-serif;
+}
+[data-theme="nostalgia"] .ch-title,
+[data-theme="nostalgia"] .tf-foil {
+  font-family: var(--font-caveat), cursive;
+  letter-spacing: 0;
+}
+[data-theme="nostalgia"] .tcg-cname {
+  font-family: var(--font-caveat), cursive;
+  font-size: 20px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+[data-theme="nostalgia"] .tcg-rank-num {
+  font-family: var(--font-caveat), cursive;
+  font-size: 21px;
+  font-weight: 700;
+}
+[data-theme="nostalgia"] .tcg-tier-banner {
+  font-family: var(--font-caveat), cursive;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* ════════════════════════════════════════════════════════════
+   NOSTALGIA HOLO FOIL v2 — rare / epic / legendary / mythic
+   (uncommon + common stay plain matte stock)
+════════════════════════════════════════════════════════════ */
+@keyframes nostalgia-holo-drift {
+  from { transform: translate3d(-17%, -8%, 0); }
+  to   { transform: translate3d(17%, 8%, 0); }
+}
+@keyframes nostalgia-sheen-sweep {
+  from { transform: translate3d(-15%, -6%, 0); }
+  to   { transform: translate3d(15%, 6%, 0); }
+}
+@keyframes nostalgia-gloss-glide {
+  0%, 14% { transform: translate3d(-130%, 0, 0); }
+  15%     { transform: translate3d(-128%, 0, 0); animation-timing-function: cubic-bezier(.62,.02,.28,.99); }
+  54%     { transform: translate3d(130%, 0, 0); }
+  100%    { transform: translate3d(130%, 0, 0); }
+}
+@keyframes nostalgia-sparkle-twinkle {
+  0%   { opacity: .30; transform: scale(1); }
+  15%  { opacity: .95; transform: scale(1.045); }
+  30%  { opacity: .40; transform: scale(1); }
+  50%  { opacity: .85; transform: scale(1.055); }
+  64%  { opacity: .35; transform: scale(1); }
+  82%  { opacity: 1;   transform: scale(1.03); }
+  100% { opacity: .30; transform: scale(1); }
+}
+
+/* Prism banding behind art */
+[data-theme="nostalgia"] .tcg-art-bg-rare::before,
+[data-theme="nostalgia"] .tcg-art-bg-epic::before,
+[data-theme="nostalgia"] .tcg-art-bg-legendary::before,
+[data-theme="nostalgia"] .tcg-art-bg-mythic::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(115deg,
+      var(--holo-a) 0 8px,
+      var(--holo-b) 8px 16px,
+      transparent 16px 24px,
+      var(--holo-b) 24px 32px,
+      var(--holo-a) 32px 40px),
+    repeating-linear-gradient(25deg,
+      rgba(255,255,255,0.06) 0 1px,
+      transparent 1px 7px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+/* Drifting rainbow glint behind art */
+[data-theme="nostalgia"] .tcg-art-bg-rare::after,
+[data-theme="nostalgia"] .tcg-art-bg-epic::after,
+[data-theme="nostalgia"] .tcg-art-bg-legendary::after,
+[data-theme="nostalgia"] .tcg-art-bg-mythic::after {
+  content: ""; position: absolute; inset: -35%;
+  background: linear-gradient(115deg,
+    rgba(255,255,255,0)    42%,
+    rgba(255,255,255,0.18) 48%,
+    rgba(255,255,255,0.55) 51%,
+    rgba(255,255,255,0.18) 54%,
+    rgba(255,255,255,0)    60%);
+  mix-blend-mode: screen;
+  animation: nostalgia-holo-drift 13s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+/* LIVE FOIL RIM — rotating conic rainbow (reuses --angle + border-spin) */
+[data-theme="nostalgia"] .tcg-body-rare::after,
+[data-theme="nostalgia"] .tcg-body-epic::after,
+[data-theme="nostalgia"] .tcg-body-legendary::after,
+[data-theme="nostalgia"] .tcg-body-mythic::after {
+  content: ""; position: absolute; inset: 0; border-radius: 16px; padding: 3px;
+  z-index: 11;
+  background: conic-gradient(from var(--angle),
+    var(--rim-a) 0%, var(--rim-b) 28%, #fffbe8 42%, var(--rim-a) 62%, var(--rim-b) 84%, var(--rim-a) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: border-spin 10s linear infinite;
+  pointer-events: none;
+}
+/* Per-tier prism / glint / rim ladders */
+[data-theme="nostalgia"] .tcg-art-bg-rare::before      { opacity: 0.55; }
+[data-theme="nostalgia"] .tcg-art-bg-epic::before      { opacity: 0.65; }
+[data-theme="nostalgia"] .tcg-art-bg-legendary::before { opacity: 0.80; }
+[data-theme="nostalgia"] .tcg-art-bg-mythic::before    { opacity: 0.90; }
+[data-theme="nostalgia"] .tcg-art-bg-rare::after      { opacity: 0.30; animation-duration: 12s;  }
+[data-theme="nostalgia"] .tcg-art-bg-epic::after      { opacity: 0.38; animation-duration: 10s;  }
+[data-theme="nostalgia"] .tcg-art-bg-legendary::after { opacity: 0.48; animation-duration: 7.5s; }
+[data-theme="nostalgia"] .tcg-art-bg-mythic::after    { opacity: 0.55; animation-duration: 5.5s; }
+[data-theme="nostalgia"] .tcg-body-rare::after      { opacity: 0.72; animation-duration: 12s; }
+[data-theme="nostalgia"] .tcg-body-epic::after      { opacity: 0.88; animation-duration: 10s; animation-delay: -4s; }
+[data-theme="nostalgia"] .tcg-body-legendary::after { opacity: 1; animation-duration: 8s;  animation-delay: -2s; padding: 4px; }
+[data-theme="nostalgia"] .tcg-body-mythic::after    { opacity: 1;    animation-duration: 6s;  animation-delay: -3s; padding: 4px; }
+
+/* Whole-card foil sheen — under header/art/panel */
+[data-theme="nostalgia"] .tcg-card-header { position: relative; z-index: 2; }
+[data-theme="nostalgia"] .tcg-body-rare::before,
+[data-theme="nostalgia"] .tcg-body-epic::before,
+[data-theme="nostalgia"] .tcg-body-legendary::before,
+[data-theme="nostalgia"] .tcg-body-mythic::before {
+  content: ""; position: absolute; inset: -40%; z-index: 0;
+  background: linear-gradient(115deg,
+    rgba(255,255,255,0)    40%,
+    rgba(232,178,90,0.22)  47%,
+    rgba(255,248,232,0.36) 51%,
+    rgba(154,184,115,0.20) 55%,
+    rgba(255,255,255,0)    62%);
+  animation: nostalgia-sheen-sweep 9s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+[data-theme="nostalgia"] .tcg-body-rare::before      { opacity: 0.65; animation-duration: 11s; }
+[data-theme="nostalgia"] .tcg-body-epic::before      { opacity: 0.75; animation-duration: 9.5s; }
+[data-theme="nostalgia"] .tcg-body-legendary::before { opacity: 0.90; animation-duration: 8s; }
+[data-theme="nostalgia"] .tcg-body-mythic::before    { opacity: 1; animation-duration: 7s; }
+
+/* Art + labels above the in-zone gloss/sparkle layers */
+[data-theme="nostalgia"] .tcg-nft-art { z-index: 2; }
+[data-theme="nostalgia"] .tcg-art-clean-label { z-index: 3; }
+
+/* GLOSSY SPECULAR SWEEP — behind the art */
+[data-theme="nostalgia"] .tcg-body-rare .tcg-art-zone::after,
+[data-theme="nostalgia"] .tcg-body-epic .tcg-art-zone::after,
+[data-theme="nostalgia"] .tcg-body-legendary .tcg-art-zone::after,
+[data-theme="nostalgia"] .tcg-body-mythic .tcg-art-zone::after {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(105deg,
+    transparent 40%,
+    rgba(255,244,214,0.18) 45%,
+    rgba(255,255,255,0.42) 48.5%,
+    rgba(255,255,255,0.98) 50%,
+    rgba(255,255,255,0.42) 51.5%,
+    rgba(255,214,236,0.18) 55%,
+    transparent 60%);
+  mix-blend-mode: screen;
+  animation: nostalgia-gloss-glide 11s linear infinite;
+  pointer-events: none;
+}
+[data-theme="nostalgia"] .tcg-body-rare .tcg-art-zone::after      { opacity: 0.50; animation-duration: 13s;  animation-delay: -3s; }
+[data-theme="nostalgia"] .tcg-body-epic .tcg-art-zone::after      { opacity: 0.62; animation-duration: 11s;  animation-delay: -7s; }
+[data-theme="nostalgia"] .tcg-body-legendary .tcg-art-zone::after { opacity: 0.78; animation-duration: 9.5s; animation-delay: -1.5s; }
+[data-theme="nostalgia"] .tcg-body-mythic .tcg-art-zone::after    { opacity: 0.92; animation-duration: 7.5s; animation-delay: -5s; }
+
+/* SPARKLE GLINTS — twinkling star points in the art-zone gutters */
+[data-theme="nostalgia"] .tcg-body-rare .tcg-art-zone::before,
+[data-theme="nostalgia"] .tcg-body-epic .tcg-art-zone::before,
+[data-theme="nostalgia"] .tcg-body-legendary .tcg-art-zone::before,
+[data-theme="nostalgia"] .tcg-body-mythic .tcg-art-zone::before {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  mix-blend-mode: screen;
+  animation: nostalgia-sparkle-twinkle 4s ease-in-out infinite;
+  pointer-events: none;
+}
+[data-theme="nostalgia"] .tcg-body-rare .tcg-art-zone::before {
+  opacity: 0.55; animation-duration: 5.2s; animation-delay: -2s;
+  background:
+    radial-gradient(circle at 8% 24%,  rgba(255,255,255,.92) 0 1px, rgba(255,235,214,.35) 2px, transparent 3.2px),
+    radial-gradient(circle at 93% 38%, rgba(255,255,255,.88) 0 1px, rgba(255,235,214,.30) 2px, transparent 3px),
+    radial-gradient(circle at 14% 82%, rgba(255,255,255,.80) 0 .8px, transparent 2.2px),
+    radial-gradient(circle at 86% 90%, rgba(255,255,255,.78) 0 .7px, transparent 2px);
+}
+[data-theme="nostalgia"] .tcg-body-epic .tcg-art-zone::before {
+  opacity: 0.65; animation-duration: 4.4s; animation-delay: -1.2s;
+  background:
+    radial-gradient(circle at 7% 18%,  rgba(255,255,255,.95) 0 1px, rgba(190,220,255,.40) 2px, transparent 3.4px),
+    radial-gradient(circle at 92% 26%, rgba(255,255,255,.90) 0 1px, rgba(190,220,255,.35) 2px, transparent 3px),
+    radial-gradient(circle at 12% 62%, rgba(255,255,255,.85) 0 .8px, transparent 2.4px),
+    radial-gradient(circle at 95% 64%, rgba(255,255,255,.82) 0 .8px, transparent 2.2px),
+    radial-gradient(circle at 30% 90%, rgba(255,255,255,.80) 0 .7px, transparent 2px),
+    radial-gradient(circle at 74% 94%, rgba(255,255,255,.78) 0 .7px, transparent 2px);
+}
+[data-theme="nostalgia"] .tcg-body-legendary .tcg-art-zone::before {
+  opacity: 0.75; animation-duration: 3.6s; animation-delay: -0.8s;
+  background:
+    radial-gradient(circle at 6% 16%,  rgba(255,255,255,.95) 0 1.1px, rgba(255,222,150,.45) 2.2px, transparent 3.8px),
+    radial-gradient(circle at 93% 22%, rgba(255,255,255,.92) 0 1px,   rgba(255,222,150,.40) 2px,   transparent 3.4px),
+    radial-gradient(circle at 11% 54%, rgba(255,255,255,.88) 0 .9px,  rgba(255,222,150,.32) 1.8px, transparent 2.8px),
+    radial-gradient(circle at 95% 60%, rgba(255,255,255,.86) 0 .9px,  rgba(255,222,150,.30) 1.8px, transparent 2.8px),
+    radial-gradient(circle at 27% 8%,  rgba(255,255,255,.82) 0 .7px,  transparent 2.1px),
+    radial-gradient(circle at 70% 6%,  rgba(255,255,255,.80) 0 .7px,  transparent 2px),
+    radial-gradient(circle at 34% 92%, rgba(255,255,255,.80) 0 .7px,  transparent 2px),
+    radial-gradient(circle at 82% 90%, rgba(255,255,255,.78) 0 .7px,  transparent 2px);
+}
+[data-theme="nostalgia"] .tcg-body-mythic .tcg-art-zone::before {
+  opacity: 0.85; animation-duration: 2.8s; animation-delay: -1.6s;
+  background:
+    radial-gradient(circle at 7% 22%,  rgba(255,255,255,.98) 0 1.2px, rgba(255,196,226,.50) 2.4px, transparent 4.2px),
+    radial-gradient(circle at 90% 16%, rgba(255,255,255,.95) 0 1.2px, rgba(255,226,160,.48) 2.4px, transparent 4px),
+    radial-gradient(circle at 14% 66%, rgba(255,255,255,.92) 0 1px,   rgba(255,226,160,.40) 2px,   transparent 3.2px),
+    radial-gradient(circle at 95% 52%, rgba(255,255,255,.92) 0 1px,   rgba(255,196,226,.40) 2px,   transparent 3.2px),
+    radial-gradient(circle at 5% 88%,  rgba(255,255,255,.86) 0 .8px,  rgba(255,196,226,.32) 1.6px, transparent 2.6px),
+    radial-gradient(circle at 87% 84%, rgba(255,255,255,.86) 0 .8px,  rgba(255,226,160,.32) 1.6px, transparent 2.6px),
+    radial-gradient(circle at 30% 8%,  rgba(255,255,255,.82) 0 .7px,  transparent 2.1px),
+    radial-gradient(circle at 66% 5%,  rgba(255,255,255,.84) 0 .8px,  transparent 2.2px),
+    radial-gradient(circle at 42% 94%, rgba(255,255,255,.80) 0 .7px,  transparent 2px),
+    radial-gradient(circle at 60% 90%, rgba(255,255,255,.78) 0 .6px,  transparent 1.8px);
+}
+
+/* Binder-grid pause — ALL animated holo layers */
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-rare::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-epic::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-legendary::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-mythic::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-rare::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-epic::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-legendary::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-mythic::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-rare::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-epic::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-legendary::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-mythic::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-rare .tcg-art-zone::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-epic .tcg-art-zone::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-legendary .tcg-art-zone::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-mythic .tcg-art-zone::before,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-rare .tcg-art-zone::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-epic .tcg-art-zone::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-legendary .tcg-art-zone::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-body-mythic .tcg-art-zone::after { animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="nostalgia"] .tcg-art-bg-rare::after,
+  [data-theme="nostalgia"] .tcg-art-bg-epic::after,
+  [data-theme="nostalgia"] .tcg-art-bg-legendary::after,
+  [data-theme="nostalgia"] .tcg-art-bg-mythic::after,
+  [data-theme="nostalgia"] .tcg-body-rare::after,
+  [data-theme="nostalgia"] .tcg-body-epic::after,
+  [data-theme="nostalgia"] .tcg-body-legendary::after,
+  [data-theme="nostalgia"] .tcg-body-mythic::after,
+  [data-theme="nostalgia"] .tcg-body-rare::before,
+  [data-theme="nostalgia"] .tcg-body-epic::before,
+  [data-theme="nostalgia"] .tcg-body-legendary::before,
+  [data-theme="nostalgia"] .tcg-body-mythic::before,
+  [data-theme="nostalgia"] .tcg-body-rare .tcg-art-zone::before,
+  [data-theme="nostalgia"] .tcg-body-epic .tcg-art-zone::before,
+  [data-theme="nostalgia"] .tcg-body-legendary .tcg-art-zone::before,
+  [data-theme="nostalgia"] .tcg-body-mythic .tcg-art-zone::before,
+  [data-theme="nostalgia"] .tcg-body-rare .tcg-art-zone::after,
+  [data-theme="nostalgia"] .tcg-body-epic .tcg-art-zone::after,
+  [data-theme="nostalgia"] .tcg-body-legendary .tcg-art-zone::after,
+  [data-theme="nostalgia"] .tcg-body-mythic .tcg-art-zone::after { animation: none !important; }
+}
+
+/* Legibility: grid sub-value size bump + deal-word sticker chip */
+[data-theme="nostalgia"] .tcg-stat-sub:not(.text-xs) { font-size: 8px; font-weight: 700; }
+[data-theme="nostalgia"] .tcg-stat-sub[style] {
+  background: rgba(26,13,5,0.82);
+  border: 1px solid rgba(255,244,214,0.28);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-top: 2px;
+  filter: brightness(1.15);
+  text-shadow: none;
+}
+
+/* ═══════════ NOSTALGIA FINAL POLISH — page chrome ═══════════ */
+/* Collection header — manila folder on the desk */
+[data-theme="nostalgia"] .tf-colhead {
+  background: linear-gradient(180deg, #f7ecd2 0%, #eedcb2 100%) !important;
+  border: 3px solid #b23a28 !important;
+  box-shadow: 0 14px 32px rgba(93,58,26,0.35), 0 0 30px rgba(255,196,110,0.30), inset 0 0 0 2px rgba(255,255,255,0.55) !important;
+}
+[data-theme="nostalgia"] .tf-colhead h1 {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: 2.5rem !important;
+  line-height: 1.02 !important;
+  letter-spacing: 0.01em !important;
+  min-width: 0;
+  background: none !important;
+  -webkit-background-clip: border-box !important; background-clip: border-box !important;
+  -webkit-text-fill-color: #8a2013 !important;
+  color: #8a2013 !important;
+  text-shadow: 0 2px 0 rgba(255,247,230,0.95), 0 0 14px rgba(255,247,230,0.60), 0 3px 7px rgba(93,58,26,0.32);
+}
+[data-theme="nostalgia"] .tf-colstat {
+  background: linear-gradient(180deg, #fdf4dd 0%, #f0dfb8 100%) !important;
+  border: 1.5px solid #b5773f !important;
+  box-shadow: 0 3px 8px rgba(93,58,26,0.22), inset 0 1px 0 rgba(255,255,255,0.8) !important;
+}
+[data-theme="nostalgia"] .tf-colstat--hero {
+  background: linear-gradient(180deg, #fff3d6 0%, #f6dfae 100%) !important;
+  border: 2px solid #b23a28 !important;
+  box-shadow: 0 4px 12px rgba(93,58,26,0.28), 0 0 18px rgba(226,140,42,0.38), inset 0 1px 0 rgba(255,255,255,0.85) !important;
+}
+/* Header + stat text — espresso, no more washed brown */
+[data-theme="nostalgia"] .tf-colstat > div:nth-child(1) { color: #4a2f16 !important; font-size: 12px !important; letter-spacing: 0.08em !important; }
+[data-theme="nostalgia"] .tf-colstat--hero > div:nth-child(1) { color: #8a2416 !important; }
+[data-theme="nostalgia"] .tf-colstat > div:nth-child(2) { color: #402a18 !important; }
+[data-theme="nostalgia"] .tf-colstat--hero > div:nth-child(2) { color: #a3341e !important; text-shadow: 0 1px 0 rgba(255,246,224,0.6); }
+[data-theme="nostalgia"] .tf-colstat > div:nth-child(3) { color: #5a3a1a !important; font-weight: 700 !important; }
+[data-theme="nostalgia"] .tf-colhead .text-subtle { color: #4a2f16 !important; font-size: 13px; }
+[data-theme="nostalgia"] .tf-colhead .text-subtle span { color: #402a18 !important; font-weight: 800 !important; }
+[data-theme="nostalgia"] .tf-fresh { background: rgba(22,110,46,0.10) !important; color: #14571f !important; border-color: rgba(22,110,46,0.45) !important; }
+
+/* Grid-scale type bumps (Caveat needs more px than Inter) */
+[data-theme="nostalgia"] .tcg-binder-page .tcg-cname       { font-size: 14px !important; font-weight: 700 !important; line-height: 1.05 !important; }
+[data-theme="nostalgia"] .tcg-binder-page .tcg-tier-banner { font-size: 12px !important; font-weight: 700 !important; padding: 3px 6px !important; letter-spacing: 0.01em; }
+[data-theme="nostalgia"] .tcg-binder-page .tcg-rank-num    { font-size: 16px !important; }
+[data-theme="nostalgia"] .tcg-binder-page .tcg-rank-lbl    { font-size: 7px !important; }
+
+/* Tier distribution bar — warm construction-paper tiles on a manila strip */
+[data-theme="nostalgia"] .tf-tierbar {
+  background: linear-gradient(180deg, #f7ecd2 0%, #eedcb2 100%) !important;
+  border: 2px solid #b5773f !important;
+  box-shadow: 0 8px 24px rgba(93,58,26,0.30), 0 0 24px rgba(255,196,110,0.25), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+  backdrop-filter: none !important;
+}
+/* Retro tier cells are rendered by TierStatsBar.tsx (isNostalgia sticker branch) — inline styles own the
+   per-tier fills/ink/cap so we do NOT repaint them here (that avoids the old !important-vs-inline fight). */
+[data-theme="nostalgia"] .tf-tierbar > .flex { background: rgba(255,250,240,0.65) !important; border-top: 1px solid rgba(154,100,40,0.30) !important; color: #4a2f16 !important; }
+
+/* (sticker-card POP CSS removed — the component now renders Retro tier cells directly.) */
+
+/* Recent-sales rail — manila photo strip */
+[data-theme="nostalgia"] .tf-salesrail {
+  background: linear-gradient(180deg, #f7ecd2 0%, #efe0ba 100%) !important;
+  border: 2px solid #b5773f !important;
+  box-shadow: 0 6px 18px rgba(93,58,26,0.28), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+}
+[data-theme="nostalgia"] .tf-salesrail .text-\[10px\] { background: rgba(178,58,40,0.12) !important; color: #7c2416 !important; }
+[data-theme="nostalgia"] .tf-salesrail-chip { background: #fffaf0 !important; border: 1.5px solid rgba(154,100,40,0.55) !important; box-shadow: 0 2px 5px rgba(93,58,26,0.20); }
+[data-theme="nostalgia"] .tf-salesrail-chip > div:first-child { background: #3a2a16 !important; }
+[data-theme="nostalgia"] .tf-salesrail-chip .absolute { background: #fdf6e2 !important; color: #7c2416 !important; border: 1px solid rgba(154,100,40,0.6); font-size: 10px !important; }
+[data-theme="nostalgia"] .tf-salesrail-chip .truncate { color: #402a18 !important; font-size: 12px !important; }
+[data-theme="nostalgia"] .tf-salesrail-chip .text-xs { color: #b07a12 !important; font-size: 13px !important; font-weight: 800 !important; }
+[data-theme="nostalgia"] .tf-salesrail-chip .text-\[9px\] { color: #4a2f16 !important; font-size: 11px !important; }
+
+/* Restore card hover life (nostalgia's filter:none was killing the base brighten) */
+[data-theme="nostalgia"] .tcg-outer-clickable { transition: transform .15s ease, filter .15s ease; }
+[data-theme="nostalgia"] .tcg-outer-clickable:hover { filter: brightness(1.10) saturate(1.06) !important; transform: translateY(-2px); }
+
+/* ═══════════ NOSTALGIA FINISH — navbar + card GLOW ═══════════ */
+/* Top navbar was using the dark-theme bar on nostalgia -> unreadable on the desk.
+   Warm manila bar with espresso links instead. */
+[data-theme="nostalgia"] .tf-navbar {
+  background: linear-gradient(180deg, #f7ecd2 0%, #efdfba 100%) !important;
+  border-bottom: 2px solid #b23a28 !important;
+  box-shadow: 0 2px 14px rgba(93,58,26,0.28) !important;
+}
+[data-theme="nostalgia"] .tf-navbar nav a { color: #5a3a1a !important; }
+[data-theme="nostalgia"] .tf-navbar nav a:hover { color: #b23a28 !important; }
+
+/* Home page: the landing paints its own bg over the AppShell desk — swap in the
+   desk scene for nostalgia and hide the dark-theme paper texture + gold dust. */
+[data-theme="nostalgia"] .tf-land-bg {
+  background-color: #b98c4f !important;
+  background-image:
+    linear-gradient(180deg, rgba(247,236,210,0.32) 0%, rgba(233,196,138,0.20) 55%, rgba(201,159,99,0.24) 100%),
+    url(/nostalgia/desk-scene-3.png),
+    url(/nostalgia/desk.png) !important;
+  background-size: auto, cover, 620px 620px !important;
+  background-position: center top, center center, top left !important;
+  background-repeat: no-repeat, no-repeat, repeat !important;
+  background-attachment: fixed, fixed, fixed !important;
+}
+[data-theme="nostalgia"] .tf-land-paper { display: none !important; }
+[data-theme="nostalgia"] .tf-dust { display: none !important; }
+
+/* ═══════════ NOSTALGIA — home page cleanup (manila cards + readable text) ═══════════ */
+/* Feature plaques: warm index cards, not white slabs */
+[data-theme="nostalgia"] .tf-plaque {
+  background: linear-gradient(180deg, #fdf4dd 0%, #f0dfb8 100%) !important;
+  border: 1.5px solid #b5773f !important;
+  box-shadow: 0 3px 8px rgba(93,58,26,0.22), inset 0 1px 0 rgba(255,255,255,0.8) !important;
+}
+/* "Track your whole binder" band: manila folder */
+[data-theme="nostalgia"] .tf-band {
+  background: linear-gradient(180deg, #f7ecd2 0%, #eedcb2 100%) !important;
+  border: 2px solid #b23a28 !important;
+  box-shadow: 0 8px 24px rgba(93,58,26,0.30), 0 0 24px rgba(255,196,110,0.22), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+}
+[data-theme="nostalgia"] .tf-band-edge { background: #b23a28 !important; }
+[data-theme="nostalgia"] .tf-band h2 { color: #402a18 !important; }
+[data-theme="nostalgia"] .tf-band-btn {
+  background: linear-gradient(180deg, #f0c04a 0%, #d29a1e 100%) !important;
+  color: #3a2606 !important; border: 1px solid rgba(168,106,18,0.6) !important;
+  box-shadow: 0 2px 6px rgba(93,58,26,0.28) !important;
+}
+/* Eyebrow pill */
+[data-theme="nostalgia"] .tf-eyebrow {
+  background: linear-gradient(180deg, #fdf6e2 0%, #f2e4c4 100%) !important;
+  color: #8a2416 !important;
+  border: 1px solid rgba(154,100,40,0.5) !important;
+  box-shadow: 0 1px 3px rgba(93,58,26,0.25) !important;
+  text-shadow: none !important;
+}
+/* Landing footer text: espresso with a cream halo so it reads over the desk */
+[data-theme="nostalgia"] .tf-foot a,
+[data-theme="nostalgia"] .tf-foot p {
+  color: #3a2412 !important; font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255,247,230,0.95), 0 0 8px rgba(255,247,230,0.85), 0 2px 5px rgba(255,247,230,0.7) !important;
+}
+/* Landing nav sits directly over the busy cassette-desk photo — a halo alone wasn't enough. Give each nav
+   ITEM (Browse / Your Binder / the Retro toggle) a warm manila "sticker" chip so it clearly pops. Scoped to
+   nav > div so the logo/wordmark link (a direct child of <nav>) is NOT wrapped in a pill. */
+[data-theme="nostalgia"] .tf-land-bg nav > div a,
+[data-theme="nostalgia"] .tf-land-bg nav > div button {
+  color: #3a2412 !important; font-weight: 800 !important;
+  background: linear-gradient(180deg, rgba(253,246,226,0.94) 0%, rgba(242,228,196,0.94) 100%) !important;
+  border: 1px solid rgba(154,100,40,0.5) !important;
+  border-radius: 9999px !important;
+  padding: 6px 14px !important;
+  box-shadow: 0 2px 7px rgba(93,58,26,0.28), inset 0 1px 0 rgba(255,255,255,0.75) !important;
+  text-shadow: 0 1px 0 rgba(255,247,230,0.8) !important;
+}
+[data-theme="nostalgia"] .tf-land-bg nav > div a:hover,
+[data-theme="nostalgia"] .tf-land-bg nav > div button:hover { color: #b23a28 !important; border-color: rgba(178,58,40,0.6) !important; }
+
+/* /binder hero — give "Your Binder" the Righteous display treatment used for collection titles so the foil
+   "Binder" word stops looking shrunken next to "Your" (Caveat renders small at the same px). */
+[data-theme="nostalgia"] .tf-binder-title {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: clamp(2rem, 8vw, 2.6rem) !important; line-height: 1.02 !important; letter-spacing: 0.01em !important;
+  color: #8a2013 !important;
+  text-shadow: 0 2px 0 rgba(255,247,230,0.95), 0 0 14px rgba(255,247,230,0.60), 0 3px 7px rgba(93,58,26,0.32);
+}
+[data-theme="nostalgia"] .tf-binder-title .tf-foil {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: inherit !important; letter-spacing: 0.01em !important;
+  color: #16a34a !important; -webkit-text-fill-color: #16a34a !important; background: none !important;
+  text-shadow: 0 1px 0 rgba(255,248,232,0.95), 0 0 4px rgba(255,248,232,0.8), 0 2px 5px rgba(18,45,18,0.45) !important;
+}
+
+/* /browse hero — same Righteous brick treatment as the collection + binder headers so "Browse"
+   stops rendering brown-on-brown and the foil "Collections" word isn't a shrunken cursive. */
+[data-theme="nostalgia"] .tf-browse-title {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: clamp(2rem, 8vw, 2.6rem) !important; line-height: 1.02 !important; letter-spacing: 0.01em !important;
+  color: #a3341e !important;
+  text-shadow: 0 2px 0 rgba(255,246,224,0.75), 0 3px 6px rgba(93,58,26,0.25);
+}
+[data-theme="nostalgia"] .tf-browse-title .tf-foil {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: inherit !important; letter-spacing: 0.01em !important;
+  color: #16a34a !important; -webkit-text-fill-color: #16a34a !important; background: none !important;
+  text-shadow: 0 1px 0 rgba(255,248,232,0.95), 0 0 4px rgba(255,248,232,0.8), 0 2px 5px rgba(18,45,18,0.45) !important;
+}
+/* Subtitle was brown-on-brown desk — espresso ink with a cream halo so it reads over the manila. */
+[data-theme="nostalgia"] .tf-browse-sub {
+  color: #3a2412 !important; font-weight: 700 !important;
+  text-shadow: 0 1px 0 rgba(255,247,230,0.95), 0 0 10px rgba(255,247,230,0.85), 0 2px 5px rgba(255,247,230,0.65) !important;
+}
+
+/* The SOLD showcase is a dark-theme island rendered INSIDE the app shell, so
+   [data-theme="nostalgia"] .tf-foil was bleeding onto its price (turning it red).
+   ID specificity (1,1,0) beats the theme rule (0,2,0) — keep the price gold in every mode. */
+#tf-sold-card .tf-foil {
+  background: linear-gradient(105deg, #8a6a1c 0%, #ffe577 24%, #f0c000 44%, #fff3c4 58%, #c9a227 78%, #ffe577 100%) !important;
+  background-size: 220% 100% !important;
+  -webkit-background-clip: text !important; background-clip: text !important;
+  -webkit-text-fill-color: transparent !important; color: transparent !important;
+  font-family: system-ui, "Segoe UI", sans-serif !important;
+}
+
+/* ═══════════ NOSTALGIA CLEANUP (Fable) ═══════════ */
+.tcg-art-blurfill { display: none; }
+[data-theme="nostalgia"] .tcg-art-blurfill {
+  display: block;
+  transform: scale(1.15);
+  filter: blur(16px) saturate(1.15) brightness(0.72);
+  opacity: 0.65;
+}
+[data-theme="nostalgia"] .tcg-art-bg-rare      { --holo-a: rgba(255,110,40,0.20);  --holo-b: rgba(255,60,0,0.12);   }
+[data-theme="nostalgia"] .tcg-art-bg-epic      { --holo-a: rgba(140,190,255,0.20); --holo-b: rgba(90,140,255,0.12); }
+[data-theme="nostalgia"] .tcg-art-bg-legendary { --holo-a: rgba(255,200,60,0.22);  --holo-b: rgba(255,150,0,0.12);  }
+[data-theme="nostalgia"] .tcg-art-bg-mythic    { --holo-a: rgba(220,120,255,0.22); --holo-b: rgba(150,60,255,0.14); }
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-rare::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-epic::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-legendary::after,
+[data-theme="nostalgia"] .tcg-binder-grid .tcg-art-bg-mythic::after { opacity: 0.20 !important; }
+[data-theme="nostalgia"] .tcg-rank-lbl { font-size: 8px !important; font-weight: 800; letter-spacing: 0.14em; line-height: 1; margin-bottom: 2px; }
+[data-theme="nostalgia"] .tcg-rank-num { line-height: 1.15 !important; }
+[data-theme="nostalgia"] .tcg-binder-page .tcg-rank-tag { padding: 3px 8px 4px !important; }
+.tcg-trait-grid-scroll { max-height: 300px; }
+.tcg-trait-grid-scroll .tcg-trait-row  { padding: 5px 10px; gap: 8px; }
+.tcg-trait-grid-scroll .tcg-trait-type { font-size: 13px; letter-spacing: .03em; font-weight: 700; }
+.tcg-trait-grid-scroll .tcg-trait-val  { font-size: 16px; font-weight: 800; }
+.tcg-trait-grid-scroll .tcg-trait-pct  { font-size: 16px; font-weight: 800; }
+.tcg-trait-grid-scroll .tcg-trait-dot  { width: 9px; height: 9px; }
+[data-theme="nostalgia"] .tf-sitefoot {
+  background: linear-gradient(180deg, #f7ecd2 0%, #eedcb2 100%) !important;
+  border-top: 2px solid #b23a28 !important;
+  box-shadow: 0 -2px 14px rgba(93,58,26,0.18);
+}
+[data-theme="nostalgia"] .tf-sitefoot .text-title  { color: #b23a28 !important; }
+[data-theme="nostalgia"] .tf-sitefoot .text-subtle { color: #4a2f16 !important; }
+[data-theme="nostalgia"] .tf-sitefoot a.text-subtle:hover { color: #b23a28 !important; opacity: 1; }
+[data-theme="nostalgia"] .tf-sheet { --title: #f0deb0; --subtle: #c9a878; --gold: #ffd479; --card-bg: #3a2a16; --card-border: #c9964a; }
+
+[data-theme="nostalgia"] #tf-sold-card { --gold: #ffe06a; }
+/* ── Nostalgia card top + rim cleanup ── */
+/* Per-tier foil rim (was a uniform pink rainbow on every tier) */
+[data-theme="nostalgia"] .tcg-body-mythic::after    { --rim-a: #ff4fb0; --rim-b: #b06bff; }
+[data-theme="nostalgia"] .tcg-body-legendary::after { --rim-a: #ffd23f; --rim-b: #ffa800; }
+[data-theme="nostalgia"] .tcg-body-epic::after      { --rim-a: #35d6ff; --rim-b: #6f9cff; }
+[data-theme="nostalgia"] .tcg-body-rare::after      { --rim-a: #ff8a1f; --rim-b: #e8340e; }
+/* Rank number: crisp sans (not looping Caveat) + smaller so it stops dominating the tag */
+[data-theme="nostalgia"] .tcg-rank-num { font-family: system-ui, "Segoe UI", sans-serif !important; letter-spacing: 0 !important; }
+[data-theme="nostalgia"] .tcg-binder-page .tcg-rank-num { font-size: 12px !important; }
+[data-theme="nostalgia"] .tcg-binder-page .tcg-rank-lbl { font-size: 6.5px !important; }
+/* ── Nostalgia card name + trait legibility: clean readable font (not looping Caveat), bigger ── */
+[data-theme="nostalgia"] .tcg-cname {
+  font-family: system-ui, "Segoe UI", sans-serif !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
+}
+[data-theme="nostalgia"] .tcg-binder-page .tcg-cname { font-size: 15px !important; line-height: 1.1 !important; }
+[data-theme="nostalgia"] .tcg-trait-type,
+[data-theme="nostalgia"] .tcg-trait-val,
+[data-theme="nostalgia"] .tcg-trait-more {
+  font-family: var(--font-shantell), system-ui, sans-serif !important;
+}
+/* Remove the per-tier foil rim ring — it drew a second rounded outline inside the
+   neon border ("double card" look). The neon .tcg-outer border already gives each
+   card its tier-colored glowing edge. */
+[data-theme="nostalgia"] .tcg-body-rare::after,
+[data-theme="nostalgia"] .tcg-body-epic::after,
+[data-theme="nostalgia"] .tcg-body-legendary::after,
+[data-theme="nostalgia"] .tcg-body-mythic::after { display: none !important; }
+/* Detail-modal market panel: manila card */
+[data-theme="nostalgia"] .tf-modal-panel {
+  background: linear-gradient(180deg, #fffaf0 0%, #f5e8c6 100%) !important;
+  border: 1.5px solid #b5773f !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.8) !important;
+}
+/* Airdrop / rewards dashboard: dark-themed component — give it a solid warm-walnut
+   island in nostalgia so its (translucent-on-dark) panels + pills read clearly. */
+[data-theme="nostalgia"] .tf-rewards {
+  background: linear-gradient(180deg, rgba(50,33,16,0.98) 0%, rgba(30,20,10,0.99) 100%) !important;
+  border: 2px solid #b5773f !important;
+  box-shadow: 0 10px 30px rgba(93,58,26,0.38) !important;
+  --title: #f2e0b2; --subtle: #cdb185; --gold: #ffd479;
+}
+/* Make the inner translucent chips/panels read as solid pills on the walnut */
+[data-theme="nostalgia"] .tf-rewards > div:first-child { background: rgba(255,212,121,0.10) !important; }
+[data-theme="nostalgia"] .tf-rewards [class*="bg-white/"],
+[data-theme="nostalgia"] .tf-rewards [class*="bg-black/"] { background: rgba(255,246,224,0.09) !important; }
+
+/* Mobile: bias the desk scene to the left so the toys show (cover crops the center away) */
+@media (max-width: 640px) {
+  [data-theme="nostalgia"],
+  [data-theme="nostalgia"] .bg-vault-bg,
+  [data-theme="nostalgia"] .tf-land-bg {
+    background-position: center, left center, top left !important;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   NOSTALGIA NIGHT — [data-theme="nostalgia-night"] — moonlit sibling of nostalgia
+   (same desk at night; moonlight-blue + gold palette; dark theme)
+═══════════════════════════════════════════════════════════════════════════ */
+[data-theme="nostalgia-night"] {
+  color-scheme: dark;
+  --gold: #c9a227;
+  --rc-ink: #dfe8f5;
+  --rc-divider: rgba(223,232,245,0.20);
+}
+[data-theme="nostalgia-night"],
+[data-theme="nostalgia-night"] .bg-vault-bg {
+  background-color: #070c18 !important;
+  /* Single top-down desk scene (toys baked in around the edges, open center for
+     content). Fixed to the viewport + cover so it never tiles or repeats the props;
+     faint warm wash unifies it with the manila UI. desk.png tile kept as the fallback
+     backdrop behind the scene on ultra-tall/edge cases. */
+  background-image:
+    linear-gradient(180deg, rgba(11,17,32,0.32) 0%, rgba(7,12,24,0.20) 55%, rgba(4,8,17,0.24) 100%),
+    url(/nostalgia/desk-scene-night.png),
+    url(/nostalgia/desk.png) !important;
+  background-size: auto, cover, 620px 620px !important;
+  background-position: center top, center center, top left !important;
+  background-repeat: no-repeat, no-repeat, repeat !important;
+  background-attachment: fixed, fixed, fixed !important;
+}
+[data-theme="nostalgia-night"] .tcg-binder-shell {
+  background: linear-gradient(180deg, #10182b 0%, #0a1120 100%) !important;
+  border: 3px solid #c9a227 !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 14px 32px rgba(3,6,14,0.35),
+    0 0 34px rgba(120,160,255,0.30),
+    inset 0 0 0 2px rgba(170,198,255,0.14) !important;
+}
+[data-theme="nostalgia-night"] .tcg-binder-shell::before,
+[data-theme="nostalgia-night"] .tcg-binder-shell::after {
+  background-image: repeating-linear-gradient(90deg, rgba(201,162,39,0.45) 0 3px, transparent 3px 8px);
+  opacity: 0.5;
+}
+
+[data-theme="nostalgia-night"] .tcg-binder-page {
+  background: linear-gradient(175deg, #141d33 0%, #0c1322 100%) !important;
+  border: 1px solid rgba(111,131,171,0.35) !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 0 24px rgba(111,131,171,0.10), 0 1px 4px rgba(3,6,14,0.18) !important;
+}
+
+[data-theme="nostalgia-night"] .tcg-sleeve {
+  background: linear-gradient(180deg, rgba(190,210,250,0.16) 0%, rgba(46,66,104,0.35) 100%) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(190,210,250,0.25),
+    inset 0 -2px 5px rgba(111,131,171,0.18),
+    0 0 0 1px rgba(111,131,171,0.28) !important;
+}
+
+/* ── NOSTALGIA RARITY CARDS — vintage colored card stock ────────────────────
+   Each tier's BODY is a dusty mid-tone wash of its rarity color (well-loved
+   trading-card stock): mythic plum, legendary aged gold, epic dusty denim,
+   rare faded brick, uncommon olive, common kraft. Mid-brightness, never neon,
+   never cream, never black. Ink flips per tier: CREAM ink on the darker stocks
+   (mythic/epic/rare), ESPRESSO ink on the lighter stocks (legendary/uncommon/
+   common). The top-right rank tab is a manila sticker on every tier so the
+   rank number always pops. Mythic/legendary keep a slow warm foil-edge spin. */
+[data-theme="nostalgia-night"] .tcg-outer-mythic {
+  background: conic-gradient(from var(--angle), #ff0090, #ff3300, #ffcc00, #00ff66, #00ccff, #9900ff, #ff00cc, #ff0090) !important;
+  animation: border-spin 2s linear infinite, mythic-glow 3s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(60,30,50,0.5), 0 0 0 1px rgba(255,0,180,0.9), 0 0 18px 5px rgba(255,0,150,0.85), 0 0 42px 14px rgba(140,0,255,0.6), 0 0 80px 26px rgba(0,210,255,0.3);
+}
+[data-theme="nostalgia-night"] .tcg-outer-legendary {
+  background: conic-gradient(from var(--angle), #ffe566, #b87d00, #ffe566, #ffc200, #fff4a0, #b87d00, #ffe566) !important;
+  animation: border-spin 3s linear infinite, gold-glow 2.5s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(60,40,10,0.5), 0 0 0 1px rgba(255,190,0,0.9), 0 0 18px 5px rgba(255,170,0,0.8), 0 0 40px 13px rgba(255,140,0,0.5), 0 0 75px 24px rgba(255,200,50,0.28);
+}
+[data-theme="nostalgia-night"] .tcg-outer-epic {
+  background: conic-gradient(from var(--angle), #ffffff, #c8d8ff, #6090e0, #ffffff, #e8efff, #ffffff, #90b8ff, #d8e8ff, #ffffff) !important;
+  animation: border-spin 2.5s linear infinite, silver-glow 2.5s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(30,40,60,0.5), 0 0 0 1px rgba(240,248,255,0.95), 0 0 18px 5px rgba(210,230,255,0.85), 0 0 42px 13px rgba(150,195,255,0.55), 0 0 78px 25px rgba(120,170,255,0.3);
+}
+[data-theme="nostalgia-night"] .tcg-outer-rare {
+  background: conic-gradient(from var(--angle), #ff8a1f, #b81800, #ffb347, #e83000, #ff9a33, #8b0e00, #ff5a1f, #ff8a1f) !important;
+  animation: border-spin 3s linear infinite, red-glow 2.5s ease-in-out infinite !important;
+  box-shadow: 0 6px 16px rgba(60,25,10,0.5), 0 0 0 1px rgba(255,110,40,0.9), 0 0 16px 5px rgba(255,90,25,0.7), 0 0 38px 12px rgba(220,60,0,0.5), 0 0 70px 22px rgba(255,150,50,0.28);
+}
+[data-theme="nostalgia-night"] .tcg-outer-uncommon {
+  background: linear-gradient(160deg, #4ecf6e 0%, #2c9a4c 100%) !important;
+  animation: none !important;
+  box-shadow: 0 4px 12px rgba(45,40,20,0.45), 0 0 0 1px rgba(80,220,120,0.75), 0 0 14px 4px rgba(63,190,100,0.5), 0 0 32px 10px rgba(40,160,80,0.22);
+}
+[data-theme="nostalgia-night"] .tcg-outer-common {
+  background: linear-gradient(160deg, #5a8ce0 0%, #3763bd 100%) !important;
+  animation: none !important;
+  box-shadow: 0 4px 12px rgba(30,35,55,0.45), 0 0 0 1px rgba(90,140,255,0.7), 0 0 14px 4px rgba(80,130,230,0.45), 0 0 30px 10px rgba(60,110,210,0.2);
+}
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-outer-mythic,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-outer-legendary,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-outer-epic,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-outer-rare { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="nostalgia-night"] .tcg-outer-mythic,
+  [data-theme="nostalgia-night"] .tcg-outer-legendary,
+  [data-theme="nostalgia-night"] .tcg-outer-epic,
+  [data-theme="nostalgia-night"] .tcg-outer-rare { animation: none !important; }
+}
+
+/* ── NOSTALGIA CARDS — radioactive neon (dark-theme parity) + warm sticker accents ── */
+[data-theme="nostalgia-night"] .tcg-body-mythic    { background: linear-gradient(180deg, #170420 0%, #0c0214 55%, #110318 100%) !important; }
+[data-theme="nostalgia-night"] .tcg-body-legendary { background: linear-gradient(180deg, #171001 0%, #0d0900 55%, #120c01 100%) !important; }
+[data-theme="nostalgia-night"] .tcg-body-epic      { background: linear-gradient(180deg, #060b1c 0%, #030614 55%, #050918 100%) !important; }
+[data-theme="nostalgia-night"] .tcg-body-rare      { background: linear-gradient(180deg, #190401 0%, #0e0200 55%, #140301 100%) !important; }
+[data-theme="nostalgia-night"] .tcg-body-uncommon  { background: linear-gradient(180deg, #06130a 0%, #030b05 55%, #051008 100%) !important; }
+[data-theme="nostalgia-night"] .tcg-body-common    { background: linear-gradient(180deg, #070a18 0%, #040610 55%, #060814 100%) !important; }
+
+[data-theme="nostalgia-night"] .tcg-art-bg-mythic    { background: radial-gradient(ellipse at 40% 45%, #3a0c64 0%, #1c0640 65%, #0a0120 100%) !important; animation: none !important; }
+[data-theme="nostalgia-night"] .tcg-art-bg-legendary { background: radial-gradient(ellipse at 40% 45%, #4a2e06 0%, #241604 65%, #0b0600 100%) !important; animation: none !important; }
+[data-theme="nostalgia-night"] .tcg-art-bg-epic      { background: radial-gradient(ellipse at 40% 45%, #10285e 0%, #081a42 65%, #02081c 100%) !important; animation: none !important; }
+[data-theme="nostalgia-night"] .tcg-art-bg-rare      { background: radial-gradient(ellipse at 50% 112%, #e04512 0%, #7c1a00 34%, #2a0900 68%, #100300 100%) !important; animation: none !important; }
+[data-theme="nostalgia-night"] .tcg-art-bg-uncommon  { background: radial-gradient(ellipse at 40% 45%, #123a1a 0%, #081f0c 65%, #020a04 100%) !important; animation: none !important; }
+[data-theme="nostalgia-night"] .tcg-art-bg-common    { background: radial-gradient(ellipse at 40% 45%, #0d1f46 0%, #06122c 65%, #020510 100%) !important; animation: none !important; }
+[data-theme="nostalgia-night"] .tcg-art-clean-label { background: rgba(28,14,8,0.55) !important; color: rgba(250,240,222,0.85) !important; border-color: rgba(250,240,222,0.30) !important; }
+
+[data-theme="nostalgia-night"] .tcg-rank-tag {
+  background: linear-gradient(180deg, #e9effa 0%, #ccd8ec 100%) !important;
+  box-shadow: 0 2px 4px rgba(5,9,18,0.35), inset 0 1px 0 rgba(190,210,250,0.30) !important;
+  transform: rotate(-2deg);
+  padding: 4px 9px 5px !important;
+  border-radius: 6px;
+}
+[data-theme="nostalgia-night"] .tcg-rank-tag-mythic    { border: 1px solid #58254a !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-legendary { border: 1px solid #7c5c14 !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-epic      { border: 1px solid #2c4358 !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-rare      { border: 1px solid #7a2c1c !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-uncommon  { border: 1px solid #4d5c26 !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-common    { border: 1px solid #6b5433 !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-mythic    .tcg-rank-lbl { color: #702355 !important; opacity: 1; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-legendary .tcg-rank-lbl { color: #6b4a00 !important; opacity: 1; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-epic      .tcg-rank-lbl { color: #2e5580 !important; opacity: 1; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-rare      .tcg-rank-lbl { color: #8c2c18 !important; opacity: 1; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-uncommon  .tcg-rank-lbl { color: #3f511b !important; opacity: 1; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-common    .tcg-rank-lbl { color: #5c4423 !important; opacity: 1; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-mythic    .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #702355 !important; color: #702355 !important; text-shadow: none !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-legendary .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #6b4a00 !important; color: #6b4a00 !important; text-shadow: none !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-epic      .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #2e5580 !important; color: #2e5580 !important; text-shadow: none !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-rare      .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #8c2c18 !important; color: #8c2c18 !important; text-shadow: none !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-uncommon  .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #3f511b !important; color: #3f511b !important; text-shadow: none !important; }
+[data-theme="nostalgia-night"] .tcg-rank-tag-common    .tcg-rank-num { background: none !important; -webkit-background-clip: unset !important; background-clip: unset !important; -webkit-text-fill-color: #5c4423 !important; color: #5c4423 !important; text-shadow: none !important; }
+
+[data-theme="nostalgia-night"] .tcg-traits-pill-mythic    { background: rgba(233,240,250,0.92) !important; border-color: #58254a !important; color: #702355 !important; }
+[data-theme="nostalgia-night"] .tcg-traits-pill-legendary { background: rgba(233,240,250,0.92) !important; border-color: #7c5c14 !important; color: #6b4a00 !important; }
+[data-theme="nostalgia-night"] .tcg-traits-pill-epic      { background: rgba(233,240,250,0.92) !important; border-color: #2c4358 !important; color: #2e5580 !important; }
+[data-theme="nostalgia-night"] .tcg-traits-pill-rare      { background: rgba(233,240,250,0.92) !important; border-color: #7a2c1c !important; color: #8c2c18 !important; }
+[data-theme="nostalgia-night"] .tcg-traits-pill-uncommon  { background: rgba(233,240,250,0.92) !important; border-color: #4d5c26 !important; color: #3f511b !important; }
+[data-theme="nostalgia-night"] .tcg-traits-pill-common    { background: rgba(233,240,250,0.92) !important; border-color: #6b5433 !important; color: #5c4423 !important; }
+
+[data-theme="nostalgia-night"] .tcg-tier-banner-mythic    { background: rgba(200,60,255,0.16) !important; border-color: rgba(224,100,255,0.7) !important; color: #ee9aff !important; box-shadow: 0 0 12px rgba(200,60,255,0.45), inset 0 0 8px rgba(200,60,255,0.18); text-shadow: 0 0 8px rgba(224,128,255,0.6); }
+[data-theme="nostalgia-night"] .tcg-tier-banner-legendary { background: rgba(255,190,0,0.14) !important;  border-color: rgba(255,200,40,0.7) !important;  color: #ffd75e !important; box-shadow: 0 0 12px rgba(255,180,0,0.45),  inset 0 0 8px rgba(255,180,0,0.16);  text-shadow: 0 0 8px rgba(255,200,60,0.55); }
+[data-theme="nostalgia-night"] .tcg-tier-banner-epic      { background: rgba(180,215,255,0.14) !important; border-color: rgba(210,235,255,0.75) !important; color: #dceeff !important; box-shadow: 0 0 12px rgba(160,200,255,0.5),  inset 0 0 8px rgba(160,200,255,0.16); text-shadow: 0 0 8px rgba(200,230,255,0.6); }
+[data-theme="nostalgia-night"] .tcg-tier-banner-rare      { background: rgba(255,60,20,0.14) !important;   border-color: rgba(255,110,60,0.7) !important;  color: #ff8a66 !important; box-shadow: 0 0 12px rgba(255,80,30,0.45),   inset 0 0 8px rgba(255,80,30,0.16);   text-shadow: 0 0 8px rgba(255,120,70,0.55); }
+[data-theme="nostalgia-night"] .tcg-tier-banner-uncommon  { background: rgba(63,200,100,0.12) !important;  border-color: rgba(80,210,120,0.6) !important;  color: #7fe89a !important; box-shadow: 0 0 8px rgba(63,190,100,0.3); }
+[data-theme="nostalgia-night"] .tcg-tier-banner-common    { background: rgba(80,130,230,0.12) !important;  border-color: rgba(100,150,240,0.6) !important; color: #8fb4f0 !important; box-shadow: 0 0 8px rgba(80,130,230,0.3); }
+
+/* Light ink on the dark bodies (all six tiers) */
+[data-theme="nostalgia-night"] .tcg-body-mythic,    [data-theme="nostalgia-night"] .tcg-panel-mythic,
+[data-theme="nostalgia-night"] .tcg-body-legendary, [data-theme="nostalgia-night"] .tcg-panel-legendary,
+[data-theme="nostalgia-night"] .tcg-body-epic,      [data-theme="nostalgia-night"] .tcg-panel-epic,
+[data-theme="nostalgia-night"] .tcg-body-rare,      [data-theme="nostalgia-night"] .tcg-panel-rare,
+[data-theme="nostalgia-night"] .tcg-body-uncommon,  [data-theme="nostalgia-night"] .tcg-panel-uncommon,
+[data-theme="nostalgia-night"] .tcg-body-common,    [data-theme="nostalgia-night"] .tcg-panel-common {
+  --rc-ink: #f6ecda; --rc-divider: rgba(246,236,218,0.28);
+  --good: #7dffa8; --fair: #ffd77a; --bad: #ff9a80;
+}
+[data-theme="nostalgia-night"] .tcg-lbl-mythic,    [data-theme="nostalgia-night"] .tcg-lbl-legendary,
+[data-theme="nostalgia-night"] .tcg-lbl-epic,      [data-theme="nostalgia-night"] .tcg-lbl-rare,
+[data-theme="nostalgia-night"] .tcg-lbl-uncommon,  [data-theme="nostalgia-night"] .tcg-lbl-common {
+  color: rgba(255,246,230,0.72) !important;
+}
+[data-theme="nostalgia-night"] .tcg-stat-val { color: #fff8ec !important; }
+[data-theme="nostalgia-night"] .tcg-sub-mythic,   [data-theme="nostalgia-night"] .tcg-sub-legendary,
+[data-theme="nostalgia-night"] .tcg-sub-epic,     [data-theme="nostalgia-night"] .tcg-sub-rare,
+[data-theme="nostalgia-night"] .tcg-sub-uncommon, [data-theme="nostalgia-night"] .tcg-sub-common {
+  color: rgba(255,246,230,0.62) !important; font-weight: 700 !important; text-shadow: 0 1px 2px rgba(0,0,0,0.7) !important;
+}
+[data-theme="nostalgia-night"] .tcg-trait-val  { color: #fff8ec !important; font-weight: 700 !important; }
+[data-theme="nostalgia-night"] .tcg-trait-type { color: rgba(255,246,230,0.62) !important; }
+[data-theme="nostalgia-night"] .tcg-trait-more { color: rgba(255,246,230,0.55) !important; }
+[data-theme="nostalgia-night"] .tcg-trait-pct  { filter: brightness(1.5) saturate(1.15); font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+[data-theme="nostalgia-night"] .tcg-cname { filter: brightness(1.2) saturate(1.15) drop-shadow(0 0 5px rgba(0,0,0,0.55)); }
+
+[data-theme="nostalgia-night"] .tf-panel {
+  background: linear-gradient(175deg, rgba(14,21,38,0.94), rgba(8,13,23,0.97));
+  border: 1px solid rgba(201,162,39,0.40);
+  box-shadow: 0 6px 20px rgba(2,5,12,0.35), inset 0 1px 0 rgba(255,229,150,0.08);
+  --title: #e3ecfa;  --subtle: #a9bad6;  --gold: #ffd479;
+  --good: #8fce6b;   --fair: #e0b45c;    --bad: #e08a6f;
+  --card-bg: #121b30; --card-border: #c9a227;
+  --rc-ink: #e8eefb; --rc-divider: rgba(255,255,255,0.16);
+}
+
+[data-theme="nostalgia-night"] .tf-search,
+[data-theme="nostalgia-night"] .tf-select {
+  background: #141d33; border-color: rgba(111,131,171,0.55);
+  color: #dfe8f5; caret-color: #c9a227;
+}
+[data-theme="nostalgia-night"] .tf-search::placeholder,
+[data-theme="nostalgia-night"] .tf-select::placeholder { color: rgba(169,186,214,0.85); }
+
+[data-theme="nostalgia-night"] .tf-pill {
+  background: #141d33; border-color: rgba(111,131,171,0.50); color: #b7c6e2;
+}
+[data-theme="nostalgia-night"] .tf-pill:hover { background: #141d33; color: #dfe8f5; }
+
+[data-theme="nostalgia-night"] .tf-tabbar { border-bottom-color: rgba(111,131,171,0.55); }
+[data-theme="nostalgia-night"] .tf-tab {
+  color: #b7c6e2; background: #10192c !important; border-color: rgba(111,131,171,0.45);
+}
+[data-theme="nostalgia-night"] .tf-tab:hover { background: #141d33 !important; color: #dfe8f5; }
+[data-theme="nostalgia-night"] .tf-tab--active {
+  background: var(--page-bg); color: #dfe8f5; border-color: rgba(111,131,171,0.60);
+}
+[data-theme="nostalgia-night"] .tf-tab-panel { border-color: rgba(111,131,171,0.60); }
+
+[data-theme="nostalgia-night"] .tf-tile {
+  background: linear-gradient(180deg, #141d33, #0c1322);
+  border-color: rgba(111,131,171,0.50);
+  box-shadow: inset 0 1px 0 rgba(190,210,250,0.30), 0 2px 6px rgba(3,6,14,0.18);
+}
+[data-theme="nostalgia-night"] .tf-tile:hover { border-color: #c9a227; box-shadow: 0 8px 20px rgba(3,6,14,0.30); }
+[data-theme="nostalgia-night"] .tf-tile-foot { border-top-color: rgba(111,131,171,0.30); }
+
+[data-theme="nostalgia-night"] .tf-hairline { background: linear-gradient(90deg, transparent, rgba(111,131,171,0.55), transparent); }
+[data-theme="nostalgia-night"] .tf-browse-tex,
+[data-theme="nostalgia-night"] .tf-land-paper {
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(111,131,171,0.10) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(-45deg, rgba(201,162,39,0.07)  0 2px, transparent 2px 10px);
+}
+[data-theme="nostalgia-night"] .tf-foot { border-top-color: rgba(111,131,171,0.35); }
+[data-theme="nostalgia-night"] .tf-deal-chip { color: #f2ffe8; }
+
+[data-theme="nostalgia-night"] .tf-foil {
+  background: linear-gradient(105deg, #8a6a1c 0%, #ffe577 24%, #f0c000 44%, #fff3c4 58%, #c9a227 78%, #ffe577 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+
+[data-theme="nostalgia-night"] .ch-title {
+  background: linear-gradient(180deg, #8a6a1c 0%, #e8c878 45%, #a07c1e 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(9,15,30,0.85));
+}
+[data-theme="nostalgia-night"] .ch-stripe { background: linear-gradient(180deg, #c9a227, #e8862a) !important; }
+[data-theme="nostalgia-night"] .ch-badge  { background: linear-gradient(120deg, #c9a227, #e8862a) !important; }
+[data-theme="nostalgia-night"] .ch-desc   { color: rgba(223,232,245,0.92) !important; }
+
+[data-theme="nostalgia-night"] .tf-land-bg {
+  --title: #dfe8f5; --subtle: #94a8cc; --card-bg: #141d33; --card-border: #6f83ab;
+  background:
+    radial-gradient(120% 55% at 50% -6%, rgba(140,170,255,0.55), transparent 60%),
+    linear-gradient(180deg, #0a1122 0%, #070c18 100%);
+}
+
+/* ── Nostalgia: warm focus ring (the global sky-blue clashes on manila) ────── */
+[data-theme="nostalgia-night"] :focus-visible { outline-color: #c9a227 !important; }
+
+/* ── Nostalgia handwriting ─────────────────────────────────────────────────
+   Shantell Sans = neat handwriting for body + readable numbers (real 300-800
+   weights). Caveat = marker script for display moments only. Micro-type
+   (6-9px grid-card stats/traits) + form controls stay Inter — handwriting is
+   illegible there; prices/ranks/% must never be squint-work. */
+[data-theme="nostalgia-night"] {
+  font-family: var(--font-shantell), var(--font-inter), sans-serif;
+}
+[data-theme="nostalgia-night"] .tcg-stat-lbl,
+[data-theme="nostalgia-night"] .tcg-stat-val,
+[data-theme="nostalgia-night"] .tcg-stat-sub,
+[data-theme="nostalgia-night"] .tcg-trait-type,
+[data-theme="nostalgia-night"] .tcg-trait-val,
+[data-theme="nostalgia-night"] .tcg-trait-pct,
+[data-theme="nostalgia-night"] .tcg-trait-more,
+[data-theme="nostalgia-night"] .tcg-rank-lbl,
+[data-theme="nostalgia-night"] .tf-search,
+[data-theme="nostalgia-night"] .tf-select {
+  font-family: var(--font-inter), sans-serif;
+}
+[data-theme="nostalgia-night"] .ch-title,
+[data-theme="nostalgia-night"] .tf-foil {
+  font-family: var(--font-caveat), cursive;
+  letter-spacing: 0;
+}
+[data-theme="nostalgia-night"] .tcg-cname {
+  font-family: var(--font-caveat), cursive;
+  font-size: 20px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+[data-theme="nostalgia-night"] .tcg-rank-num {
+  font-family: var(--font-caveat), cursive;
+  font-size: 21px;
+  font-weight: 700;
+}
+[data-theme="nostalgia-night"] .tcg-tier-banner {
+  font-family: var(--font-caveat), cursive;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* ════════════════════════════════════════════════════════════
+   NOSTALGIA HOLO FOIL v2 — rare / epic / legendary / mythic
+   (uncommon + common stay plain matte stock)
+════════════════════════════════════════════════════════════ */
+@keyframes nostalgia-holo-drift {
+  from { transform: translate3d(-17%, -8%, 0); }
+  to   { transform: translate3d(17%, 8%, 0); }
+}
+@keyframes nostalgia-sheen-sweep {
+  from { transform: translate3d(-15%, -6%, 0); }
+  to   { transform: translate3d(15%, 6%, 0); }
+}
+@keyframes nostalgia-gloss-glide {
+  0%, 14% { transform: translate3d(-130%, 0, 0); }
+  15%     { transform: translate3d(-128%, 0, 0); animation-timing-function: cubic-bezier(.62,.02,.28,.99); }
+  54%     { transform: translate3d(130%, 0, 0); }
+  100%    { transform: translate3d(130%, 0, 0); }
+}
+@keyframes nostalgia-sparkle-twinkle {
+  0%   { opacity: .30; transform: scale(1); }
+  15%  { opacity: .95; transform: scale(1.045); }
+  30%  { opacity: .40; transform: scale(1); }
+  50%  { opacity: .85; transform: scale(1.055); }
+  64%  { opacity: .35; transform: scale(1); }
+  82%  { opacity: 1;   transform: scale(1.03); }
+  100% { opacity: .30; transform: scale(1); }
+}
+
+/* Prism banding behind art */
+[data-theme="nostalgia-night"] .tcg-art-bg-rare::before,
+[data-theme="nostalgia-night"] .tcg-art-bg-epic::before,
+[data-theme="nostalgia-night"] .tcg-art-bg-legendary::before,
+[data-theme="nostalgia-night"] .tcg-art-bg-mythic::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(115deg,
+      var(--holo-a) 0 8px,
+      var(--holo-b) 8px 16px,
+      transparent 16px 24px,
+      var(--holo-b) 24px 32px,
+      var(--holo-a) 32px 40px),
+    repeating-linear-gradient(25deg,
+      rgba(255,255,255,0.06) 0 1px,
+      transparent 1px 7px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+/* Drifting rainbow glint behind art */
+[data-theme="nostalgia-night"] .tcg-art-bg-rare::after,
+[data-theme="nostalgia-night"] .tcg-art-bg-epic::after,
+[data-theme="nostalgia-night"] .tcg-art-bg-legendary::after,
+[data-theme="nostalgia-night"] .tcg-art-bg-mythic::after {
+  content: ""; position: absolute; inset: -35%;
+  background: linear-gradient(115deg,
+    rgba(255,255,255,0)    42%,
+    rgba(255,255,255,0.18) 48%,
+    rgba(255,255,255,0.55) 51%,
+    rgba(255,255,255,0.18) 54%,
+    rgba(255,255,255,0)    60%);
+  mix-blend-mode: screen;
+  animation: nostalgia-holo-drift 13s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+/* LIVE FOIL RIM — rotating conic rainbow (reuses --angle + border-spin) */
+[data-theme="nostalgia-night"] .tcg-body-rare::after,
+[data-theme="nostalgia-night"] .tcg-body-epic::after,
+[data-theme="nostalgia-night"] .tcg-body-legendary::after,
+[data-theme="nostalgia-night"] .tcg-body-mythic::after {
+  content: ""; position: absolute; inset: 0; border-radius: 16px; padding: 3px;
+  z-index: 11;
+  background: conic-gradient(from var(--angle),
+    var(--rim-a) 0%, var(--rim-b) 28%, #fffbe8 42%, var(--rim-a) 62%, var(--rim-b) 84%, var(--rim-a) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: border-spin 10s linear infinite;
+  pointer-events: none;
+}
+/* Per-tier prism / glint / rim ladders */
+[data-theme="nostalgia-night"] .tcg-art-bg-rare::before      { opacity: 0.55; }
+[data-theme="nostalgia-night"] .tcg-art-bg-epic::before      { opacity: 0.65; }
+[data-theme="nostalgia-night"] .tcg-art-bg-legendary::before { opacity: 0.80; }
+[data-theme="nostalgia-night"] .tcg-art-bg-mythic::before    { opacity: 0.90; }
+[data-theme="nostalgia-night"] .tcg-art-bg-rare::after      { opacity: 0.30; animation-duration: 12s;  }
+[data-theme="nostalgia-night"] .tcg-art-bg-epic::after      { opacity: 0.38; animation-duration: 10s;  }
+[data-theme="nostalgia-night"] .tcg-art-bg-legendary::after { opacity: 0.48; animation-duration: 7.5s; }
+[data-theme="nostalgia-night"] .tcg-art-bg-mythic::after    { opacity: 0.55; animation-duration: 5.5s; }
+[data-theme="nostalgia-night"] .tcg-body-rare::after      { opacity: 0.72; animation-duration: 12s; }
+[data-theme="nostalgia-night"] .tcg-body-epic::after      { opacity: 0.88; animation-duration: 10s; animation-delay: -4s; }
+[data-theme="nostalgia-night"] .tcg-body-legendary::after { opacity: 1; animation-duration: 8s;  animation-delay: -2s; padding: 4px; }
+[data-theme="nostalgia-night"] .tcg-body-mythic::after    { opacity: 1;    animation-duration: 6s;  animation-delay: -3s; padding: 4px; }
+
+/* Whole-card foil sheen — under header/art/panel */
+[data-theme="nostalgia-night"] .tcg-card-header { position: relative; z-index: 2; }
+[data-theme="nostalgia-night"] .tcg-body-rare::before,
+[data-theme="nostalgia-night"] .tcg-body-epic::before,
+[data-theme="nostalgia-night"] .tcg-body-legendary::before,
+[data-theme="nostalgia-night"] .tcg-body-mythic::before {
+  content: ""; position: absolute; inset: -40%; z-index: 0;
+  background: linear-gradient(115deg,
+    rgba(255,255,255,0)    40%,
+    rgba(232,178,90,0.22)  47%,
+    rgba(255,248,232,0.36) 51%,
+    rgba(154,184,115,0.20) 55%,
+    rgba(255,255,255,0)    62%);
+  animation: nostalgia-sheen-sweep 9s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+[data-theme="nostalgia-night"] .tcg-body-rare::before      { opacity: 0.65; animation-duration: 11s; }
+[data-theme="nostalgia-night"] .tcg-body-epic::before      { opacity: 0.75; animation-duration: 9.5s; }
+[data-theme="nostalgia-night"] .tcg-body-legendary::before { opacity: 0.90; animation-duration: 8s; }
+[data-theme="nostalgia-night"] .tcg-body-mythic::before    { opacity: 1; animation-duration: 7s; }
+
+/* Art + labels above the in-zone gloss/sparkle layers */
+[data-theme="nostalgia-night"] .tcg-nft-art { z-index: 2; }
+[data-theme="nostalgia-night"] .tcg-art-clean-label { z-index: 3; }
+
+/* GLOSSY SPECULAR SWEEP — behind the art */
+[data-theme="nostalgia-night"] .tcg-body-rare .tcg-art-zone::after,
+[data-theme="nostalgia-night"] .tcg-body-epic .tcg-art-zone::after,
+[data-theme="nostalgia-night"] .tcg-body-legendary .tcg-art-zone::after,
+[data-theme="nostalgia-night"] .tcg-body-mythic .tcg-art-zone::after {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(105deg,
+    transparent 40%,
+    rgba(255,244,214,0.18) 45%,
+    rgba(255,255,255,0.42) 48.5%,
+    rgba(255,255,255,0.98) 50%,
+    rgba(255,255,255,0.42) 51.5%,
+    rgba(255,214,236,0.18) 55%,
+    transparent 60%);
+  mix-blend-mode: screen;
+  animation: nostalgia-gloss-glide 11s linear infinite;
+  pointer-events: none;
+}
+[data-theme="nostalgia-night"] .tcg-body-rare .tcg-art-zone::after      { opacity: 0.50; animation-duration: 13s;  animation-delay: -3s; }
+[data-theme="nostalgia-night"] .tcg-body-epic .tcg-art-zone::after      { opacity: 0.62; animation-duration: 11s;  animation-delay: -7s; }
+[data-theme="nostalgia-night"] .tcg-body-legendary .tcg-art-zone::after { opacity: 0.78; animation-duration: 9.5s; animation-delay: -1.5s; }
+[data-theme="nostalgia-night"] .tcg-body-mythic .tcg-art-zone::after    { opacity: 0.92; animation-duration: 7.5s; animation-delay: -5s; }
+
+/* SPARKLE GLINTS — twinkling star points in the art-zone gutters */
+[data-theme="nostalgia-night"] .tcg-body-rare .tcg-art-zone::before,
+[data-theme="nostalgia-night"] .tcg-body-epic .tcg-art-zone::before,
+[data-theme="nostalgia-night"] .tcg-body-legendary .tcg-art-zone::before,
+[data-theme="nostalgia-night"] .tcg-body-mythic .tcg-art-zone::before {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  mix-blend-mode: screen;
+  animation: nostalgia-sparkle-twinkle 4s ease-in-out infinite;
+  pointer-events: none;
+}
+[data-theme="nostalgia-night"] .tcg-body-rare .tcg-art-zone::before {
+  opacity: 0.55; animation-duration: 5.2s; animation-delay: -2s;
+  background:
+    radial-gradient(circle at 8% 24%,  rgba(255,255,255,.92) 0 1px, rgba(255,235,214,.35) 2px, transparent 3.2px),
+    radial-gradient(circle at 93% 38%, rgba(255,255,255,.88) 0 1px, rgba(255,235,214,.30) 2px, transparent 3px),
+    radial-gradient(circle at 14% 82%, rgba(255,255,255,.80) 0 .8px, transparent 2.2px),
+    radial-gradient(circle at 86% 90%, rgba(255,255,255,.78) 0 .7px, transparent 2px);
+}
+[data-theme="nostalgia-night"] .tcg-body-epic .tcg-art-zone::before {
+  opacity: 0.65; animation-duration: 4.4s; animation-delay: -1.2s;
+  background:
+    radial-gradient(circle at 7% 18%,  rgba(255,255,255,.95) 0 1px, rgba(190,220,255,.40) 2px, transparent 3.4px),
+    radial-gradient(circle at 92% 26%, rgba(255,255,255,.90) 0 1px, rgba(190,220,255,.35) 2px, transparent 3px),
+    radial-gradient(circle at 12% 62%, rgba(255,255,255,.85) 0 .8px, transparent 2.4px),
+    radial-gradient(circle at 95% 64%, rgba(255,255,255,.82) 0 .8px, transparent 2.2px),
+    radial-gradient(circle at 30% 90%, rgba(255,255,255,.80) 0 .7px, transparent 2px),
+    radial-gradient(circle at 74% 94%, rgba(255,255,255,.78) 0 .7px, transparent 2px);
+}
+[data-theme="nostalgia-night"] .tcg-body-legendary .tcg-art-zone::before {
+  opacity: 0.75; animation-duration: 3.6s; animation-delay: -0.8s;
+  background:
+    radial-gradient(circle at 6% 16%,  rgba(255,255,255,.95) 0 1.1px, rgba(255,222,150,.45) 2.2px, transparent 3.8px),
+    radial-gradient(circle at 93% 22%, rgba(255,255,255,.92) 0 1px,   rgba(255,222,150,.40) 2px,   transparent 3.4px),
+    radial-gradient(circle at 11% 54%, rgba(255,255,255,.88) 0 .9px,  rgba(255,222,150,.32) 1.8px, transparent 2.8px),
+    radial-gradient(circle at 95% 60%, rgba(255,255,255,.86) 0 .9px,  rgba(255,222,150,.30) 1.8px, transparent 2.8px),
+    radial-gradient(circle at 27% 8%,  rgba(255,255,255,.82) 0 .7px,  transparent 2.1px),
+    radial-gradient(circle at 70% 6%,  rgba(255,255,255,.80) 0 .7px,  transparent 2px),
+    radial-gradient(circle at 34% 92%, rgba(255,255,255,.80) 0 .7px,  transparent 2px),
+    radial-gradient(circle at 82% 90%, rgba(255,255,255,.78) 0 .7px,  transparent 2px);
+}
+[data-theme="nostalgia-night"] .tcg-body-mythic .tcg-art-zone::before {
+  opacity: 0.85; animation-duration: 2.8s; animation-delay: -1.6s;
+  background:
+    radial-gradient(circle at 7% 22%,  rgba(255,255,255,.98) 0 1.2px, rgba(255,196,226,.50) 2.4px, transparent 4.2px),
+    radial-gradient(circle at 90% 16%, rgba(255,255,255,.95) 0 1.2px, rgba(255,226,160,.48) 2.4px, transparent 4px),
+    radial-gradient(circle at 14% 66%, rgba(255,255,255,.92) 0 1px,   rgba(255,226,160,.40) 2px,   transparent 3.2px),
+    radial-gradient(circle at 95% 52%, rgba(255,255,255,.92) 0 1px,   rgba(255,196,226,.40) 2px,   transparent 3.2px),
+    radial-gradient(circle at 5% 88%,  rgba(255,255,255,.86) 0 .8px,  rgba(255,196,226,.32) 1.6px, transparent 2.6px),
+    radial-gradient(circle at 87% 84%, rgba(255,255,255,.86) 0 .8px,  rgba(255,226,160,.32) 1.6px, transparent 2.6px),
+    radial-gradient(circle at 30% 8%,  rgba(255,255,255,.82) 0 .7px,  transparent 2.1px),
+    radial-gradient(circle at 66% 5%,  rgba(255,255,255,.84) 0 .8px,  transparent 2.2px),
+    radial-gradient(circle at 42% 94%, rgba(255,255,255,.80) 0 .7px,  transparent 2px),
+    radial-gradient(circle at 60% 90%, rgba(255,255,255,.78) 0 .6px,  transparent 1.8px);
+}
+
+/* Binder-grid pause — ALL animated holo layers */
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-rare::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-epic::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-legendary::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-mythic::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-rare::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-epic::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-legendary::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-mythic::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-rare::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-epic::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-legendary::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-mythic::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-rare .tcg-art-zone::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-epic .tcg-art-zone::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-legendary .tcg-art-zone::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-mythic .tcg-art-zone::before,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-rare .tcg-art-zone::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-epic .tcg-art-zone::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-legendary .tcg-art-zone::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-body-mythic .tcg-art-zone::after { animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="nostalgia-night"] .tcg-art-bg-rare::after,
+  [data-theme="nostalgia-night"] .tcg-art-bg-epic::after,
+  [data-theme="nostalgia-night"] .tcg-art-bg-legendary::after,
+  [data-theme="nostalgia-night"] .tcg-art-bg-mythic::after,
+  [data-theme="nostalgia-night"] .tcg-body-rare::after,
+  [data-theme="nostalgia-night"] .tcg-body-epic::after,
+  [data-theme="nostalgia-night"] .tcg-body-legendary::after,
+  [data-theme="nostalgia-night"] .tcg-body-mythic::after,
+  [data-theme="nostalgia-night"] .tcg-body-rare::before,
+  [data-theme="nostalgia-night"] .tcg-body-epic::before,
+  [data-theme="nostalgia-night"] .tcg-body-legendary::before,
+  [data-theme="nostalgia-night"] .tcg-body-mythic::before,
+  [data-theme="nostalgia-night"] .tcg-body-rare .tcg-art-zone::before,
+  [data-theme="nostalgia-night"] .tcg-body-epic .tcg-art-zone::before,
+  [data-theme="nostalgia-night"] .tcg-body-legendary .tcg-art-zone::before,
+  [data-theme="nostalgia-night"] .tcg-body-mythic .tcg-art-zone::before,
+  [data-theme="nostalgia-night"] .tcg-body-rare .tcg-art-zone::after,
+  [data-theme="nostalgia-night"] .tcg-body-epic .tcg-art-zone::after,
+  [data-theme="nostalgia-night"] .tcg-body-legendary .tcg-art-zone::after,
+  [data-theme="nostalgia-night"] .tcg-body-mythic .tcg-art-zone::after { animation: none !important; }
+}
+
+/* Legibility: grid sub-value size bump + deal-word sticker chip */
+[data-theme="nostalgia-night"] .tcg-stat-sub:not(.text-xs) { font-size: 8px; font-weight: 700; }
+[data-theme="nostalgia-night"] .tcg-stat-sub[style] {
+  background: rgba(4,8,17,0.82);
+  border: 1px solid rgba(255,244,214,0.28);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-top: 2px;
+  filter: brightness(1.15);
+  text-shadow: none;
+}
+
+/* ═══════════ NOSTALGIA FINAL POLISH — page chrome ═══════════ */
+/* Collection header — manila folder on the desk */
+[data-theme="nostalgia-night"] .tf-colhead {
+  background: linear-gradient(180deg, #10182b 0%, #0a1120 100%) !important;
+  border: 3px solid #c9a227 !important;
+  box-shadow: 0 14px 32px rgba(3,6,14,0.35), 0 0 30px rgba(130,165,255,0.30), inset 0 0 0 2px rgba(170,198,255,0.14) !important;
+}
+[data-theme="nostalgia-night"] .tf-colhead h1 {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: 2.5rem !important;
+  line-height: 1.02 !important;
+  letter-spacing: 0.01em !important;
+  min-width: 0;
+  background: none !important;
+  -webkit-background-clip: border-box !important; background-clip: border-box !important;
+  -webkit-text-fill-color: #ffd968 !important;
+  color: #ffd968 !important;
+  text-shadow: 0 2px 0 rgba(9,15,30,0.85), 0 0 16px rgba(255,210,90,0.38), 0 3px 7px rgba(3,6,14,0.40);
+}
+[data-theme="nostalgia-night"] .tf-colstat {
+  background: linear-gradient(180deg, #161f36 0%, #0e1728 100%) !important;
+  border: 1.5px solid #6f83ab !important;
+  box-shadow: 0 3px 8px rgba(3,6,14,0.22), inset 0 1px 0 rgba(170,198,255,0.16) !important;
+}
+[data-theme="nostalgia-night"] .tf-colstat--hero {
+  background: linear-gradient(180deg, #1a2540 0%, #121d33 100%) !important;
+  border: 2px solid #c9a227 !important;
+  box-shadow: 0 4px 12px rgba(3,6,14,0.28), 0 0 18px rgba(120,155,235,0.38), inset 0 1px 0 rgba(170,198,255,0.18) !important;
+}
+/* Header + stat text — espresso, no more washed brown */
+[data-theme="nostalgia-night"] .tf-colstat > div:nth-child(1) { color: #a9bad6 !important; font-size: 12px !important; letter-spacing: 0.08em !important; }
+[data-theme="nostalgia-night"] .tf-colstat--hero > div:nth-child(1) { color: #e8c878 !important; }
+[data-theme="nostalgia-night"] .tf-colstat > div:nth-child(2) { color: #dfe8f5 !important; }
+[data-theme="nostalgia-night"] .tf-colstat--hero > div:nth-child(2) { color: #e8c878 !important; text-shadow: 0 1px 0 rgba(9,15,30,0.6); }
+[data-theme="nostalgia-night"] .tf-colstat > div:nth-child(3) { color: #b7c6e2 !important; font-weight: 700 !important; }
+[data-theme="nostalgia-night"] .tf-colhead .text-subtle { color: #a9bad6 !important; font-size: 13px; }
+[data-theme="nostalgia-night"] .tf-colhead .text-subtle span { color: #dfe8f5 !important; font-weight: 800 !important; }
+[data-theme="nostalgia-night"] .tf-fresh { background: rgba(80,220,130,0.10) !important; color: #7fe89a !important; border-color: rgba(80,220,130,0.45) !important; }
+
+/* Grid-scale type bumps (Caveat needs more px than Inter) */
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-cname       { font-size: 14px !important; font-weight: 700 !important; line-height: 1.05 !important; }
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-tier-banner { font-size: 12px !important; font-weight: 700 !important; padding: 3px 6px !important; letter-spacing: 0.01em; }
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-rank-num    { font-size: 16px !important; }
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-rank-lbl    { font-size: 7px !important; }
+
+/* Tier distribution bar — warm construction-paper tiles on a manila strip */
+[data-theme="nostalgia-night"] .tf-tierbar {
+  background: linear-gradient(180deg, #10182b 0%, #0a1120 100%) !important;
+  border: 2px solid #6f83ab !important;
+  box-shadow: 0 8px 24px rgba(3,6,14,0.30), 0 0 24px rgba(130,165,255,0.25), inset 0 1px 0 rgba(170,198,255,0.14) !important;
+  backdrop-filter: none !important;
+}
+/* Retro Night tier cells are rendered by TierStatsBar.tsx (isNostalgia sticker branch) — inline styles own
+   per-tier fills/ink/cap; no CSS repaint here. */
+[data-theme="nostalgia-night"] .tf-tierbar > .flex { background: rgba(9,14,26,0.65) !important; border-top: 1px solid rgba(111,131,171,0.30) !important; color: #a9bad6 !important; }
+
+/* Recent-sales rail — manila photo strip */
+[data-theme="nostalgia-night"] .tf-salesrail {
+  background: linear-gradient(180deg, #10182b 0%, #0c1322 100%) !important;
+  border: 2px solid #6f83ab !important;
+  box-shadow: 0 6px 18px rgba(3,6,14,0.28), inset 0 1px 0 rgba(170,198,255,0.14) !important;
+}
+[data-theme="nostalgia-night"] .tf-salesrail .text-\[10px\] { background: rgba(201,162,39,0.12) !important; color: #ffd479 !important; }
+[data-theme="nostalgia-night"] .tf-salesrail-chip { background: #141d33 !important; border: 1.5px solid rgba(111,131,171,0.55) !important; box-shadow: 0 2px 5px rgba(3,6,14,0.20); }
+[data-theme="nostalgia-night"] .tf-salesrail-chip > div:first-child { background: #121b30 !important; }
+[data-theme="nostalgia-night"] .tf-salesrail-chip .absolute { background: #e9effa !important; color: #23345a !important; border: 1px solid rgba(111,131,171,0.6); font-size: 10px !important; }
+[data-theme="nostalgia-night"] .tf-salesrail-chip .truncate { color: #dfe8f5 !important; font-size: 12px !important; }
+[data-theme="nostalgia-night"] .tf-salesrail-chip .text-xs { color: #ffd479 !important; font-size: 13px !important; font-weight: 800 !important; }
+[data-theme="nostalgia-night"] .tf-salesrail-chip .text-\[9px\] { color: #a9bad6 !important; font-size: 11px !important; }
+
+/* Restore card hover life (nostalgia's filter:none was killing the base brighten) */
+[data-theme="nostalgia-night"] .tcg-outer-clickable { transition: transform .15s ease, filter .15s ease; }
+[data-theme="nostalgia-night"] .tcg-outer-clickable:hover { filter: brightness(1.10) saturate(1.06) !important; transform: translateY(-2px); }
+
+/* ═══════════ NOSTALGIA FINISH — navbar + card GLOW ═══════════ */
+/* Top navbar was using the dark-theme bar on nostalgia -> unreadable on the desk.
+   Warm manila bar with espresso links instead. */
+[data-theme="nostalgia-night"] .tf-navbar {
+  background: linear-gradient(180deg, #10182b 0%, #0c1322 100%) !important;
+  border-bottom: 2px solid #c9a227 !important;
+  box-shadow: 0 2px 14px rgba(3,6,14,0.28) !important;
+}
+[data-theme="nostalgia-night"] .tf-navbar nav a { color: #b7c6e2 !important; }
+[data-theme="nostalgia-night"] .tf-navbar nav a:hover { color: #c9a227 !important; }
+
+/* Home page: the landing paints its own bg over the AppShell desk — swap in the
+   desk scene for nostalgia and hide the dark-theme paper texture + gold dust. */
+[data-theme="nostalgia-night"] .tf-land-bg {
+  background-color: #070c18 !important;
+  background-image:
+    linear-gradient(180deg, rgba(11,17,32,0.32) 0%, rgba(7,12,24,0.20) 55%, rgba(4,8,17,0.24) 100%),
+    url(/nostalgia/desk-scene-night.png),
+    url(/nostalgia/desk.png) !important;
+  background-size: auto, cover, 620px 620px !important;
+  background-position: center top, center center, top left !important;
+  background-repeat: no-repeat, no-repeat, repeat !important;
+  background-attachment: fixed, fixed, fixed !important;
+}
+[data-theme="nostalgia-night"] .tf-land-paper { display: none !important; }
+[data-theme="nostalgia-night"] .tf-dust { display: none !important; }
+
+/* ═══════════ NOSTALGIA — home page cleanup (manila cards + readable text) ═══════════ */
+/* Feature plaques: warm index cards, not white slabs */
+[data-theme="nostalgia-night"] .tf-plaque {
+  background: linear-gradient(180deg, #161f36 0%, #0e1728 100%) !important;
+  border: 1.5px solid #6f83ab !important;
+  box-shadow: 0 3px 8px rgba(3,6,14,0.22), inset 0 1px 0 rgba(170,198,255,0.16) !important;
+}
+/* "Track your whole binder" band: manila folder */
+[data-theme="nostalgia-night"] .tf-band {
+  background: linear-gradient(180deg, #10182b 0%, #0a1120 100%) !important;
+  border: 2px solid #c9a227 !important;
+  box-shadow: 0 8px 24px rgba(3,6,14,0.30), 0 0 24px rgba(130,165,255,0.22), inset 0 1px 0 rgba(170,198,255,0.14) !important;
+}
+[data-theme="nostalgia-night"] .tf-band-edge { background: #c9a227 !important; }
+[data-theme="nostalgia-night"] .tf-band h2 { color: #dfe8f5 !important; }
+[data-theme="nostalgia-night"] .tf-band-btn {
+  background: linear-gradient(180deg, #f0c04a 0%, #d29a1e 100%) !important;
+  color: #3a2606 !important; border: 1px solid rgba(168,106,18,0.6) !important;
+  box-shadow: 0 2px 6px rgba(3,6,14,0.28) !important;
+}
+/* Eyebrow pill */
+[data-theme="nostalgia-night"] .tf-eyebrow {
+  background: linear-gradient(180deg, rgba(26,37,64,0.92) 0%, rgba(16,24,43,0.92) 100%) !important;
+  color: #cddcff !important;
+  border: 1px solid rgba(130,165,255,0.5) !important;
+  box-shadow: 0 1px 3px rgba(3,6,14,0.4), 0 0 14px rgba(130,165,255,0.25), inset 0 1px 0 rgba(170,198,255,0.15) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5) !important;
+}
+/* Landing footer text */
+[data-theme="nostalgia-night"] .tf-foot a,
+[data-theme="nostalgia-night"] .tf-foot p { color: #dfe8f5 !important; font-weight: 700 !important; }
+/* Landing nav over the night desk photo — dark glass "sticker" chip per item (logo link excluded). */
+[data-theme="nostalgia-night"] .tf-land-bg nav > div a,
+[data-theme="nostalgia-night"] .tf-land-bg nav > div button {
+  color: #eaf1fb !important; font-weight: 700 !important;
+  background: linear-gradient(180deg, rgba(22,31,54,0.85) 0%, rgba(14,23,40,0.85) 100%) !important;
+  border: 1px solid rgba(111,131,171,0.55) !important;
+  border-radius: 9999px !important;
+  padding: 6px 14px !important;
+  box-shadow: 0 2px 7px rgba(3,6,14,0.4), inset 0 1px 0 rgba(170,198,255,0.15) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5) !important;
+}
+[data-theme="nostalgia-night"] .tf-land-bg nav > div a:hover,
+[data-theme="nostalgia-night"] .tf-land-bg nav > div button:hover { color: #c9a227 !important; border-color: rgba(201,162,39,0.6) !important; }
+
+/* /binder hero — Righteous display treatment (gold ink) so "Your Binder" reads cohesive in Retro Night. */
+[data-theme="nostalgia-night"] .tf-binder-title {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: clamp(2rem, 8vw, 2.6rem) !important; line-height: 1.02 !important; letter-spacing: 0.01em !important;
+  color: #ffd968 !important;
+  text-shadow: 0 2px 0 rgba(9,15,30,0.85), 0 0 16px rgba(255,210,90,0.38), 0 3px 7px rgba(3,6,14,0.40);
+}
+[data-theme="nostalgia-night"] .tf-binder-title .tf-foil {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: inherit !important; letter-spacing: 0.01em !important;
+  color: #bcd2ff !important; -webkit-text-fill-color: #bcd2ff !important; background: none !important;
+  text-shadow: 0 0 12px rgba(150,180,255,0.55), 0 2px 5px rgba(3,7,16,0.60) !important;
+}
+
+/* /browse hero — Righteous gold treatment matching the collection + binder headers (Retro Night). */
+[data-theme="nostalgia-night"] .tf-browse-title {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: clamp(2rem, 8vw, 2.6rem) !important; line-height: 1.02 !important; letter-spacing: 0.01em !important;
+  color: #e8c878 !important;
+  text-shadow: 0 2px 0 rgba(9,15,30,0.75), 0 3px 6px rgba(3,6,14,0.3);
+}
+[data-theme="nostalgia-night"] .tf-browse-title .tf-foil {
+  font-family: var(--font-righteous), system-ui, sans-serif !important;
+  font-size: inherit !important; letter-spacing: 0.01em !important;
+  color: #bcd2ff !important; -webkit-text-fill-color: #bcd2ff !important; background: none !important;
+  text-shadow: 0 0 12px rgba(150,180,255,0.55), 0 2px 5px rgba(3,7,16,0.60) !important;
+}
+[data-theme="nostalgia-night"] .tf-browse-sub {
+  color: #b7c6e2 !important; font-weight: 600 !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.55) !important;
+}
+
+/* The SOLD showcase is a dark-theme island rendered INSIDE the app shell, so
+   [data-theme="nostalgia-night"] .tf-foil was bleeding onto its price (turning it red).
+   ID specificity (1,1,0) beats the theme rule (0,2,0) — keep the price gold in every mode. */
+#tf-sold-card .tf-foil {
+  background: linear-gradient(105deg, #8a6a1c 0%, #ffe577 24%, #f0c000 44%, #fff3c4 58%, #c9a227 78%, #ffe577 100%) !important;
+  background-size: 220% 100% !important;
+  -webkit-background-clip: text !important; background-clip: text !important;
+  -webkit-text-fill-color: transparent !important; color: transparent !important;
+  font-family: system-ui, "Segoe UI", sans-serif !important;
+}
+
+/* ═══════════ NOSTALGIA CLEANUP (Fable) ═══════════ */
+.tcg-art-blurfill { display: none; }
+[data-theme="nostalgia-night"] .tcg-art-blurfill {
+  display: block;
+  transform: scale(1.15);
+  filter: blur(16px) saturate(1.15) brightness(0.72);
+  opacity: 0.65;
+}
+[data-theme="nostalgia-night"] .tcg-art-bg-rare      { --holo-a: rgba(255,110,40,0.20);  --holo-b: rgba(255,60,0,0.12);   }
+[data-theme="nostalgia-night"] .tcg-art-bg-epic      { --holo-a: rgba(140,190,255,0.20); --holo-b: rgba(90,140,255,0.12); }
+[data-theme="nostalgia-night"] .tcg-art-bg-legendary { --holo-a: rgba(255,200,60,0.22);  --holo-b: rgba(255,150,0,0.12);  }
+[data-theme="nostalgia-night"] .tcg-art-bg-mythic    { --holo-a: rgba(220,120,255,0.22); --holo-b: rgba(150,60,255,0.14); }
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-rare::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-epic::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-legendary::after,
+[data-theme="nostalgia-night"] .tcg-binder-grid .tcg-art-bg-mythic::after { opacity: 0.20 !important; }
+[data-theme="nostalgia-night"] .tcg-rank-lbl { font-size: 8px !important; font-weight: 800; letter-spacing: 0.14em; line-height: 1; margin-bottom: 2px; }
+[data-theme="nostalgia-night"] .tcg-rank-num { line-height: 1.15 !important; }
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-rank-tag { padding: 3px 8px 4px !important; }
+.tcg-trait-grid-scroll { max-height: 300px; }
+.tcg-trait-grid-scroll .tcg-trait-row  { padding: 5px 10px; gap: 8px; }
+.tcg-trait-grid-scroll .tcg-trait-type { font-size: 13px; letter-spacing: .03em; font-weight: 700; }
+.tcg-trait-grid-scroll .tcg-trait-val  { font-size: 16px; font-weight: 800; }
+.tcg-trait-grid-scroll .tcg-trait-pct  { font-size: 16px; font-weight: 800; }
+.tcg-trait-grid-scroll .tcg-trait-dot  { width: 9px; height: 9px; }
+[data-theme="nostalgia-night"] .tf-sitefoot {
+  background: linear-gradient(180deg, #10182b 0%, #0a1120 100%) !important;
+  border-top: 2px solid #c9a227 !important;
+  box-shadow: 0 -2px 14px rgba(3,6,14,0.18);
+}
+[data-theme="nostalgia-night"] .tf-sitefoot .text-title  { color: #c9a227 !important; }
+[data-theme="nostalgia-night"] .tf-sitefoot .text-subtle { color: #a9bad6 !important; }
+[data-theme="nostalgia-night"] .tf-sitefoot a.text-subtle:hover { color: #c9a227 !important; opacity: 1; }
+[data-theme="nostalgia-night"] .tf-sheet { --title: #e3ecfa; --subtle: #a9bad6; --gold: #ffd479; --card-bg: #121b30; --card-border: #c9a227; }
+
+[data-theme="nostalgia-night"] #tf-sold-card { --gold: #ffe06a; }
+/* ── Nostalgia card top + rim cleanup ── */
+/* Per-tier foil rim (was a uniform pink rainbow on every tier) */
+[data-theme="nostalgia-night"] .tcg-body-mythic::after    { --rim-a: #ff4fb0; --rim-b: #b06bff; }
+[data-theme="nostalgia-night"] .tcg-body-legendary::after { --rim-a: #ffd23f; --rim-b: #ffa800; }
+[data-theme="nostalgia-night"] .tcg-body-epic::after      { --rim-a: #35d6ff; --rim-b: #6f9cff; }
+[data-theme="nostalgia-night"] .tcg-body-rare::after      { --rim-a: #ff8a1f; --rim-b: #e8340e; }
+/* Rank number: crisp sans (not looping Caveat) + smaller so it stops dominating the tag */
+[data-theme="nostalgia-night"] .tcg-rank-num { font-family: system-ui, "Segoe UI", sans-serif !important; letter-spacing: 0 !important; }
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-rank-num { font-size: 12px !important; }
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-rank-lbl { font-size: 6.5px !important; }
+/* ── Nostalgia card name + trait legibility: clean readable font (not looping Caveat), bigger ── */
+[data-theme="nostalgia-night"] .tcg-cname {
+  font-family: system-ui, "Segoe UI", sans-serif !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
+}
+[data-theme="nostalgia-night"] .tcg-binder-page .tcg-cname { font-size: 15px !important; line-height: 1.1 !important; }
+[data-theme="nostalgia-night"] .tcg-trait-type,
+[data-theme="nostalgia-night"] .tcg-trait-val,
+[data-theme="nostalgia-night"] .tcg-trait-more {
+  font-family: var(--font-shantell), system-ui, sans-serif !important;
+}
+/* Remove the per-tier foil rim ring — it drew a second rounded outline inside the
+   neon border ("double card" look). The neon .tcg-outer border already gives each
+   card its tier-colored glowing edge. */
+[data-theme="nostalgia-night"] .tcg-body-rare::after,
+[data-theme="nostalgia-night"] .tcg-body-epic::after,
+[data-theme="nostalgia-night"] .tcg-body-legendary::after,
+[data-theme="nostalgia-night"] .tcg-body-mythic::after { display: none !important; }
+/* Detail-modal market panel: manila card */
+[data-theme="nostalgia-night"] .tf-modal-panel {
+  background: linear-gradient(180deg, #141d33 0%, #0c1322 100%) !important;
+  border: 1.5px solid #6f83ab !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(170,198,255,0.16) !important;
+}
+/* Airdrop / rewards dashboard: dark-themed component — give it a solid warm-walnut
+   island in nostalgia so its (translucent-on-dark) panels + pills read clearly. */
+[data-theme="nostalgia-night"] .tf-rewards {
+  background: linear-gradient(180deg, rgba(9,15,28,0.98) 0%, rgba(5,9,19,0.99) 100%) !important;
+  border: 2px solid #6f83ab !important;
+  box-shadow: 0 10px 30px rgba(3,6,14,0.38) !important;
+  --title: #e3ecfa; --subtle: #a9bad6; --gold: #ffd479;
+}
+/* Make the inner translucent chips/panels read as solid pills on the walnut */
+[data-theme="nostalgia-night"] .tf-rewards > div:first-child { background: rgba(255,212,121,0.10) !important; }
+[data-theme="nostalgia-night"] .tf-rewards [class*="bg-white/"],
+[data-theme="nostalgia-night"] .tf-rewards [class*="bg-black/"] { background: rgba(170,198,255,0.10) !important; }
+
+/* Mobile: bias the desk scene to the left so the toys show (cover crops the center away) */
+@media (max-width: 640px) {
+  [data-theme="nostalgia-night"],
+  [data-theme="nostalgia-night"] .bg-vault-bg,
+  [data-theme="nostalgia-night"] .tf-land-bg {
+    background-position: center, left center, top left !important;
+  }
 }

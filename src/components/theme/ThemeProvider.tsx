@@ -3,50 +3,38 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { ThemeMode } from "@/types";
 
-interface ThemeContextValue {
-  mode: ThemeMode;
-  toggle: () => void;
-}
-
+// The app now has just two live themes: Day (warm) and Night (moonlight). Internally they map to the
+// existing "nostalgia" / "nostalgia-night" theme tokens; the legacy "dark"/"light" values are migrated on
+// load so returning users land on the closest new theme.
+interface ThemeContextValue { mode: ThemeMode; toggle: () => void; setTheme: (m: ThemeMode) => void; }
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-
 const STORAGE_KEY = "chia-collector-theme-mode";
+const isNight = (m: ThemeMode) => m === "nostalgia-night" || m === "dark";
+// Any stored/legacy value -> one of the two live themes. Night: old "dark" + "nostalgia-night". Day: rest.
+const normalize = (m: string | null): ThemeMode => (m === "nostalgia-night" || m === "dark") ? "nostalgia-night" : "nostalgia";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>("dark");
+  const [mode, setMode] = useState<ThemeMode>("nostalgia"); // Day by default
 
-  useEffect(() => {
-    // Hidden activation for the 90s "nostalgia" skin: ?nostalgia=1 (or ?theme=nostalgia) flips it on and
-    // remembers it; there is intentionally NO visible toggle yet (prototype). Clear with ?nostalgia=0.
-    const params = new URLSearchParams(window.location.search);
-    const nostParam = params.get("nostalgia");
-    const themeParam = params.get("theme");
-    if (nostParam === "1" || themeParam === "nostalgia") {
-      window.localStorage.setItem(STORAGE_KEY, "nostalgia");
-      document.documentElement.style.colorScheme = "light";
-      setMode("nostalgia");
-      return;
-    }
-    if (nostParam === "0") window.localStorage.setItem(STORAGE_KEY, "dark");
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === "dark" || stored === "light" || stored === "nostalgia") {
-      setMode(stored);
-      if (stored === "nostalgia") document.documentElement.style.colorScheme = "light";
-    }
-  }, []);
-
-  const toggle = () => {
-    setMode((prev) => {
-      const next = prev === "dark" ? "light" : "dark";
-      window.localStorage.setItem(STORAGE_KEY, next);
-      // Keep <html> color-scheme in sync so native controls (select, input, etc.)
-      // switch immediately without waiting for a re-render cycle.
-      document.documentElement.style.colorScheme = next === "dark" ? "dark" : "light";
-      return next;
-    });
+  const apply = (m: ThemeMode) => {
+    window.localStorage.setItem(STORAGE_KEY, m);
+    document.documentElement.style.colorScheme = isNight(m) ? "dark" : "light";
+    setMode(m);
   };
 
-  return <ThemeContext.Provider value={{ mode, toggle }}>{children}</ThemeContext.Provider>;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const themeParam = params.get("theme");
+    if (params.get("nostalgia-night") === "1" || themeParam === "nostalgia-night" || themeParam === "night") { apply("nostalgia-night"); return; }
+    if (params.get("nostalgia") === "1" || themeParam === "nostalgia" || themeParam === "day") { apply("nostalgia"); return; }
+    apply(normalize(window.localStorage.getItem(STORAGE_KEY)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setTheme = (m: ThemeMode) => apply(m);
+  const toggle = () => apply(isNight(mode) ? "nostalgia" : "nostalgia-night");
+
+  return <ThemeContext.Provider value={{ mode, toggle, setTheme }}>{children}</ThemeContext.Provider>;
 }
 
 export function useThemeMode(): ThemeContextValue {

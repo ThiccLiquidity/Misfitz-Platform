@@ -24,7 +24,7 @@ export function NavBar() {
 
   return (
     <header
-      className="flex items-center justify-between gap-2 px-3 py-2.5 md:px-8 md:py-3"
+      className="tf-navbar flex items-center justify-between gap-2 px-3 py-2.5 md:px-8 md:py-3"
       style={{
         background: isLight ? "#ffffff" : "rgba(10, 6, 2, 0.85)",
         borderBottom: isLight ? "1px solid rgba(41, 128, 200, 0.18)" : "1px solid rgba(184, 146, 63, 0.35)",

@@ -118,7 +118,7 @@ export interface CollectionData {
   dexieCollectionId: string | null;
 }
 
-export type ThemeMode = "dark" | "light" | "nostalgia"; // "nostalgia" = hidden 90s-childhood skin (prototype)
+export type ThemeMode = "dark" | "light" | "nostalgia" | "nostalgia-night"; // nostalgia = 90s desk (day); nostalgia-night = same desk, moonlit
 
 // Lightweight collection card for the discovery / browse page (MintGarden trending + search).
 export interface CollectionSummary {

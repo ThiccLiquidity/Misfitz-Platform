@@ -32,7 +32,7 @@ export function MobileFilterSheet({
     <div className="fixed inset-0 z-50 flex flex-col justify-end md:hidden" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" style={{ backdropFilter: "blur(4px)" }} />
       <div
-        className="relative overflow-y-auto rounded-t-2xl"
+        className="tf-sheet relative overflow-y-auto rounded-t-2xl"
         style={{
           maxHeight: "85vh",
           paddingBottom: "env(safe-area-inset-bottom)",

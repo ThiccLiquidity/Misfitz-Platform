@@ -12,7 +12,7 @@ export function Footer() {
   const border = isLight ? "1px solid rgba(41,128,200,0.18)" : "1px solid rgba(184,146,63,0.22)";
   return (
     <footer
-      className="mt-10 px-4 py-8 md:px-8"
+      className="tf-sitefoot mt-10 px-4 py-8 md:px-8"
       style={{ borderTop: border, background: isLight ? "rgba(255,255,255,0.6)" : "rgba(10,6,2,0.6)" }}
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-4">

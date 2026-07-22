@@ -62,7 +62,7 @@ export function NftDetailModal({
 }: NftDetailModalProps) {
   const { mode } = useThemeMode();
   const router = useRouter();
-  const isLight = mode === "light";
+  const isLight = mode !== "dark" && mode !== "nostalgia-night"; // light + nostalgia(day) = light; dark + night = dark
   const [lightbox, setLightbox] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   // Derive the XCH->USD rate the coach needs (the modal gets no rate prop) from the fair-value pair.
@@ -191,7 +191,7 @@ export function NftDetailModal({
 
         {/* ── Market Panel ─────────────────────────────────────────────── */}
         <div
-          className="mt-3 rounded-xl overflow-hidden"
+          className="tf-modal-panel mt-3 rounded-xl overflow-hidden"
           style={{
             background: panelBg,
             border: panelBorder,

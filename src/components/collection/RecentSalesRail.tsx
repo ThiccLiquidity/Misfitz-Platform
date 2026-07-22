@@ -22,7 +22,7 @@ export function RecentSalesRail({
   if (!sales || sales.length === 0) return null;
 
   return (
-    <div className="mb-3 overflow-hidden rounded-xl border"
+    <div className="tf-salesrail mb-3 overflow-hidden rounded-xl border"
       style={{ borderColor: "color-mix(in srgb, var(--gold) 22%, transparent)", background: "color-mix(in srgb, var(--gold) 5%, transparent)" }}>
       <button
         type="button"
@@ -45,7 +45,7 @@ export function RecentSalesRail({
               type="button"
               onClick={() => onOpen(s)}
               title={`${s.name} — sold for ${formatXchShort(s.priceXch)} XCH ${timeAgo(s.date)}`}
-              className="group flex w-[112px] flex-shrink-0 flex-col overflow-hidden rounded-lg text-left transition-transform hover:-translate-y-0.5"
+              className="tf-salesrail-chip group flex w-[112px] flex-shrink-0 flex-col overflow-hidden rounded-lg text-left transition-transform hover:-translate-y-0.5"
               style={{ background: "color-mix(in srgb, var(--card-border) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--card-border) 30%, transparent)" }}
             >
               <div className="relative aspect-square w-full overflow-hidden" style={{ background: "#05080f" }}>
@@ -62,7 +62,7 @@ export function RecentSalesRail({
               <div className="px-2 py-1.5">
                 <div className="truncate text-[11px] font-bold" style={{ color: "var(--title)" }}>{s.name}</div>
                 <div className="mt-0.5 flex items-baseline justify-between gap-1">
-                  <span className="text-xs font-black tabular-nums" style={{ color: light ? "#047857" : "var(--gold)" }}>{formatXchShort(s.priceXch)}</span>
+                  <span className="text-xs font-black tabular-nums" style={{ color: light ? "#a8760f" : "var(--gold)" }}>{formatXchShort(s.priceXch)}</span>
                   <span className="text-[9px] font-semibold" style={{ color: "var(--subtle)" }}>{timeAgo(s.date)}</span>
                 </div>
               </div>

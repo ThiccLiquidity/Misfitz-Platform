@@ -33,7 +33,7 @@ export default async function BinderPage({ searchParams }: { searchParams: { add
       {!showBinder && (
         <div className="mb-4 px-2">
           <span className="tf-eyebrow inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]">Portfolio · no login</span>
-          <h1 className="text-title mt-2 text-2xl font-black tracking-tight sm:text-3xl">Your <span className="tf-foil">Binder</span></h1>
+          <h1 className="tf-binder-title text-title mt-2 text-3xl font-black tracking-tight sm:text-4xl">Your <span className="tf-foil">Binder</span></h1>
           <div className="tf-hairline mt-4" aria-hidden />
         </div>
       )}

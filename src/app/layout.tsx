@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Righteous, Inter } from "next/font/google";
+import { Righteous, Inter, Caveat, Shantell_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { AppShell } from "@/components/layout/AppShell";
@@ -14,6 +14,9 @@ const righteous = Righteous({
 // Clean UI/body font. Righteous (a heavy display face) stays reserved for the brand wordmark and a
 // few headings (var(--font-righteous)); using it for body text made everything look thick/fuzzy.
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+// Nostalgia-mode handwriting pair — loaded but only applied under [data-theme="nostalgia"] in globals.css.
+const caveat = Caveat({ subsets: ["latin"], variable: "--font-caveat", display: "swap" });
+const shantell = Shantell_Sans({ subsets: ["latin"], variable: "--font-shantell", display: "swap" });
 
 // Set NEXT_PUBLIC_SITE_URL to the production origin (e.g. https://traitfolio.app) so Open Graph image
 // URLs resolve absolutely. Falls back to localhost for dev. (See LAUNCH-READINESS.md.)
@@ -62,15 +65,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${righteous.variable} ${inter.variable}`}>
+    <html lang="en" className={`${righteous.variable} ${inter.variable} ${caveat.variable} ${shantell.variable}`}>
       {/* Blocking script — runs before first paint, prevents native form-control flash.
           Reads saved theme and sets color-scheme on <html> so <select> elements
           render in the correct scheme from frame 0, no JS hydration required. */}
       <head>
         <script dangerouslySetInnerHTML={{ __html: `
           try {
-            var t = localStorage.getItem('chia-collector-theme-mode') || 'dark';
-            document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';
+            var t = localStorage.getItem('chia-collector-theme-mode') || 'nostalgia';
+            if (t === 'dark') t = 'nostalgia-night';
+            if (t === 'light') t = 'nostalgia';
+            document.documentElement.style.colorScheme = (t === 'nostalgia-night') ? 'dark' : 'light';
           } catch(e) {}
         `}} />
         <script defer src="/_vercel/insights/script.js" />
