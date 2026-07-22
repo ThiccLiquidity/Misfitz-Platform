@@ -75,7 +75,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             var t = localStorage.getItem('chia-collector-theme-mode') || 'nostalgia';
             if (t === 'dark') t = 'nostalgia-night';
             if (t === 'light') t = 'nostalgia';
-            document.documentElement.style.colorScheme = (t === 'nostalgia-night') ? 'dark' : 'light';
+            var night = (t === 'nostalgia-night');
+            document.documentElement.style.colorScheme = night ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', t);           // theme CSS active from frame 0 (no swap flash)
+            document.documentElement.style.backgroundColor = night ? '#070c18' : '#b98c4f'; // correct base color paints immediately
           } catch(e) {}
         `}} />
         <script defer src="/_vercel/insights/script.js" />

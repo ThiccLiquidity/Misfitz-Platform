@@ -2645,8 +2645,8 @@ body {
 [data-theme="nostalgia"] .tf-binder-title .tf-foil {
   font-family: var(--font-righteous), system-ui, sans-serif !important;
   font-size: inherit !important; letter-spacing: 0.01em !important;
-  color: #16a34a !important; -webkit-text-fill-color: #16a34a !important; background: none !important;
-  text-shadow: 0 1px 0 rgba(255,248,232,0.95), 0 0 4px rgba(255,248,232,0.8), 0 2px 5px rgba(18,45,18,0.45) !important;
+  color: inherit !important; -webkit-text-fill-color: inherit !important; background: none !important;
+  text-shadow: inherit !important;
 }
 
 /* /browse hero — same Righteous brick treatment as the collection + binder headers so "Browse"
@@ -2660,8 +2660,8 @@ body {
 [data-theme="nostalgia"] .tf-browse-title .tf-foil {
   font-family: var(--font-righteous), system-ui, sans-serif !important;
   font-size: inherit !important; letter-spacing: 0.01em !important;
-  color: #16a34a !important; -webkit-text-fill-color: #16a34a !important; background: none !important;
-  text-shadow: 0 1px 0 rgba(255,248,232,0.95), 0 0 4px rgba(255,248,232,0.8), 0 2px 5px rgba(18,45,18,0.45) !important;
+  color: inherit !important; -webkit-text-fill-color: inherit !important; background: none !important;
+  text-shadow: inherit !important;
 }
 /* Subtitle was brown-on-brown desk — espresso ink with a cream halo so it reads over the manila. */
 [data-theme="nostalgia"] .tf-browse-sub {
