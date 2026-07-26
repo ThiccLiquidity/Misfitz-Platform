@@ -257,6 +257,20 @@ body {
   color: #fff;
   text-shadow: 0 1px 6px rgba(0,0,0,.98);
   line-height: 1.4;
+
+  /* OVERFLOW CONTAINMENT. The header is a flex row: name on the left, rank tag on the right with
+     flex-shrink: 0. A flex item will NOT shrink below its own content width unless min-width is 0, so
+     without this a long collection name ("NECKSPWNAELGO", "Ultimate Farmers Club") pushed the rank tag
+     past the card edge, where the card's overflow clipped it — the tag looked cut in half and the title
+     ran into it. min-width: 0 lets the name shrink; the clamp keeps every card header the same height
+     instead of growing to three lines; overflow-wrap breaks names that contain no spaces at all. */
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .tcg-rank-tag {
@@ -796,6 +810,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 6px; /* the name must never sit flush against the rank tag */
   padding: 7px 9px 6px;
   border-bottom: 1px solid;
   flex-shrink: 0;

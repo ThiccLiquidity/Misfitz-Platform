@@ -123,7 +123,7 @@ function NftRarityCardImpl({
 
         {/* ── CARD HEADER — name + rank on card body material, NOT inside art zone ── */}
         <div className={`tcg-card-header tcg-ch-${id}`}>
-          <span className="tcg-cname">
+          <span className="tcg-cname" title={`${colName} | ${tokenSuffix(nft.name)}`}>
             {colName} | {tokenSuffix(nft.name)}
           </span>
           {tier.rank !== null && (
