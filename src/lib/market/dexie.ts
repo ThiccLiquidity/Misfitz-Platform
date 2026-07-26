@@ -1,5 +1,5 @@
 // Dexie.space v1 API client — live market data for any Chia NFT collection.
-import { cacheGet, cachePut } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, cacheGetLarge, cachePutLarge } from "@/lib/db/nftCache";
 import { adaptiveTtl, recordSalesActivity } from "@/lib/market/activity";
 //
 // All functions:
@@ -469,7 +469,7 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
     const l1 = _cache.get(`colsales_${colId}`);
     if (l1 && Date.now() < l1.expiresAt) return l1.value as CompletedSale[];
     try {
-      const dbHit = await cacheGet(`sales:${colId}`, 60 * 60_000);
+      const dbHit = await cacheGetLarge(`sales:${colId}`, 60 * 60_000);
       if (dbHit) { const r = JSON.parse(dbHit) as CompletedSale[]; return Array.isArray(r) ? r : []; }
     } catch { /* no blob — return empty rather than scan */ }
     return [];
@@ -522,12 +522,14 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
       // poison valuations platform-wide (build() would cache comps-none and drop to baseline). If we still
       // have a recent non-empty blob, keep serving it instead of persisting the empty result.
       try {
-        const prev = await cacheGet(`sales:${colId}`, 60 * 60_000);
+        const prev = await cacheGetLarge(`sales:${colId}`, 60 * 60_000);
         if (prev) { const r = JSON.parse(prev) as CompletedSale[]; if (r.length) { recordSalesActivity(colId, r); return r; } }
       } catch { /* no prior blob — fall through and persist the (genuinely empty) result */ }
     }
     recordSalesActivity(colId, result); // free busyness signal — tunes market-data freshness, no extra calls
-    cachePut(`sales:${colId}`, JSON.stringify(result), 60 * 60); // readable up to salesTtl; 1h ex
+    // LARGE seam: measured 37KB avg / 344KB max uncompressed, and highly repetitive (hex ids + ISO
+    // dates) so it gzips ~10x. As a plain tf:kv: key it was stuck on Redis forever.
+    cachePutLarge(`sales:${colId}`, JSON.stringify(result), 60 * 60); // readable up to salesTtl; 1h ex
     return result;
   };
 
@@ -541,7 +543,7 @@ export async function fetchCollectionCompletedSales(colId: string, maxPages = 30
   }
 
   return withCache(`colsales_${colId}`, salesTtl, async () => {
-    const dbHit = await cacheGet(`sales:${colId}`, salesTtl);
+    const dbHit = await cacheGetLarge(`sales:${colId}`, salesTtl);
     if (dbHit) { try { const r = JSON.parse(dbHit) as CompletedSale[]; recordSalesActivity(colId, r); return r; } catch { /* refetch */ } }
     return doFetch();
   });

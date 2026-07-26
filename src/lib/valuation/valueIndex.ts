@@ -67,20 +67,44 @@ let _warmsetNotedAt = 0;
 
 // Best-effort: fold the collections this wallet holds into the warmset (read-merge-write, throttled per
 // instance). Call in the background (keepAlive).
+// FREQUENCY-WEIGHTED, not recency-first. The old version did `[...new Set([...ids, ...cur])].slice(0, 300)`,
+// putting the newest ids FIRST — so a single unauthenticated visit from a wallet holding 300 junk collections
+// evicted every real collection from the warm set for 30 days, and the nightly cron then spent its whole
+// budget warming the attacker's collections. Now each collection carries a count of how many distinct wallet
+// visits have held it, and we keep the top N BY COUNT: an established collection can't be displaced by a
+// one-off wallet, and a genuinely popular new collection still climbs in naturally over repeat visits.
+type WarmsetDoc = { v: 2; counts: Record<string, number> };
+
+function parseWarmset(raw: string | null): Record<string, number> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as string[] | WarmsetDoc;
+    // Legacy format was a bare string[]; seed each at 1 so nothing is lost on the first write.
+    if (Array.isArray(parsed)) return Object.fromEntries(parsed.map((id) => [id, 1]));
+    return parsed?.counts && typeof parsed.counts === "object" ? parsed.counts : {};
+  } catch { return {}; }
+}
+
 export async function noteWarmset(colIds: string[]): Promise<void> {
-  const ids = colIds.filter((c) => c.startsWith("col1"));
+  const ids = [...new Set(colIds.filter((c) => c.startsWith("col1")))]; // one vote per collection per wallet
   if (ids.length === 0) return;
   if (Date.now() - _warmsetNotedAt < 5 * 60_000) return; // throttle
   _warmsetNotedAt = Date.now();
   try {
-    const raw = await cacheGet(WARMSET_KEY, WARMSET_TTL_MS);
-    const cur: string[] = raw ? (JSON.parse(raw) as string[]) : [];
-    if (ids.every((c) => cur.includes(c))) return; // nothing new
-    const merged = [...new Set([...ids, ...cur])].slice(0, WARMSET_MAX); // most-recently-held first
-    cachePut(WARMSET_KEY, JSON.stringify(merged), WARMSET_EX_S);
+    const counts = parseWarmset(await cacheGet(WARMSET_KEY, WARMSET_TTL_MS));
+    for (const id of ids) counts[id] = (counts[id] ?? 0) + 1;
+    const top = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, WARMSET_MAX);
+    cachePut(WARMSET_KEY, JSON.stringify({ v: 2, counts: Object.fromEntries(top) } satisfies WarmsetDoc), WARMSET_EX_S);
   } catch { /* best effort */ }
 }
 
+// Returned most-held-first, so even a partly-polluted warmset warms the collections real wallets actually
+// hold before it ever reaches a one-off entry.
 export async function readWarmset(): Promise<string[]> {
-  try { const raw = await cacheGet(WARMSET_KEY, WARMSET_TTL_MS); return raw ? (JSON.parse(raw) as string[]) : []; } catch { return []; }
+  try {
+    const counts = parseWarmset(await cacheGet(WARMSET_KEY, WARMSET_TTL_MS));
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  } catch { return []; }
 }

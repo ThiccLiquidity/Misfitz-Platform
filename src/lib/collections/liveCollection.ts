@@ -101,6 +101,22 @@ export async function getCollectionView(id: string, size = 60): Promise<Collecti
 // for 10 min. The binder renders only the visible slice, so big collections stay light in the DOM.
 interface BaseCollection { cards: NftData[]; floorXch: number | null; xchUsdRate: number; capped: boolean; warming?: boolean }
 const _fullCache = new Map<string, { value: BaseCollection; expiresAt: number }>();
+// BOUNDED. Each entry is a WHOLE collection of stamped cards — ~1.4KB/card, so a 10k collection is ~13MB.
+// Unbounded, a warm lambda that served a few dozen collections could hold hundreds of MB and OOM mid-request
+// (which surfaces as a bare 500 with nothing useful in the log). Expired entries are swept first, then the
+// nearest-to-expiry is evicted.
+const FULL_CACHE_CAP = 3;
+function fullCachePut(id: string, value: BaseCollection, ttlMs: number): void {
+  const now = Date.now();
+  for (const [k, v] of _fullCache) if (v.expiresAt <= now) _fullCache.delete(k);
+  if (_fullCache.size >= FULL_CACHE_CAP && !_fullCache.has(id)) {
+    let oldestKey: string | null = null;
+    let oldestExp = Infinity;
+    for (const [k, v] of _fullCache) if (v.expiresAt < oldestExp) { oldestExp = v.expiresAt; oldestKey = k; }
+    if (oldestKey) _fullCache.delete(oldestKey);
+  }
+  _fullCache.set(id, { value, expiresAt: now + ttlMs });
+}
 const FULL_PAGE_SIZE = 100;
 const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their rarest ~12k
 // The whole-collection roster scan is the ONE expensive step (30-70s of sequential MintGarden paging).
@@ -338,7 +354,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
 
   cards.sort((a, b) => (a.rarityRank ?? Infinity) - (b.rarityRank ?? Infinity)); // rarest first, unranked last
   const base: BaseCollection = { cards, floorXch, xchUsdRate, capped, warming: scanWarming };
-  if (!scanWarming) _fullCache.set(id, { value: base, expiresAt: Date.now() + 10 * 60_000 }); // never cache a partial scan
+  if (!scanWarming) fullCachePut(id, base, 10 * 60_000); // never cache a partial scan
   return base;
 }
 

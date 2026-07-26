@@ -16,7 +16,7 @@ import { resolveTrustedFloor } from "@/lib/market/floorTrust";
 import { rarityFactorForPercentile } from "@/lib/valuation/estimate";
 import { getNftDetailsBatch, getCollection } from "@/lib/data-sources/mintgarden/client";
 import { buildCompsModel, type CompsModel, type Sale, type Trait } from "@/lib/valuation/comps";
-import { cacheGet, cachePut, keepAlive, tryLock, releaseLock } from "@/lib/db/nftCache";
+import { cacheGet, cachePut, cacheGetLarge, cachePutLarge, keepAlive, tryLock, releaseLock } from "@/lib/db/nftCache";
 import { getCollectionFrequency } from "@/lib/rarity/collectionFrequency";
 import { mapTraits } from "@/lib/data-sources/mintgarden/map";
 import { isSeeded, getSeed, numberFromName } from "@/lib/data-sources/seed/registry";
@@ -184,7 +184,10 @@ async function build(colId: string, opts: { fresh?: boolean } = {}): Promise<Com
     supply, floor, traitFreq, builtAt: now,
     sales: usable.map((s) => ({ rank: s.rank, price: s.price, soldAt: s.soldAt, traits: s.traits, seller: s.seller, buyer: s.buyer })),
   };
-  try { cachePut(`comps:${colId}`, JSON.stringify(persisted), 12 * 60 * 60); } catch { /* cache optional */ } // readable 6h; 12h ex
+  // LARGE seam (gzip + R2), not plain cachePut. Measured 54KB avg / 260KB max UNCOMPRESSED, read once
+  // per collection per cold lambda - and as a plain tf:kv: key it could never leave Redis. Roughly an
+  // 85% cut and it moves off the metered Upstash bandwidth entirely. Old plain keys just miss once.
+  try { cachePutLarge(`comps:${colId}`, JSON.stringify(persisted), 12 * 60 * 60); } catch { /* cache optional */ } // readable 6h; 12h ex
 
   return buildCompsModel(usable, supply, { floor, rarityFactor: rarityFactorForPercentile, traitFreq, ...adaptiveHalfLifeOptions() });
 }
@@ -198,7 +201,7 @@ function kickBuild(colId: string, stale: CompsModel | null, wait?: boolean, fres
     const got = await tryLock(`compsbuild:${colId}`, 120).catch(() => false);
     if (!got) {
       // Another instance is building — pick up its freshly-persisted blob if it's already there.
-      try { const raw = await cacheGet(`comps:${colId}`, DB_TTL); if (raw) { const m = modelFromPersisted(JSON.parse(raw) as PersistedComps); if (m) return m; } } catch { /* fall back to stale */ }
+      try { const raw = await cacheGetLarge(`comps:${colId}`, DB_TTL); if (raw) { const m = modelFromPersisted(JSON.parse(raw) as PersistedComps); if (m) return m; } } catch { /* fall back to stale */ }
       return stale;
     }
     try { return await build(colId, { fresh }); } finally { await releaseLock(`compsbuild:${colId}`); }
@@ -278,7 +281,7 @@ export async function getCompsModel(colId: string, opts: { wait?: boolean } = {}
   // Cold in-memory: try persisted inputs for an instant warm model before touching the network.
   if (!hit) {
     let raw: string | null = null;
-    try { raw = await cacheGet(`comps:${colId}`, DB_TTL); } catch { raw = null; }
+    try { raw = await cacheGetLarge(`comps:${colId}`, DB_TTL); } catch { raw = null; }
     if (raw) {
       try {
         const persisted = JSON.parse(raw) as PersistedComps;

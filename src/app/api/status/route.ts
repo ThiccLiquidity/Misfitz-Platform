@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { redisHealth, redisStats } from "@/lib/db/nftCache";
 import { isSeeded, getSeed } from "@/lib/data-sources/seed/registry";
 import { perfSnapshot } from "@/lib/perf/timing";
+import { diagLevel } from "@/lib/ops/diagAuth";
 
 // One-stop health + storage check: GET /api/status. Tells you (a) the shared cache is alive and writing,
 // (b) the Misfitz seed is loaded, and (c) WHAT is filling Redis (rosters vs comps vs leftover details) so
@@ -14,7 +15,10 @@ const MISFITZ = "col1s8fwfqdl3x77h7rn40m0mzhkgp7kajdwu56me36glv0ez8w79heqst90mh"
 const FREE_TIER_KEY_HINT = 20000; // rough: past this many keys, watch the Upstash storage gauge
 
 export async function GET(req: Request) {
-  const deep = new URL(req.url).searchParams.get("deep") === "1"; // deep=1 runs the ~60-command SCAN breakdown
+  // deep=1 runs a ~60-command Redis SCAN. That was callable by anyone, per request — enough traffic to
+  // exhaust the Upstash command budget, which is itself what takes the cache down. Operator-only now.
+  const full = diagLevel(req) === "full";
+  const deep = full && new URL(req.url).searchParams.get("deep") === "1";
   const [health, stats, seed] = await Promise.all([
     redisHealth(),
     redisStats(deep),
@@ -40,7 +44,7 @@ export async function GET(req: Request) {
         configured: health.configured,
         writesWork: health.roundTrip,
         waitUntil: health.waitUntil,
-        host: health.urlHost,
+        host: full ? health.urlHost : null, // infra hostname is operator-only
         totalKeys: stats.dbsize,
         countedKeys: stats.scanned,
         countComplete: stats.complete,
@@ -49,6 +53,7 @@ export async function GET(req: Request) {
       seed: { enabled: isSeeded(MISFITZ), misfitzLoaded: !!seed, misfitzCount: seed ? Object.keys(seed.byNumber).length : 0 },
       perf, // per-instance request timing (p50/p95/p99/max per endpoint); resets on instance recycle
       notes,
+      detail: full ? "full" : "reduced — pass ?key=<OPS_SECRET> for the host and ?deep=1",
     },
     { headers: { "cache-control": "no-store" } },
   );
