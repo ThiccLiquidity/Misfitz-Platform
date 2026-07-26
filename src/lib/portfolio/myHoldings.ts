@@ -212,7 +212,7 @@ async function getMyHoldingsFastInner(addresses: string[], opts: OwnerScanOpts =
     await stampCardsFromIndex(nfts, xchUsdRate);
     // Roster-first enrichment: traits + our ranks + browse-identical values from each collection's CACHED
     // artifacts (slimlist2 + vidx). Defensive: never blocks the binder if a read hiccups.
-    try { const r = await stampCardsFromArtifacts(nfts, collections, xchUsdRate, { budgetMs: 3500, maxCols: 40 }); stampAsOf = r.asOf; coldCols = r.coldCols; }
+    try { const r = await stampCardsFromArtifacts(nfts, collections, xchUsdRate, { budgetMs: 3500, maxCols: 120 }); stampAsOf = r.asOf; coldCols = r.coldCols; }
     catch (e) { console.error("[binder] artifact stamp skipped:", e); }
   }
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);

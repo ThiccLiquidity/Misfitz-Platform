@@ -51,7 +51,12 @@ export async function stampCardsFromArtifacts(
   opts: { budgetMs?: number; maxCols?: number } = {},
 ): Promise<{ coldCols: string[]; asOf: number | null }> {
   const deadline = Date.now() + (opts.budgetMs ?? 3500);
-  const maxCols = opts.maxCols ?? 40;
+  // 120, not 40. This is now a SAFETY RAIL, not the real bound - the wave loop below enforces budgetMs,
+  // so a slow SSR sheds work by TIME and a fast one stamps everything. 40 was chosen when the budget was
+  // broken and bounded nothing, which silently capped serious collectors (100+ collections is a real
+  // wallet shape here) at 40 stamped collections no matter how fast the reads were. Sorted most-held
+  // first, so if the budget does run out, the collections holding the most cards are the ones covered.
+  const maxCols = opts.maxCols ?? 120;
 
   // Group held cards by col1 collection; seeds are authoritative (applySeedOverlay ran first) — skip them.
   const byCol = new Map<string, NftData[]>();
