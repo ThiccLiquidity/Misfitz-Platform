@@ -2937,155 +2937,145 @@ html[data-theme="nostalgia-night"] .tf-land-bg {
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    TRADING CARD v2  —  .card-* namespace  (CARD-REDESIGN-PLAN.md)
-   Built ALONGSIDE the legacy .tcg-* card, selected by NEXT_PUBLIC_NEW_CARD. Nothing here affects
-   the live card until that flag is on. Delete the .tcg-* system only after this has soaked.
+   Built ALONGSIDE the legacy .tcg-* card, selected by NEXT_PUBLIC_NEW_CARD.
 
-   The whole design is six token blocks. Every structural rule below reads from them, instead of
-   the legacy approach of hand-writing 6 tiers x 2 themes x every element (449 rules, ~2,021 lines).
-   Six dials escalate together: pigment, foil, glow, frame thickness, lift, art tint.
+   Six token blocks drive everything, replacing 449 hand-written .tcg-* rules.
+   Tuned after real-wallet review: a real page is ~90% commons, so SIGNAL beats subtlety.
+   The muted "printed pigment" palette read as a page of nothing. Saturated colour, thick frames
+   and a two-layer radioactive glow is what makes rarity legible at a glance.
+
+   Per tier:  --a/--b frame pigment · --ink plate text · --plate plate fill · --fw frame thickness
+              --g1 hard rim (survives on cream paper) · --g2 wide bloom (the radioactive part)
+              --pulse slow breathe, epic+ only · --z stack order so a glow is never clipped by a neighbour
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 
 .card-frame.tier-common {
-  --ink-a:#8592a5; --ink-b:#465264; --txt:#e6ebf2; --glow:0 0 0 transparent;
-  --holo:0;   --foil:0;    --fw:3px;   --lift:0px; --foil-anim:none;
+  --a:#7f8fa6; --b:#3d4a5e; --ink:#2a3340; --plate:#dbe3ee; --fw:4px; --z:1;
+  --g1:0 0 0 0 transparent; --g2:0 0 0 transparent; --pulse:none;
 }
 .card-frame.tier-uncommon {
-  --ink-a:#7fa96f; --ink-b:#3d6634; --txt:#e9f4e4; --glow:0 0 11px rgba(127,169,111,.26);
-  --holo:.20; --foil:.25;  --fw:3.5px; --lift:0px; --foil-anim:none;
+  --a:#57d95f; --b:#158a2c; --ink:#0c4a18; --plate:#c8f5cc; --fw:6px; --z:2;
+  --g1:0 0 0 1.5px rgba(87,217,95,.85);
+  --g2:0 0 26px 5px rgba(87,217,95,.70), 0 0 60px 14px rgba(87,217,95,.35); --pulse:none;
 }
 .card-frame.tier-rare {
-  --ink-a:#c9705f; --ink-b:#8a3527; --txt:#fbe7e2; --glow:0 0 17px rgba(201,112,95,.32);
-  --holo:.36; --foil:.5;   --fw:4px;   --lift:1px; --foil-anim:none;
+  --a:#ff5f3a; --b:#b81c08; --ink:#7a1408; --plate:#ffd6cc; --fw:7px; --z:3;
+  --g1:0 0 0 1.5px rgba(255,95,58,.9);
+  --g2:0 0 32px 6px rgba(255,95,58,.80), 0 0 74px 16px rgba(255,95,58,.40); --pulse:none;
 }
-/* Epic and above animate. Rarer by definition = few on screen, so a 100-card page stays cheap. */
+/* Epic and above pulse AND animate foil — rare by definition, so few are ever on screen at once. */
 .card-frame.tier-epic {
-  --ink-a:#6fb3d6; --ink-b:#255f88; --txt:#e4f3fb; --glow:0 0 24px rgba(111,179,214,.42);
-  --holo:.52; --foil:.7;   --fw:4.5px; --lift:2px; --foil-anim:card-refract;
+  --a:#2fb0ff; --b:#0a4f9c; --ink:#06355f; --plate:#cbe8ff; --fw:8px; --z:4;
+  --g1:0 0 0 2px rgba(47,176,255,.95);
+  --g2:0 0 40px 8px rgba(47,176,255,.90), 0 0 90px 20px rgba(47,176,255,.45);
+  --pulse:card-glowpulse 3.4s ease-in-out infinite;
 }
 .card-frame.tier-legendary {
-  --ink-a:#d2a548; --ink-b:#8a6410; --txt:#fdf3dc; --glow:0 0 30px rgba(210,165,72,.50);
-  --holo:.66; --foil:.85;  --fw:5px;   --lift:3px; --foil-anim:card-refract;
+  --a:#ffc400; --b:#b07400; --ink:#5e3f00; --plate:#ffeeb0; --fw:9px; --z:5;
+  --g1:0 0 0 2px rgba(255,196,0,1);
+  --g2:0 0 48px 10px rgba(255,196,0,.95), 0 0 105px 24px rgba(255,196,0,.50);
+  --pulse:card-glowpulse 3s ease-in-out infinite;
 }
 .card-frame.tier-mythic {
-  --ink-a:#b477c9; --ink-b:#6b2f8f; --txt:#f6e6fb; --glow:0 0 38px rgba(180,119,201,.56);
-  --holo:.80; --foil:1;    --fw:5.5px; --lift:4px; --foil-anim:card-refract;
+  --a:#e14fff; --b:#7d0fc4; --ink:#4d0a75; --plate:#f4d0ff; --fw:10px; --z:6;
+  --g1:0 0 0 2.5px rgba(225,79,255,1);
+  --g2:0 0 55px 12px rgba(225,79,255,1), 0 0 120px 30px rgba(225,79,255,.60);
+  --pulse:card-glowpulse 2.6s ease-in-out infinite;
 }
 
-/* ── the frame: pigment ramp + emboss. NOT a flat neon gradient — that is what read as "electric". ── */
 .card-frame {
-  position:relative; display:flex; isolation:isolate;
-  aspect-ratio:5/7;                     /* real 2.5in x 3.5in trading card proportions */
+  position:relative; z-index:var(--z); display:flex; isolation:isolate;
+  aspect-ratio:5/7;                       /* true 2.5in x 3.5in trading-card proportions */
   border-radius:10px; padding:var(--fw);
-  transform:translateY(calc(var(--lift) * -1));
-  background:linear-gradient(158deg,
-    color-mix(in srgb, var(--ink-a) 88%, #fff) 0%, var(--ink-a) 22%,
-    var(--ink-b) 55%, color-mix(in srgb, var(--ink-b) 82%, #000) 78%, var(--ink-a) 100%);
+  background:linear-gradient(150deg,
+    color-mix(in srgb, var(--a) 94%, #fff) 0%, var(--a) 28%,
+    var(--b) 60%, color-mix(in srgb, var(--a) 86%, #fff) 100%);
   box-shadow:
-    var(--glow),
-    inset 0 1px 0 rgba(255,255,255,.42), inset 1px 0 0 rgba(255,255,255,.16),
-    inset 0 -1px 0 rgba(0,0,0,.45),      inset -1px 0 0 rgba(0,0,0,.30),
-    0 4px 14px rgba(0,0,0,.55);
+    var(--g1), var(--g2),
+    inset 0 1px 0 rgba(255,255,255,.60), inset 0 -1px 0 rgba(0,0,0,.45),
+    0 3px 12px rgba(0,0,0,.40);
+  animation:var(--pulse);
 }
+@keyframes card-glowpulse { 0%,100% { filter:brightness(1); } 50% { filter:brightness(1.14); } }
 .card-frame-clickable { cursor:pointer; }
-.card-frame-clickable:hover { filter:brightness(1.06); }
+.card-frame-clickable:hover { filter:brightness(1.07); }
 
-/* ── refraction foil: two opposed gradient layers + a drifting hotspot, soft-light. ── */
-.card-frame::before {
-  content:""; position:absolute; inset:0; border-radius:10px; pointer-events:none; z-index:4;
-  opacity:var(--holo); mix-blend-mode:soft-light;
-  background:
-    radial-gradient(140px 110px at 30% 20%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 62%),
-    repeating-linear-gradient(102deg, rgba(255,240,200,.30) 0 6px, rgba(255,255,255,0) 6px 15px,
-      rgba(190,255,240,.26) 15px 21px, rgba(255,255,255,0) 21px 32px,
-      rgba(255,205,240,.26) 32px 38px, rgba(255,255,255,0) 38px 52px),
-    repeating-linear-gradient(-38deg, rgba(255,255,255,.14) 0 3px, rgba(255,255,255,0) 3px 12px);
-  background-size:200% 200%, 180% 180%, 140% 140%;
-  animation:var(--foil-anim) 7s ease-in-out infinite;
-}
-@keyframes card-refract {
-  0%   { background-position:0% 30%,   0% 0%,     0% 0%; }
-  50%  { background-position:100% 70%, 140% 100%, 90% 60%; }
-  100% { background-position:0% 30%,   280% 200%, 180% 120%; }
-}
-/* ── cardstock grain: inline SVG turbulence. No asset, no request. ── */
+/* cardstock grain — kept from the printed pass; it survives the brighter palette fine */
 .card-frame::after {
-  content:""; position:absolute; inset:0; border-radius:10px; pointer-events:none; z-index:5;
-  opacity:.28; mix-blend-mode:overlay;
+  content:""; position:absolute; inset:0; border-radius:10px; pointer-events:none; z-index:7;
+  opacity:.24; mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>");
 }
-@media (prefers-reduced-motion: reduce) {
-  .card-frame::before { animation:none; }
-}
+@media (prefers-reduced-motion: reduce) { .card-frame { animation:none; } }
 
 .card-in {
   position:relative; z-index:2; flex:1; min-width:0; display:flex; flex-direction:column;
-  border-radius:6px; overflow:hidden;
-  background:linear-gradient(180deg,#121722 0%,#090c14 100%);
-  box-shadow:inset 0 0 0 1px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+  border-radius:5px; overflow:hidden;
+  background:linear-gradient(180deg,#141a26 0%,#090c14 100%);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.55);
 }
-
-/* ── ART: the hero. Fills all remaining height. ── */
 .card-art {
   position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center;
-  background:radial-gradient(ellipse at 46% 40%, color-mix(in srgb, var(--ink-b) 42%, #0a0d14) 0%, #070a11 82%);
-}
-.card-art::after {
-  content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
-  opacity:calc(var(--foil) * .26); mix-blend-mode:soft-light;
-  background:conic-gradient(from 200deg, rgba(255,190,240,.5), rgba(180,240,255,.5), rgba(255,245,190,.5), rgba(255,190,240,.5));
+  background:radial-gradient(ellipse at 46% 40%, color-mix(in srgb, var(--b) 45%, #0a0d14) 0%, #070a11 82%);
 }
 .card-art-img { position:absolute; inset:0; }
 
-/* ── rank sticker: cream, tilted, sits on the art like a grading label ── */
+/* ── TIER CHIP: tier + percentile. This is the CONTEXT a bare rank number was missing. ── */
+.card-tier {
+  position:absolute; left:6px; top:6px; z-index:6; max-width:calc(100% - 62px);
+  font-family:var(--font-righteous), system-ui, sans-serif; font-size:8.5px; letter-spacing:.06em;
+  padding:2px 7px; border-radius:20px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  background:linear-gradient(180deg, var(--a), var(--b));
+  border:1px solid rgba(0,0,0,.4);
+  box-shadow:0 1px 4px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.5);
+}
+/* ── RANK sticker: now says the word, so the number means something ── */
 .card-rank {
-  position:absolute; top:6px; right:6px; z-index:3;
-  font-family:var(--font-righteous), system-ui, sans-serif;
-  font-size:10px; padding:1.5px 6px; border-radius:3px; color:#2b1a08;
-  transform:rotate(-1.5deg); background:linear-gradient(180deg,#fbf4e0,#ecdcbb);
-  border:1px solid rgba(70,48,16,.55);
-  box-shadow:0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.8);
+  position:absolute; top:6px; right:6px; z-index:6; text-align:right; padding:2px 7px; border-radius:4px;
+  background:linear-gradient(180deg,#fbf4e0,#ecdcbb); border:1px solid rgba(70,48,16,.5);
+  box-shadow:0 1px 3px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.85);
 }
-.card-detail .card-rank { font-size:13px; padding:2px 8px; top:9px; right:9px; }
+.card-rank-l { display:block; font-size:6px; font-weight:900; letter-spacing:.14em; line-height:1; color:rgba(60,42,14,.75); }
+.card-rank-n { display:block; font-family:var(--font-righteous), system-ui, sans-serif; font-size:11px; line-height:1.15; color:#2b1a08; }
 
-/* ── nameplate: collection above, token below, value right. Replaces the old stats panel. ── */
-.card-plate {
-  flex-shrink:0; display:flex; align-items:center; gap:6px; padding:6px 7px 7px;
-  background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(0,0,0,.26));
-  border-top:1px solid rgba(0,0,0,.5); box-shadow:inset 0 1px 0 rgba(255,255,255,.10);
-}
-.card-nm { min-width:0; flex:1; }
-.card-col {
-  display:block; font-size:7.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
-  color:rgba(246,236,218,.52); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-.card-tok {
-  display:block; font-family:var(--font-righteous), system-ui, sans-serif; font-size:13px;
-  color:var(--txt); line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  text-shadow:0 1px 2px rgba(0,0,0,.75);
-}
-.card-val {
-  flex-shrink:0; font-family:var(--font-righteous), system-ui, sans-serif; font-size:11px; color:var(--txt);
-}
-.card-detail .card-col { font-size:9px; }
-.card-detail .card-tok { font-size:17px; }
-.card-detail .card-val { font-size:13px; }
+/* ── PLATE: tier-tinted, tier-coloured ink, labelled value ── */
+.card-plate { flex-shrink:0; padding:6px 7px 7px; border-top:2px solid var(--a);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--b) 34%, #0d1119), color-mix(in srgb, var(--b) 18%, #080b12)); }
+.card-col { display:block; font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:.09em;
+  color:color-mix(in srgb, var(--a) 75%, #fff); opacity:.88; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card-tok { display:block; font-family:var(--font-righteous), system-ui, sans-serif; font-size:15px; line-height:1.15;
+  color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card-vrow { display:flex; align-items:baseline; justify-content:space-between; gap:6px; margin-top:3px;
+  padding-top:4px; border-top:1px solid color-mix(in srgb, var(--a) 30%, transparent); }
+.card-vlab { font-size:7px; font-weight:900; text-transform:uppercase; letter-spacing:.12em;
+  color:color-mix(in srgb, var(--a) 70%, #fff); opacity:.8; }
+.card-vnum { font-family:var(--font-righteous), system-ui, sans-serif; font-size:13px; color:#fff; white-space:nowrap; }
+.card-vunit { font-size:8.5px; font-weight:800; opacity:.65; }
 
-/* ── DAY (nostalgia): paper surfaces. Frame + foil unchanged — same tokens. ── */
-[data-theme="nostalgia"] .card-in   { background:linear-gradient(180deg,#fffdf5 0%,#efe4cb 100%); }
-[data-theme="nostalgia"] .card-art  { background:radial-gradient(ellipse at 46% 40%, color-mix(in srgb, var(--ink-a) 22%, #fffdf5) 0%, #efe4cb 82%); }
-[data-theme="nostalgia"] .card-tok  { color:#20160a; text-shadow:none; }
-[data-theme="nostalgia"] .card-col  { color:rgba(40,26,10,.60); }
-[data-theme="nostalgia"] .card-val  { color:#20160a; }
-[data-theme="nostalgia"] .card-plate{
-  background:linear-gradient(180deg, rgba(255,255,255,.62), rgba(0,0,0,.06));
-  border-top-color:rgba(80,55,20,.35);
-}
+.card-detail .card-tier   { font-size:11px; padding:3px 10px; left:9px; top:9px; }
+.card-detail .card-rank   { top:9px; right:9px; padding:3px 9px; }
+.card-detail .card-rank-l { font-size:7.5px; }
+.card-detail .card-rank-n { font-size:15px; }
+.card-detail .card-col    { font-size:10px; }
+.card-detail .card-tok    { font-size:20px; }
+.card-detail .card-vnum   { font-size:17px; }
+.card-detail .card-vlab   { font-size:9px; }
 
-/* ── the sleeve: translucent plastic pocket. This is what makes a grid read as a BINDER. ── */
+/* ── DAY (nostalgia): paper card interior, dark tier-coloured ink on a tinted plate. ── */
+[data-theme="nostalgia"] .card-in    { background:linear-gradient(180deg,#fffdf5 0%,#efe4cb 100%); }
+[data-theme="nostalgia"] .card-art   { background:radial-gradient(ellipse at 46% 40%, #fff 0%, #eee3c9 82%); }
+[data-theme="nostalgia"] .card-plate { background:var(--plate); border-top:2px solid var(--b); }
+[data-theme="nostalgia"] .card-col   { color:var(--ink); opacity:.75; }
+[data-theme="nostalgia"] .card-tok   { color:var(--ink); }
+[data-theme="nostalgia"] .card-vlab  { color:var(--ink); opacity:.62; }
+[data-theme="nostalgia"] .card-vnum  { color:var(--ink); }
+[data-theme="nostalgia"] .card-vrow  { border-top-color:color-mix(in srgb, var(--b) 30%, transparent); }
+
+/* ── the sleeve: translucent plastic pocket. What makes a grid read as a BINDER. ── */
 .card-sleeve {
   position:relative; display:flex; padding:4px; border-radius:8px; aspect-ratio:5/7;
   background:linear-gradient(160deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.03) 40%, rgba(255,255,255,.09) 100%);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16), inset 0 2px 6px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.06);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16), inset 0 2px 6px rgba(0,0,0,.35);
 }
 .card-sleeve::after {
   content:""; position:absolute; inset:0; border-radius:8px; pointer-events:none; z-index:9;
@@ -3093,8 +3083,7 @@ html[data-theme="nostalgia-night"] .tf-land-bg {
     rgba(255,255,255,0) 66%, rgba(255,255,255,.10) 100%);
 }
 .card-sleeve > .card-frame { flex:1; min-width:0; width:100%; aspect-ratio:auto; }
-/* Desktop page spread: the 3x3 grid row dictates height, so the pocket fills its cell instead of
-   deriving height from the 5:7 ratio. The CARD keeps its proportions inside it. */
+/* Desktop page spread: the grid row dictates height, so the pocket fills its cell. */
 .card-sleeve-fill { aspect-ratio:auto; height:100%; min-height:0; }
 [data-theme="nostalgia"] .card-sleeve {
   background:linear-gradient(160deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.12) 40%, rgba(255,255,255,.30) 100%);

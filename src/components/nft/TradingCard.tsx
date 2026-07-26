@@ -2,7 +2,6 @@ import Image from "next/image";
 import { memo } from "react";
 import type { NftData } from "@/types";
 import { getRarityTier, resolveTierThresholds, type RarityTierThresholds } from "@/lib/rarity/tiers";
-import { formatXchShort } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // TradingCard — the v2 card (see CARD-REDESIGN-PLAN.md).
@@ -12,11 +11,12 @@ import { formatXchShort } from "@/lib/format";
 // /theme-lab regardless so the design can be reviewed without touching production.
 //
 // Structure (all styling reads from the six tier tokens in globals.css):
-//   .card-frame.tier-{id}   pigment frame + emboss + refraction foil + cardstock grain
+//   .card-frame.tier-{id}   thick saturated frame + two-layer radioactive glow + cardstock grain
 //     .card-in              inner card body (dark at night, paper in day)
-//       .card-art           the HERO — fills all remaining height, art edge to edge
-//         .card-rank        cream tilted rank sticker, like a grading label
-//       .card-plate         collection (small, muted) / token (bold) / value
+//       .card-art           the HERO — fills all remaining height
+//         .card-tier        tier + percentile chip — the CONTEXT a bare rank number lacked
+//         .card-rank        cream sticker, labelled "Rank" so the number reads
+//       .card-plate         tier-tinted: collection / token / labelled Est. value
 //
 // What deliberately ISN'T here vs the legacy card: the stats panel, sparkles, gloss, tier banner
 // and inline traits. Removing them is what gives the art its room; that information now lives in
@@ -56,6 +56,14 @@ function TradingCardImpl({
   const token = tokenSuffix(nft.name);
   const value = nft.fairValue?.totalEstimate ?? null;
 
+  // CONTEXT for the rank number. A bare "#5961" tells a collector nothing — is that good? out of what?
+  // Sub-1% cards get the absolute form ("#3 of 10,000") because at that rarity the exact position is the
+  // brag; everything else gets the percentile band, which is what actually communicates "how rare".
+  const rankContext =
+    tier.percentile !== null && tier.percentile < 1 && tier.rank !== null
+      ? `#${tier.rank} of ${supply.toLocaleString()}`
+      : tier.percentileLabel;
+
   return (
     <div
       className={`card-frame tier-${tier.id}${isDetail ? " card-detail" : ""}${onOpen ? " card-frame-clickable" : ""}`}
@@ -63,7 +71,7 @@ function TradingCardImpl({
       onKeyDown={onOpen ? (e) => { if (e.key === "Enter" || e.key === " ") onOpen(nft.launcherId); } : undefined}
       role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
-      aria-label={onOpen ? `${colName} ${token}` : undefined}
+      aria-label={onOpen ? `${colName} ${token}, ${tier.label}, ${rankContext}` : undefined}
     >
       <div className="card-in">
         <div
@@ -75,8 +83,8 @@ function TradingCardImpl({
         >
           {nft.imageUrl ? (
             <div className="card-art-img">
-              {/* unoptimized, exactly as the legacy card: NFT art comes from arbitrary on-chain hosts
-                  and the Next optimizer is switched off app-wide. */}
+              {/* unoptimized, as the legacy card: NFT art comes from arbitrary on-chain hosts and the
+                  Next optimizer is off app-wide. */}
               <Image
                 src={nft.imageUrl}
                 alt={nft.name}
@@ -89,15 +97,30 @@ function TradingCardImpl({
           ) : (
             <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.05)" }} aria-hidden />
           )}
-          {tier.rank !== null && <div className="card-rank">#{tier.rank}</div>}
+
+          <div className="card-tier" title={`${tier.label} — ${rankContext}`}>
+            {tier.label} · {rankContext}
+          </div>
+
+          {tier.rank !== null && (
+            <div className="card-rank">
+              <span className="card-rank-l">Rank</span>
+              <span className="card-rank-n">#{tier.rank}</span>
+            </div>
+          )}
         </div>
 
         <div className="card-plate">
-          <span className="card-nm">
-            <span className="card-col" title={colName}>{colName}</span>
-            <span className="card-tok" title={nft.name}>{token}</span>
-          </span>
-          {value !== null && <span className="card-val">{formatXchShort(value)}</span>}
+          <span className="card-col" title={colName}>{colName}</span>
+          <span className="card-tok" title={nft.name}>{token}</span>
+          {value !== null && (
+            <div className="card-vrow">
+              <span className="card-vlab">Est. value</span>
+              <span className="card-vnum">
+                {value.toFixed(2)}<span className="card-vunit"> XCH</span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
