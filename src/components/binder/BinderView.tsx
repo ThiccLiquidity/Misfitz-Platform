@@ -5,7 +5,7 @@ import type { CollectionData, NftData } from "@/types";
 import { BinderPage } from "./BinderPage";
 import { BinderPageControls } from "./BinderPageControls";
 import { NftDetailModal } from "@/components/nft/NftDetailModal";
-import { NftRarityCard } from "@/components/nft/NftRarityCard";
+import { CardSlot } from "@/components/nft/CardSlot";
 import { useThemeMode } from "@/components/theme/ThemeProvider";
 import { getThemeTokens, themeTokensToCssVars } from "@/lib/theme/themes";
 
@@ -337,15 +337,14 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
               <span className="text-subtle text-sm">Loading cards…</span>
             </div>
           ) : gridSlice.map((n) => (
-            <div key={n.launcherId} className="tcg-sleeve">
-              <NftRarityCard
-                nft={n}
-                collectionName={collection.name}
-                onOpen={setOpenLauncherId}
-                totalSupply={collection.totalSupply}
-                rarityTiers={collection.rarityTiers}
-              />
-            </div>
+            <CardSlot
+              key={n.launcherId}
+              nft={n}
+              collectionName={collection.name}
+              onOpen={setOpenLauncherId}
+              totalSupply={collection.totalSupply}
+              rarityTiers={collection.rarityTiers}
+            />
           ))}
         </div>
 

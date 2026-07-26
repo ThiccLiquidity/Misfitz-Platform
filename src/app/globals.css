@@ -3092,7 +3092,10 @@ html[data-theme="nostalgia-night"] .tf-land-bg {
   background:linear-gradient(118deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 34%,
     rgba(255,255,255,0) 66%, rgba(255,255,255,.10) 100%);
 }
-.card-sleeve > .card-frame { width:100%; aspect-ratio:auto; }
+.card-sleeve > .card-frame { flex:1; min-width:0; width:100%; aspect-ratio:auto; }
+/* Desktop page spread: the 3x3 grid row dictates height, so the pocket fills its cell instead of
+   deriving height from the 5:7 ratio. The CARD keeps its proportions inside it. */
+.card-sleeve-fill { aspect-ratio:auto; height:100%; min-height:0; }
 [data-theme="nostalgia"] .card-sleeve {
   background:linear-gradient(160deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.12) 40%, rgba(255,255,255,.30) 100%);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.5), inset 0 2px 6px rgba(60,40,15,.25);

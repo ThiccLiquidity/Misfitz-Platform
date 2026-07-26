@@ -1,6 +1,6 @@
 import type { NftData } from "@/types";
 import type { RarityTierThresholds } from "@/lib/rarity/tiers";
-import { NftRarityCard } from "@/components/nft/NftRarityCard";
+import { CardSlot } from "@/components/nft/CardSlot";
 
 interface BinderPageProps {
   nfts: NftData[];
@@ -31,15 +31,16 @@ export function BinderPage({
   return (
     <div className={`tcg-binder-page grid grid-cols-3 grid-rows-3 gap-1.5 ${radius} p-2 h-full w-full`}>
       {nfts.map((nft) => (
-        <div key={nft.launcherId} className="tcg-sleeve min-h-0">
-          <NftRarityCard
-            nft={nft}
-            collectionName={collectionName}
-            onOpen={onOpen}
-            totalSupply={totalSupply}
-            rarityTiers={rarityTiers}
-          />
-        </div>
+        <CardSlot
+          key={nft.launcherId}
+          nft={nft}
+          collectionName={collectionName}
+          onOpen={onOpen}
+          totalSupply={totalSupply}
+          rarityTiers={rarityTiers}
+          fill
+          className="min-h-0"
+        />
       ))}
     </div>
   );
