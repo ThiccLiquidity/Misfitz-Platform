@@ -322,20 +322,35 @@ export async function cacheGetLarge(key: string, ttlMs: number): Promise<string 
 // Release a lock early (after a scan slice checkpoints) so the next poll can resume immediately instead of
 // waiting out the TTL. Best-effort.
 export async function releaseLock(key: string): Promise<void> {
+  _localLocks.delete(key);
   try { const r = await redis(); if (r) await r.del(`tf:lock:${key}`); } catch { /* ignore */ }
+}
+
+// PROCESS-LOCAL fallback lock, used whenever Redis can't answer (absent in local dev, or hard-blocked when
+// the Upstash plan limit is hit). It cannot coordinate across instances - nothing can, without Redis - but it
+// still stops ONE instance from starting the same scan N times, and critically it lets real work PROCEED.
+// Without this, a fail-closed Redis lock would mean no collection ever builds while Upstash is down.
+const _localLocks = new Map<string, number>(); // key -> expiry ms
+function tryLocalLock(key: string, ttlS: number): boolean {
+  const now = Date.now();
+  if ((_localLocks.get(key) ?? 0) > now) return false; // this instance is already building it
+  if (_localLocks.size > 200) for (const [k, exp] of _localLocks) if (exp <= now) _localLocks.delete(k);
+  _localLocks.set(key, now + ttlS * 1000);
+  return true;
 }
 export async function tryLock(key: string, ttlS: number): Promise<boolean> {
   try {
     const r = await redis();
-    if (!r) return true;
+    if (!r) return tryLocalLock(key, ttlS); // not configured (local dev) -> coalesce within this instance
     const ok = await r.set(`tf:lock:${key}`, { t: Date.now() }, { nx: true, ex: ttlS });
     return ok === "OK" || ok === true;
   } catch {
-    // FAIL CLOSED on a Redis ERROR. This used to return true, which meant that the moment Redis got slow or
-    // rate-limited, every instance believed it held the lock and started the same full collection scan at
-    // once - the exact 429 storm this lock exists to prevent. Callers already handle 'lock lost' by serving
-    // the warming state. (Redis simply NOT CONFIGURED still returns true above, so local dev is unaffected.)
-    return false;
+    // Redis ERRORED (slow, rate-limited, or plan-limit blocked). Do NOT return true - that is what turned a
+    // Redis hiccup into a 429 storm, with every instance starting the same full scan at once. But do NOT
+    // return a flat false either: when Upstash is HARD-BLOCKED every call errors, so a flat false would mean
+    // no collection ever builds and the site serves "warming" forever. Fall back to the per-instance lock:
+    // work still proceeds, and each instance runs the scan at most once.
+    return tryLocalLock(key, ttlS);
   }
 }
 
