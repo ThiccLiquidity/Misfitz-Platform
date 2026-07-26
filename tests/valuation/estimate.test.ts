@@ -37,16 +37,18 @@ test("estimate = floor + rarity + desirability; no standalone trait double-count
   const fv = estimateFairValue({
     floorXch: 1.0,
     rarityRank: 72,
-    totalSupply: 250, // 28.8th percentile -> 0.22x floor (smooth curve)
+    totalSupply: 250, // 28.8th percentile -> 0.22229466...x floor (smooth curve)
     desirabilityWeight: 0.03, // e.g. a palindrome
     xchUsdRate: 10,
   })!;
   assert.equal(fv.floorValue, 1.0);
-  assert.equal(fv.rarityPremium, 0.22);
+  // XCH rounds to 6dp, not 2dp. These expectations previously encoded the 2dp truncation, which is
+  // the bug that made sub-0.01-XCH floors evaluate to zero. The true factor is 0.22229466843288925.
+  assert.equal(fv.rarityPremium, 0.222295);
   assert.equal(fv.desirabilityPremium, 0.03);
   assert.equal(fv.traitPremium, 0); // reserved for dynamic trait demand
-  assert.equal(fv.totalEstimate, 1.25);
-  assert.equal(fv.totalEstimateUsd, 12.5);
+  assert.equal(fv.totalEstimate, 1.252295); // 1.0 floor + 0.222295 rarity + 0.03 desirability
+  assert.equal(fv.totalEstimateUsd, 12.52); // USD stays 2dp
 });
 
 test("a grail number meaningfully bumps value; rarer outranks common at same floor", () => {
