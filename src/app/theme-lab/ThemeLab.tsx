@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { NftData } from "@/types";
 import { NftRarityCard } from "@/components/nft/NftRarityCard";
+import { TradingCard } from "@/components/nft/TradingCard";
 import { colorForLabel, funLabel } from "@/components/nft/DealScoreGauge";
 import { TIER_ORDER, type TierId } from "@/lib/rarity/tiers";
 
@@ -86,6 +87,58 @@ export function ThemeLab() {
           <span className="ch-badge text-xs font-black" style={{ color: "#fff", padding: "4px 12px", borderRadius: 999 }}>BINDER</span>
         </div>
         <p className="tf-foil" style={{ fontSize: 28, fontWeight: 900, marginTop: 12 }}>Foil headline sample</p>
+      </Section>
+
+      {/* ── v2 TRADING CARD (CARD-REDESIGN-PLAN.md) ──────────────────────────────────────────
+          The verification gallery. Every tier, in a sleeve and bare, on one page — so the whole
+          6 tiers x 2 themes matrix is two screenshots instead of 120 manual checks. Switch theme
+          with the Day/Night buttons above to check both. ── */}
+      <Section title="NEW trading card v2 — in binder sleeves (the real binder view)">
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(auto-fill, 150px)", gap: 12,
+          padding: 16, borderRadius: 10,
+          background: "linear-gradient(180deg,#2a1c0c 0%,#150e05 100%)",
+          border: "1px solid rgba(180,140,60,.28)",
+        }}>
+          {TIER_ORDER.map((tier) => (
+            <div key={tier} className="card-sleeve">
+              <TradingCard nft={mockNft(tier)} collectionName="Theme Lab" totalSupply={SUPPLY} onOpen={() => {}} />
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="NEW trading card v2 — bare, and one at detail size">
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+          {TIER_ORDER.map((tier) => (
+            <div key={tier} style={{ width: 132 }}>
+              <TradingCard nft={mockNft(tier)} collectionName="Theme Lab" totalSupply={SUPPLY} />
+              <p style={{ fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", opacity: .6, marginTop: 6, textAlign: "center" }}>{tier}</p>
+            </div>
+          ))}
+          <div style={{ width: 236 }}>
+            <TradingCard nft={mockNft("mythic")} collectionName="Theme Lab" totalSupply={SUPPLY} variant="detail" />
+            <p style={{ fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", opacity: .6, marginTop: 6, textAlign: "center" }}>detail size</p>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Long / awkward names — the case that broke the old header">
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          {[
+            { c: "NECKSPWN\u00c6LG\u0150", n: "Specimen #6444" },
+            { c: "Ultimate Farmers Club", n: "Boar - Soldier" },
+            { c: "BlockArt", n: "Specimen #139" },
+          ].map((x, i) => (
+            <div key={i} style={{ width: 132 }}>
+              <TradingCard
+                nft={{ ...mockNft(i === 0 ? "common" : i === 1 ? "uncommon" : "epic"), name: x.n }}
+                collectionName={x.c}
+                totalSupply={SUPPLY}
+              />
+            </div>
+          ))}
+        </div>
       </Section>
 
       <Section title="Rarity cards — mythic → common (every deal-pill state)">

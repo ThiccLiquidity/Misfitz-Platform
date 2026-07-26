@@ -2933,3 +2933,167 @@ html[data-theme="nostalgia-night"] .tf-land-bg {
     background-position: center, left center, top left !important;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   TRADING CARD v2  —  .card-* namespace  (CARD-REDESIGN-PLAN.md)
+   Built ALONGSIDE the legacy .tcg-* card, selected by NEXT_PUBLIC_NEW_CARD. Nothing here affects
+   the live card until that flag is on. Delete the .tcg-* system only after this has soaked.
+
+   The whole design is six token blocks. Every structural rule below reads from them, instead of
+   the legacy approach of hand-writing 6 tiers x 2 themes x every element (449 rules, ~2,021 lines).
+   Six dials escalate together: pigment, foil, glow, frame thickness, lift, art tint.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.card-frame.tier-common {
+  --ink-a:#8592a5; --ink-b:#465264; --txt:#e6ebf2; --glow:0 0 0 transparent;
+  --holo:0;   --foil:0;    --fw:3px;   --lift:0px; --foil-anim:none;
+}
+.card-frame.tier-uncommon {
+  --ink-a:#7fa96f; --ink-b:#3d6634; --txt:#e9f4e4; --glow:0 0 11px rgba(127,169,111,.26);
+  --holo:.20; --foil:.25;  --fw:3.5px; --lift:0px; --foil-anim:none;
+}
+.card-frame.tier-rare {
+  --ink-a:#c9705f; --ink-b:#8a3527; --txt:#fbe7e2; --glow:0 0 17px rgba(201,112,95,.32);
+  --holo:.36; --foil:.5;   --fw:4px;   --lift:1px; --foil-anim:none;
+}
+/* Epic and above animate. Rarer by definition = few on screen, so a 100-card page stays cheap. */
+.card-frame.tier-epic {
+  --ink-a:#6fb3d6; --ink-b:#255f88; --txt:#e4f3fb; --glow:0 0 24px rgba(111,179,214,.42);
+  --holo:.52; --foil:.7;   --fw:4.5px; --lift:2px; --foil-anim:card-refract;
+}
+.card-frame.tier-legendary {
+  --ink-a:#d2a548; --ink-b:#8a6410; --txt:#fdf3dc; --glow:0 0 30px rgba(210,165,72,.50);
+  --holo:.66; --foil:.85;  --fw:5px;   --lift:3px; --foil-anim:card-refract;
+}
+.card-frame.tier-mythic {
+  --ink-a:#b477c9; --ink-b:#6b2f8f; --txt:#f6e6fb; --glow:0 0 38px rgba(180,119,201,.56);
+  --holo:.80; --foil:1;    --fw:5.5px; --lift:4px; --foil-anim:card-refract;
+}
+
+/* ── the frame: pigment ramp + emboss. NOT a flat neon gradient — that is what read as "electric". ── */
+.card-frame {
+  position:relative; display:flex; isolation:isolate;
+  aspect-ratio:5/7;                     /* real 2.5in x 3.5in trading card proportions */
+  border-radius:10px; padding:var(--fw);
+  transform:translateY(calc(var(--lift) * -1));
+  background:linear-gradient(158deg,
+    color-mix(in srgb, var(--ink-a) 88%, #fff) 0%, var(--ink-a) 22%,
+    var(--ink-b) 55%, color-mix(in srgb, var(--ink-b) 82%, #000) 78%, var(--ink-a) 100%);
+  box-shadow:
+    var(--glow),
+    inset 0 1px 0 rgba(255,255,255,.42), inset 1px 0 0 rgba(255,255,255,.16),
+    inset 0 -1px 0 rgba(0,0,0,.45),      inset -1px 0 0 rgba(0,0,0,.30),
+    0 4px 14px rgba(0,0,0,.55);
+}
+.card-frame-clickable { cursor:pointer; }
+.card-frame-clickable:hover { filter:brightness(1.06); }
+
+/* ── refraction foil: two opposed gradient layers + a drifting hotspot, soft-light. ── */
+.card-frame::before {
+  content:""; position:absolute; inset:0; border-radius:10px; pointer-events:none; z-index:4;
+  opacity:var(--holo); mix-blend-mode:soft-light;
+  background:
+    radial-gradient(140px 110px at 30% 20%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 62%),
+    repeating-linear-gradient(102deg, rgba(255,240,200,.30) 0 6px, rgba(255,255,255,0) 6px 15px,
+      rgba(190,255,240,.26) 15px 21px, rgba(255,255,255,0) 21px 32px,
+      rgba(255,205,240,.26) 32px 38px, rgba(255,255,255,0) 38px 52px),
+    repeating-linear-gradient(-38deg, rgba(255,255,255,.14) 0 3px, rgba(255,255,255,0) 3px 12px);
+  background-size:200% 200%, 180% 180%, 140% 140%;
+  animation:var(--foil-anim) 7s ease-in-out infinite;
+}
+@keyframes card-refract {
+  0%   { background-position:0% 30%,   0% 0%,     0% 0%; }
+  50%  { background-position:100% 70%, 140% 100%, 90% 60%; }
+  100% { background-position:0% 30%,   280% 200%, 180% 120%; }
+}
+/* ── cardstock grain: inline SVG turbulence. No asset, no request. ── */
+.card-frame::after {
+  content:""; position:absolute; inset:0; border-radius:10px; pointer-events:none; z-index:5;
+  opacity:.28; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>");
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-frame::before { animation:none; }
+}
+
+.card-in {
+  position:relative; z-index:2; flex:1; min-width:0; display:flex; flex-direction:column;
+  border-radius:6px; overflow:hidden;
+  background:linear-gradient(180deg,#121722 0%,#090c14 100%);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+/* ── ART: the hero. Fills all remaining height. ── */
+.card-art {
+  position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(ellipse at 46% 40%, color-mix(in srgb, var(--ink-b) 42%, #0a0d14) 0%, #070a11 82%);
+}
+.card-art::after {
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+  opacity:calc(var(--foil) * .26); mix-blend-mode:soft-light;
+  background:conic-gradient(from 200deg, rgba(255,190,240,.5), rgba(180,240,255,.5), rgba(255,245,190,.5), rgba(255,190,240,.5));
+}
+.card-art-img { position:absolute; inset:0; }
+
+/* ── rank sticker: cream, tilted, sits on the art like a grading label ── */
+.card-rank {
+  position:absolute; top:6px; right:6px; z-index:3;
+  font-family:var(--font-righteous), system-ui, sans-serif;
+  font-size:10px; padding:1.5px 6px; border-radius:3px; color:#2b1a08;
+  transform:rotate(-1.5deg); background:linear-gradient(180deg,#fbf4e0,#ecdcbb);
+  border:1px solid rgba(70,48,16,.55);
+  box-shadow:0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.8);
+}
+.card-detail .card-rank { font-size:13px; padding:2px 8px; top:9px; right:9px; }
+
+/* ── nameplate: collection above, token below, value right. Replaces the old stats panel. ── */
+.card-plate {
+  flex-shrink:0; display:flex; align-items:center; gap:6px; padding:6px 7px 7px;
+  background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(0,0,0,.26));
+  border-top:1px solid rgba(0,0,0,.5); box-shadow:inset 0 1px 0 rgba(255,255,255,.10);
+}
+.card-nm { min-width:0; flex:1; }
+.card-col {
+  display:block; font-size:7.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
+  color:rgba(246,236,218,.52); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.card-tok {
+  display:block; font-family:var(--font-righteous), system-ui, sans-serif; font-size:13px;
+  color:var(--txt); line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  text-shadow:0 1px 2px rgba(0,0,0,.75);
+}
+.card-val {
+  flex-shrink:0; font-family:var(--font-righteous), system-ui, sans-serif; font-size:11px; color:var(--txt);
+}
+.card-detail .card-col { font-size:9px; }
+.card-detail .card-tok { font-size:17px; }
+.card-detail .card-val { font-size:13px; }
+
+/* ── DAY (nostalgia): paper surfaces. Frame + foil unchanged — same tokens. ── */
+[data-theme="nostalgia"] .card-in   { background:linear-gradient(180deg,#fffdf5 0%,#efe4cb 100%); }
+[data-theme="nostalgia"] .card-art  { background:radial-gradient(ellipse at 46% 40%, color-mix(in srgb, var(--ink-a) 22%, #fffdf5) 0%, #efe4cb 82%); }
+[data-theme="nostalgia"] .card-tok  { color:#20160a; text-shadow:none; }
+[data-theme="nostalgia"] .card-col  { color:rgba(40,26,10,.60); }
+[data-theme="nostalgia"] .card-val  { color:#20160a; }
+[data-theme="nostalgia"] .card-plate{
+  background:linear-gradient(180deg, rgba(255,255,255,.62), rgba(0,0,0,.06));
+  border-top-color:rgba(80,55,20,.35);
+}
+
+/* ── the sleeve: translucent plastic pocket. This is what makes a grid read as a BINDER. ── */
+.card-sleeve {
+  position:relative; display:flex; padding:4px; border-radius:8px; aspect-ratio:5/7;
+  background:linear-gradient(160deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.03) 40%, rgba(255,255,255,.09) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16), inset 0 2px 6px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.06);
+}
+.card-sleeve::after {
+  content:""; position:absolute; inset:0; border-radius:8px; pointer-events:none; z-index:9;
+  background:linear-gradient(118deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 34%,
+    rgba(255,255,255,0) 66%, rgba(255,255,255,.10) 100%);
+}
+.card-sleeve > .card-frame { width:100%; aspect-ratio:auto; }
+[data-theme="nostalgia"] .card-sleeve {
+  background:linear-gradient(160deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.12) 40%, rgba(255,255,255,.30) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.5), inset 0 2px 6px rgba(60,40,15,.25);
+}
