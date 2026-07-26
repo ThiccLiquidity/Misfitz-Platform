@@ -4,7 +4,11 @@ import { listCollectionNfts } from "@/lib/data-sources/mintgarden/client";
 import type { MgPage, MgListItem } from "@/lib/data-sources/mintgarden/types";
 import { mapListItemTraits } from "@/lib/data-sources/mintgarden/map";
 import { buildRankEstimator } from "@/lib/rarity/estimateRank";
-import { cacheGetLarge, cachePutLargeAsync, keepAlive, tryLock } from "@/lib/db/nftCache";
+import { cacheGetLarge, cachePutLargeAsync, keepAlive, releaseLock, tryLock } from "@/lib/db/nftCache";
+
+// Hard budget for our own full-collection scan. The serverless function dies at 60s; stopping at 35s means
+// we return a PARTIAL tally (complete:false -> short TTL, retried) instead of being killed mid-scan.
+const RARITY_SCAN_BUDGET_MS = 35_000;
 import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +
@@ -82,18 +86,28 @@ async function build(colId: string): Promise<CollectionFrequency | null> {
 
   if (!items) {
     if (!(await tryLock(`rarity:${colId}`, 90))) return null; // someone else is scanning -> warming
+    // BOUNDED + RELEASED. This loop previously had no deadline and the lock was never released: on a large
+    // collection the scan outlived the 60s function, nothing was checkpointed, and the lock stayed held for
+    // its full 90s TTL - so every retry in that window returned null and the next attempt restarted from
+    // page 1, burning ~600 MintGarden requests each time and never converging.
+    const scanDeadline = Date.now() + RARITY_SCAN_BUDGET_MS;
     const scanned: MgListItem[] = [];
     let cursor: string | null | undefined = undefined;
-    do {
-      let page: MgPage<MgListItem> | null = null;
-      for (let attempt = 0; attempt < 3 && !page; attempt++) {
-        page = await listCollectionNfts(colId, cursor, PAGE, true, true).catch(() => null); // background + include_metadata
-        if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-      }
-      if (!page) { listComplete = false; break; }
-      for (const it of page.items ?? []) { if (scanned.length >= MAX_NFTS) break; if (it.id) scanned.push(it); }
-      cursor = page.next;
-    } while (cursor && scanned.length < MAX_NFTS);
+    try {
+      do {
+        let page: MgPage<MgListItem> | null = null;
+        for (let attempt = 0; attempt < 3 && !page; attempt++) {
+          page = await listCollectionNfts(colId, cursor, PAGE, true, true).catch(() => null); // background + include_metadata
+          if (!page && attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        }
+        if (!page) { listComplete = false; break; }
+        for (const it of page.items ?? []) { if (scanned.length >= MAX_NFTS) break; if (it.id) scanned.push(it); }
+        cursor = page.next;
+        if (Date.now() > scanDeadline) { listComplete = false; break; } // partial tally beats a killed function
+      } while (cursor && scanned.length < MAX_NFTS);
+    } finally {
+      await releaseLock(`rarity:${colId}`); // let the next invocation resume immediately, not after the TTL
+    }
     items = scanned;
   }
   if (!items || items.length === 0) return null;

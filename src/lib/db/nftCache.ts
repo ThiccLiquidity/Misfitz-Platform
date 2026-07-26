@@ -257,6 +257,7 @@ async function redisPutLargeB64(key: string, b64: string, exSeconds: number): Pr
     }
     await r.set(`tf:kvz:${key}`, { v: JSON.stringify({ g, shards, len: b64.length }), t: Date.now() }, { ex: exSeconds });
   }
+  _notePut(`tf:kvz:${key}`, b64.length); // count the FULL payload; without this every kvz write reported 0 bytes
 }
 async function redisGetLargeB64(key: string, ttlMs: number): Promise<string | null> {
   const man = await redisGet(`tf:kvz:${key}`, ttlMs);
@@ -273,7 +274,7 @@ async function redisGetLargeB64(key: string, ttlMs: number): Promise<string | nu
       const parts: string[] = [];
       let ok = true;
       for (const o of vals) { if (o && typeof o.v === "string") parts.push(o.v); else { ok = false; break; } }
-      if (ok) joined = parts.join("");
+      if (ok) { joined = parts.join(""); _noteGet(`tf:kvz:${key}`, joined.length); } // sharded reads were counted as ~60 bytes
     }
   }
   if (joined != null && (typeof m.len !== "number" || joined.length === m.len)) return joined;
@@ -329,7 +330,13 @@ export async function tryLock(key: string, ttlS: number): Promise<boolean> {
     if (!r) return true;
     const ok = await r.set(`tf:lock:${key}`, { t: Date.now() }, { nx: true, ex: ttlS });
     return ok === "OK" || ok === true;
-  } catch { return true; }
+  } catch {
+    // FAIL CLOSED on a Redis ERROR. This used to return true, which meant that the moment Redis got slow or
+    // rate-limited, every instance believed it held the lock and started the same full collection scan at
+    // once - the exact 429 storm this lock exists to prevent. Callers already handle 'lock lost' by serving
+    // the warming state. (Redis simply NOT CONFIGURED still returns true above, so local dev is unaffected.)
+    return false;
+  }
 }
 
 // -- Diagnostic (safe to expose): reports whether the shared Redis layer is actually working in the

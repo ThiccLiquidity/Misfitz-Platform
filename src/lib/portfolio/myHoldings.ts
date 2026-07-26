@@ -44,11 +44,15 @@ const EMPTY: MyHoldings = {
   collections: [], addresses: [], truncated: false, warming: false, demo: false,
 };
 
-// Chunk the roster for the /api/holdings poll so a 10k-card reply stays under Vercel's ~4.5MB response cap.
-// CRITICAL correctness rule: while `warming` the roster is UNSTABLE (per-address segments grow independently),
-// so a positional index into it is meaningless — we only ever serve the stable first chunk (the client REPLACES
-// it each poll, never shrinking). Once the scan is COMPLETE the full roster is stable, so we page it by index
-// from `have` and the client APPENDS. `done` = the client has everything after merging this response.
+// NOTE (audit 2026-07): the POST /api/holdings route that used pageRoster was removed — it was the
+// server-checkpointed ancestor of /api/holdings/page, where the BROWSER now drives the cursor loop.
+// pageRoster is therefore PRODUCTION-DEAD but still exercised by tests/portfolio/largeWallet.test.ts,
+// so it is kept until you decide whether that coverage goes with it.
+// Chunk the roster so a 10k-card reply stays under Vercel's ~4.5MB response cap.
+// CRITICAL correctness rule: while `warming` the roster is UNSTABLE (per-address segments grow
+// independently), so a positional index into it is meaningless — we only ever serve the stable first
+// chunk (the client REPLACES it each poll, never shrinking). Once the scan is COMPLETE the full roster
+// is stable, so we page it by index from `have` and the client APPENDS.
 export const ROSTER_CHUNK = 1200; // ~1-2KB/card -> well under 4.5MB
 export function pageRoster(all: NftData[], warming: boolean, have: number, chunk = ROSTER_CHUNK): { nfts: NftData[]; rosterCount: number; chunkStart: number; done: boolean } {
   const rosterCount = all.length;

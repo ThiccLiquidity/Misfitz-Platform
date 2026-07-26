@@ -70,10 +70,15 @@ const MARKET_FETCH_TIMEOUT_MS = 12000;
 async function tfetch(url: string, init?: RequestInit, timeoutMs = MARKET_FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // NOTE: the timer is deliberately NOT cleared on success. clearTimeout in a finally here fired as soon as
+  // response HEADERS arrived, so an upstream that sent 200 OK and then stalled the BODY hung with no ceiling
+  // until the whole Vercel function was killed. Leaving the abort armed for the full window covers body read
+  // too; aborting an already-consumed response is a no-op.
   try {
     return await fetch(url, { cache: "no-store", ...init, signal: controller.signal });
-  } finally {
+  } catch (e) {
     clearTimeout(timer);
+    throw e;
   }
 }
 
@@ -340,36 +345,8 @@ export async function fetchMarketContext(
   };
 }
 
-// ── NFT offer file (for "copy offer") ─────────────────────────────────────────
-// The active Dexie offer for a listed NFT carries the full `offer1...` string a buyer pastes into
-// their wallet to accept the trade. We surface it for copy (never execute the trade ourselves).
-// Cached 2 min. Returns null for non-nft1 ids, when nothing is listed on Dexie, or on error.
-export async function fetchNftOffer(launcherId: string): Promise<{ offer: string; priceXch: number } | null> {
-  if (!launcherId.startsWith("nft1")) return null;
-  return withCache(`offerfile_${launcherId}`, 2 * 60_000, async () => {
-    try {
-      const url = new URL(`${DEXIE_BASE}/offers`);
-      url.searchParams.set("status", "0");          // active
-      url.searchParams.set("offered", launcherId);
-      url.searchParams.set("sort", "price_asc");    // cheapest active offer
-      url.searchParams.set("page_size", "5");
-      const res = await tfetch(url.toString());
-      if (!res.ok) return null;
-      const json = (await res.json()) as {
-        offers?: { offer?: string; price?: number; requested?: { id?: string }[] }[];
-      };
-      // Prefer an offer that requests XCH (a plain sale), cheapest first.
-      const o =
-        (json?.offers ?? []).find(
-          (of) => typeof of.offer === "string" && (of.requested ?? []).some((r) => r.id === "xch"),
-        ) ?? (json?.offers ?? []).find((of) => typeof of.offer === "string");
-      if (!o || typeof o.offer !== "string") return null;
-      return { offer: o.offer, priceXch: typeof o.price === "number" ? o.price : 0 };
-    } catch {
-      return null;
-    }
-  });
-}
+// (Removed: fetchNftOffer + the /api/offer route it backed. Nothing called either — NftDetailModal
+// links straight out to dexie.space/offers/{id}. Audit 2026-07.)
 
 // ── Collection active offers (for accurate shop listings + multi-asset detection) ──────────────
 // Dexie's offers carry the FULL requested-asset list, so we can tell a clean NFT-for-XCH listing from

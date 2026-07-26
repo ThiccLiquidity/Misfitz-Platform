@@ -47,7 +47,10 @@ export async function stampCardsFromArtifacts(
   opts: { budgetMs?: number; maxCols?: number } = {},
 ): Promise<{ coldCols: string[]; asOf: number | null }> {
   const deadline = Date.now() + (opts.budgetMs ?? 3500);
-  const maxCols = opts.maxCols ?? 40;
+  // 10, not 40: the budget check below runs inside a Promise.all, so every collection evaluates the deadline
+  // at t=0 and passes - the budget bounds nothing. 40 collections = ~55MB of roster+index reads in a single
+  // SSR. The overflow is reported as coldCols, which the client already enriches progressively.
+  const maxCols = opts.maxCols ?? 10;
 
   // Group held cards by col1 collection; seeds are authoritative (applySeedOverlay ran first) — skip them.
   const byCol = new Map<string, NftData[]>();

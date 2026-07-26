@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\" \"src/**/__tests__/*.test.mjs\"",
     "backtest": "tsx scripts/backtest-valuation.ts",
     "bot": "tsx src/lib/rewards/botCli.ts"
   },

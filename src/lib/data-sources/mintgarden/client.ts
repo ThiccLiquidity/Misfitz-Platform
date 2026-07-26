@@ -173,7 +173,13 @@ function slimNftDetail(d: MgNftDetail): MgNftDetail {
       sensitive_content: c.sensitive_content ?? null,
     },
     openrarity_rank: d.openrarity_rank ?? null,
-    events: (d.events ?? []).map((e) => ({
+    // Only PRICED events are ever read (sale history, comps, last-sale, deal detection). Unpriced
+    // transfers/mints were ~38% of every stored detail. Keep the most recent 20 priced events - every
+    // consumer already caps at 20 or takes the latest. Pure bandwidth cut, no behaviour change.
+    events: (d.events ?? [])
+      .filter((e) => (e?.xch_price ?? 0) > 0)
+      .slice(-20)
+      .map((e) => ({
       type: e?.type ?? null,
       timestamp: e?.timestamp ?? null,
       xch_price: e?.xch_price ?? null,
@@ -203,7 +209,8 @@ export function getNftDetail(nftId: string, background = false, bulk = false, sk
         return d;
       } catch (e) {
         lastErr = e;
-        await new Promise((r) => setTimeout(r, Math.min(3_000, 400 * 2 ** attempt))); // exp backoff for transient 429s/timeouts
+        // no sleep after the LAST attempt - it just burned 1.6s of function time per permanently-dead id
+        if (attempt < 2) await new Promise((r) => setTimeout(r, Math.min(3_000, 400 * 2 ** attempt))); // exp backoff for transient 429s/timeouts
       }
     }
     throw lastErr;

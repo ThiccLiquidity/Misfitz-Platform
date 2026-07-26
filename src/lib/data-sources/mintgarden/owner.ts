@@ -79,7 +79,10 @@ interface CachedListings { items: MgListItem[]; collections: [string, MgCollecti
 // it that way. BOUNDED: capped + expired entries evicted so a lambda serving many wallets can't retain whale
 // rosters (tens of MB each) forever.
 const _holdMemo = new Map<string, { value: CachedListings; at: number }>();
-const HOLD_MEMO_MS = 45_000;
+// 5min, not 45s: the Redis read this memoizes already serves data up to HOLDINGS_TTL (30min) old, so a
+// longer memo changes worst-case staleness from 30m45s to 35m while cutting whole-roster re-reads ~6.7x.
+// The user-facing Refresh path passes fresh:true and bypasses the memo entirely.
+const HOLD_MEMO_MS = 5 * 60_000;
 const HOLD_MEMO_CAP = 8;
 function holdMemoPut(key: string, value: CachedListings): void {
   if (_holdMemo.size >= HOLD_MEMO_CAP && !_holdMemo.has(key)) {

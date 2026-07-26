@@ -7,11 +7,16 @@ import { isRewardsShadowEnabled } from "@/lib/rewards/flag";
 import { MISFITZ_COLLECTION_ID } from "@/lib/rewards/consts";
 import { RewardsDashboard } from "@/components/rewards/RewardsDashboard";
 import { opsSecretMatches } from "@/lib/rewards/opsAuth";
+import { isCollectionId } from "@/lib/chia/ids";
 
 // Live collection binder — the same binder experience as a wallet, but for a whole collection.
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  // Validate BEFORE fetching. generateMetadata runs ahead of the page body's own col1 guard, so every hit to
+  // /collection/<junk> was a force-dynamic SSR that fired a MintGarden request and permanently added a
+  // col_<junk> entry to an unbounded in-process cache.
+  if (!isCollectionId(params.id)) return { title: "Collection" };
   const col = await getCollection(params.id).catch(() => null); // TTL-cached; reused by the page render
   if (!col) return { title: "Collection" };
   const name = col.name ?? "Collection";

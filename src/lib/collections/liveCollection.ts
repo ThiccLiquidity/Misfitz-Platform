@@ -461,7 +461,10 @@ export interface SaleFeedItem {
 
 export async function getCollectionRecentSales(id: string, cards: NftData[], limit = 25): Promise<SaleFeedItem[]> {
   if (!id.startsWith("col1")) return [];
-  const sales = await fetchCollectionCompletedSales(id).catch(() => [] as CompletedSale[]);
+  // cacheOnly: the rail is display-only and this flag was built for it ("adds zero upstream load") but was
+  // never actually passed - so a cold collection ran a blocking 30-page Dexie scan here, AFTER the roster
+  // scan had already spent 35s of the 60s function budget. That is the cold-collection 504.
+  const sales = await fetchCollectionCompletedSales(id, 30, { cacheOnly: true }).catch(() => [] as CompletedSale[]);
   if (!sales.length) return [];
   const byId = new Map(cards.map((c) => [c.id.toLowerCase(), c])); // CompletedSale.id (hex) == card.id (hex)
   const items: SaleFeedItem[] = [];

@@ -2,14 +2,22 @@ import { NextResponse } from "next/server";
 import { readValueIndex, vidxIsFresh } from "@/lib/valuation/valueIndex";
 import { getAllCollectionCards } from "@/lib/collections/liveCollection";
 import { keepAlive } from "@/lib/db/nftCache";
+import { isCollectionId } from "@/lib/chia/ids";
 
 // Per-instance throttle: a "pending"/stale collection should not re-kick the (multi-MB) getAllCollectionCards
 // build on EVERY poll — once per 5 min per collection is plenty and slashes repeated roster/vidx reads.
+// BOUNDED: this map used to grow by up to 60 entries per request with caller-supplied keys and never
+// evicted - a warm lambda could be pushed to OOM by posting junk collection ids. Oldest-first eviction.
 const _lastKick = new Map<string, number>();
+const KICK_CAP = 500;
 function shouldKick(colId: string): boolean {
   const now = Date.now();
   const last = _lastKick.get(colId) ?? 0;
   if (now - last < 5 * 60_000) return false;
+  if (_lastKick.size >= KICK_CAP && !_lastKick.has(colId)) {
+    const oldest = _lastKick.keys().next().value;
+    if (oldest !== undefined) _lastKick.delete(oldest);
+  }
   _lastKick.set(colId, now);
   return true;
 }
@@ -27,7 +35,9 @@ export async function POST(req: Request) {
   let body: { cols?: Record<string, unknown> };
   try { body = await req.json(); } catch { return NextResponse.json({ values: {}, pending: [] }); }
   const cols = body.cols && typeof body.cols === "object" ? (body.cols as Record<string, unknown>) : {};
-  const colIds = Object.keys(cols).filter((c) => c.startsWith("col1")).slice(0, 60);
+  // Shape-validate before anything dispatches work: a bare startsWith("col1") let "col1" + any junk
+  // through, and each miss kicked a full background collection scan via keepAlive.
+  const colIds = Object.keys(cols).filter(isCollectionId).slice(0, 60);
 
   const values: Record<string, ValueEntry> = {};
   const pending: string[] = [];

@@ -26,3 +26,6 @@ tsconfig.tsbuildinfo
 bot-config.json
 bot-ledger.json
 bot-ledger.json.tmp
+
+# Quarantine for files removed from the tree (this session's sandbox cannot rm)
+_to_delete/

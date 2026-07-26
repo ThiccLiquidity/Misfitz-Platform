@@ -4,6 +4,7 @@ import { enrichNftsByIds } from "@/lib/portfolio/service";
 import { isSeeded, getSeed } from "@/lib/data-sources/seed/registry";
 import { fetchXchUsdRate, XCH_USD_FALLBACK } from "@/lib/market/dexie";
 import type { NftData } from "@/types";
+import { isCollectionId } from "@/lib/chia/ids";
 
 // Debug: GET /api/nft-debug[?col=col1...] -> the ACTUAL shape of a Misfitz card as produced by (a) the
 // collection path (getAllCollectionCards) and (b) the wallet/enrichment path (enrichNftsByIds), so we can
@@ -26,7 +27,12 @@ function slim(n: NftData | null | undefined) {
 }
 
 export async function GET(req: Request) {
-  const col = new URL(req.url).searchParams.get("col") ?? MISFITZ;
+  // Dev-only, matching the gate already used by /comps-status and /api/rewards/dev-compute. This route runs
+  // getAllCollectionCards() on a caller-supplied collection id with maxDuration 60 - an unauthenticated
+  // full-collection scan trigger, which is exactly what /api/warm is CRON_SECRET-gated to prevent.
+  if (process.env.NODE_ENV === "production") return NextResponse.json({ error: "not found" }, { status: 404 });
+  const colParam = new URL(req.url).searchParams.get("col");
+  const col = colParam && isCollectionId(colParam) ? colParam : MISFITZ;
   const seed = await getSeed(col).catch(() => null);
   const all = await getAllCollectionCards(col).catch(() => null);
   const cards = all?.nfts ?? [];

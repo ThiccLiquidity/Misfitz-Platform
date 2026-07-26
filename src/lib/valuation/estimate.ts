@@ -10,7 +10,10 @@ import type { FairValueEstimate } from "@/types";
 // dynamic trait-demand/reputation signal, which needs the sales-history feed.
 // ──────────────────────────────────────────────────────────────────────────
 
-function round(value: number, decimals = 2): number {
+// XCH amounts are rounded to 6dp, NOT 2dp. Many Chia collections floor below 0.01 XCH; at 2dp a
+// 0.004 floor rounded to 0, every premium multiplied to 0, and the whole collection was persisted
+// into the value index as "0 XCH" for 24h. USD is rounded to 2dp explicitly at the call site.
+function round(value: number, decimals = 6): number {
   const f = 10 ** decimals;
   return Math.round(value * f) / f;
 }
@@ -89,7 +92,7 @@ export function estimateFairValue(input: EstimateInput): FairValueEstimate | nul
     demandPremium: null,
     rewardValue: null,
     totalEstimate,
-    totalEstimateUsd: round(totalEstimate * xchUsdRate),
+    totalEstimateUsd: round(totalEstimate * xchUsdRate, 2),
     estimatedAt: new Date().toISOString(),
   };
 }
