@@ -165,17 +165,6 @@ export function SoldShowcase({ sale, onClose }: { sale: SoldShowcaseData; onClos
   // One-click share to the user's OWN X account: opens X's compose window pre-filled with a caption + a link
   // to a share page whose OG image IS this exact SOLD card, so X unfurls the branded card. No login/OAuth on
   // our side (stays no-login) — the user just hits Post. The Save/Copy buttons remain for the full-res image.
-  const shareToX = () => {
-    // CLEAN share link: just /s/<launcherId>. The share page fetches the sale server-side from that id and
-    // emits OG/Twitter-card metadata whose image IS this SOLD card, so X unfurls the branded card — no giant
-    // query string in the tweet. Caption stays short (name + price + rank). No OAuth: user hits Post themself.
-    const text = `${sale.name} sold for ${formatXch(sale.priceXch)}${tier.rank ? ` \u00b7 Rank #${tier.rank}` : ""} on Traitfolio \u25c8`;
-    const params = new URLSearchParams({ text });
-    if (sale.launcherId) params.set("url", `${window.location.origin}/s/${sale.launcherId}`);
-    const intent = `https://x.com/intent/post?${params.toString()}`;
-    window.open(intent, "_blank", "noopener,noreferrer");
-  };
-
   const render = async (): Promise<Blob | null> => {
     const art = await loadArt(sale.imageUrl);
     const canvas = drawCard(sale, tier, { usd, dateAbs, chips }, art);
@@ -287,10 +276,6 @@ export function SoldShowcase({ sale, onClose }: { sale: SoldShowcaseData; onClos
 
         {/* ── Chrome (outside the frame) ── */}
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <button type="button" onClick={shareToX} className={btn}
-            style={{ background: "#000", border: "1px solid rgba(255,255,255,0.3)", color: "#fff" }}>
-            Share to X
-          </button>
           <button type="button" onClick={saveImage} disabled={busy !== null} className={btn}
             style={{ background: "linear-gradient(180deg,#ffe577,#e8b800)", border: "1px solid rgba(150,110,0,0.55)", color: "#241200" }}>
             {busy === "save" ? "Saving…" : done === "save" ? "Saved ✓" : "Save image"}
