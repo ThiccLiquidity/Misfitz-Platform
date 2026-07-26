@@ -1,19 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // Global footer. Carries the estimate/legal disclaimer (important: Traitfolio publishes VALUE ESTIMATES
 // and links out to marketplaces) plus light wayfinding. Kept factual and non-advisory.
 export function Footer() {
-  const { mode } = useThemeMode();
-  const isLight = mode === "light";
   const year = new Date().getFullYear();
-  const border = isLight ? "1px solid rgba(41,128,200,0.18)" : "1px solid rgba(184,146,63,0.22)";
+  const border = "1px solid rgba(184,146,63,0.22)";
   return (
     <footer
       className="tf-sitefoot mt-10 px-4 py-8 md:px-8"
-      style={{ borderTop: border, background: isLight ? "rgba(255,255,255,0.6)" : "rgba(10,6,2,0.6)" }}
+      style={{ borderTop: border, background: "rgba(10,6,2,0.6)" }}
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">

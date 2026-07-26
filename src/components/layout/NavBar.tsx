@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import { useThemeMode } from "@/components/theme/ThemeProvider";
 import { Wordmark } from "@/components/brand/Wordmark";
 
 // Top nav. The product is no-login (paste/save wallets locally), so the bar is just wayfinding:
@@ -16,19 +15,17 @@ const LINKS = [
 ];
 
 export function NavBar() {
-  const { mode } = useThemeMode();
-  const isLight = mode === "light";
   const pathname = usePathname();
-  const linkColor = isLight ? "#2d5a8e" : "var(--subtle)";
-  const activeColor = isLight ? "#0a1e38" : "var(--title)";
+  const linkColor = "var(--subtle)";
+  const activeColor = "var(--title)";
 
   return (
     <header
       className="tf-navbar flex items-center justify-between gap-2 px-3 py-2.5 md:px-8 md:py-3"
       style={{
-        background: isLight ? "#ffffff" : "rgba(10, 6, 2, 0.85)",
-        borderBottom: isLight ? "1px solid rgba(41, 128, 200, 0.18)" : "1px solid rgba(184, 146, 63, 0.35)",
-        boxShadow: isLight ? "0 1px 12px rgba(0, 80, 160, 0.08)" : "0 1px 0 rgba(255,255,255,0.04)",
+        background: "rgba(10, 6, 2, 0.85)",
+        borderBottom: "1px solid rgba(184, 146, 63, 0.35)",
+        boxShadow: "0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
       <Link href="/" className="flex min-w-0 items-center gap-2 transition hover:opacity-80" aria-label="Traitfolio home">

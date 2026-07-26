@@ -62,7 +62,7 @@ export function NftDetailModal({
 }: NftDetailModalProps) {
   const { mode } = useThemeMode();
   const router = useRouter();
-  const isLight = mode !== "dark" && mode !== "nostalgia-night"; // light + nostalgia(day) = light; dark + night = dark
+  const isLight = mode !== "nostalgia-night"; // nostalgia (day) = light surfaces; nostalgia-night = dark
   const [lightbox, setLightbox] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   // Derive the XCH->USD rate the coach needs (the modal gets no rate prop) from the fair-value pair.

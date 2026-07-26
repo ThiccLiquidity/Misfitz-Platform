@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { useSavedWallets } from "@/lib/portfolio/useSavedWallets";
 import { parseOwnerIds } from "@/lib/wallet/ownerId";
-import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // No-login profile bar for the binder. Paste one or many xch1…/did:chia… ids, see them as removable
 // chips. The loaded set lives in the URL (?address=a,b,c) so it stays shareable and server-rendered.
@@ -19,8 +18,6 @@ function shortId(id: string) {
 export function WalletProfileBar({ loaded }: { loaded: string[] }) {
   const router = useRouter();
   const { wallets: saved, hydrated, save, clear } = useSavedWallets();
-  const { mode } = useThemeMode();
-  const isLight = mode === "light";
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
@@ -95,7 +92,7 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
         </span>
         {loaded.length > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold" style={{ color: isLight ? "#1a7f3c" : "#34d399" }}>
+            <span className="text-[11px] font-semibold" style={{ color: "#34d399" }}>
               ✓ Saved on this device
             </span>
             <button type="button" onClick={forget} className="text-[11px] font-semibold text-subtle underline hover:opacity-80">
@@ -126,7 +123,7 @@ export function WalletProfileBar({ loaded }: { loaded: string[] }) {
       </div>
 
       {error && (
-        <p className="mt-2 text-[12px] font-semibold" style={{ color: isLight ? "#aa1111" : "#f87171" }}>
+        <p className="mt-2 text-[12px] font-semibold" style={{ color: "#f87171" }}>
           {error}
         </p>
       )}

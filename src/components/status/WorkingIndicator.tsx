@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useThemeMode } from "@/components/theme/ThemeProvider";
 
 // A consistent, always-visible "the site is working" bar. Fixed to the bottom so it shows on any
 // data-heavy view whenever we're loading a collection, streaming per-NFT traits/ranks, or warming a
@@ -18,8 +17,6 @@ export function WorkingIndicator({
   label: string;
   progress?: number;
 }) {
-  const { mode } = useThemeMode();
-  const isLight = mode === "light";
   // Linger briefly after work stops so the quick gaps BETWEEN enrichment batches don't flicker it in and
   // out. The last label/progress are held during the linger.
   const [visible, setVisible] = useState(active);
@@ -34,9 +31,9 @@ export function WorkingIndicator({
   const hasPct = typeof shown.progress === "number";
   const pct = hasPct ? Math.round(Math.max(0, Math.min(1, shown.progress as number)) * 100) : null;
 
-  const accent = isLight ? "#2980c8" : "#f0c040";
-  const accent2 = isLight ? "#5ab0e8" : "#ffe08a";
-  const track = isLight ? "rgba(41,128,200,0.16)" : "rgba(240,192,64,0.16)";
+  const accent = "#f0c040";
+  const accent2 = "#ffe08a";
+  const track = "rgba(240,192,64,0.16)";
 
   return (
     <div
@@ -53,9 +50,9 @@ export function WorkingIndicator({
       <div
         className="flex flex-col gap-2 rounded-2xl px-4 py-3 shadow-2xl"
         style={{
-          background: isLight ? "rgba(255,255,255,0.97)" : "rgba(20,16,10,0.97)",
-          border: `1.5px solid ${isLight ? "rgba(41,128,200,0.5)" : "rgba(240,192,64,0.5)"}`,
-          color: isLight ? "#0a1e38" : "#f0d9a0",
+          background: "rgba(20,16,10,0.97)",
+          border: "1.5px solid rgba(240,192,64,0.5)",
+          color: "#f0d9a0",
         }}
       >
         <div className="flex items-center justify-between gap-3">

@@ -9,7 +9,7 @@ import type { ThemeMode } from "@/types";
 interface ThemeContextValue { mode: ThemeMode; toggle: () => void; setTheme: (m: ThemeMode) => void; }
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = "chia-collector-theme-mode";
-const isNight = (m: ThemeMode) => m === "nostalgia-night" || m === "dark";
+const isNight = (m: ThemeMode) => m === "nostalgia-night";
 // Any stored/legacy value -> one of the two live themes. Night: old "dark" + "nostalgia-night". Day: rest.
 const normalize = (m: string | null): ThemeMode => (m === "nostalgia-night" || m === "dark") ? "nostalgia-night" : "nostalgia";
 

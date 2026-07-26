@@ -223,12 +223,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
                 the flipper, riding in right-area at z-100, passes over during animation. */}
             <div
               className="hidden md:flex w-12 flex-col justify-evenly items-center flex-shrink-0 relative z-[3]"
-              style={mode === "light" ? {
-                background: "linear-gradient(90deg, #0a2040 0%, #1a3f70 25%, #102e58 50%, #1a3f70 75%, #0a2040 100%)",
-                boxShadow:
-                  "inset 4px 0 12px rgba(0,20,60,0.5), inset -4px 0 12px rgba(0,20,60,0.5), " +
-                  "3px 0 14px rgba(0,20,60,0.3), -3px 0 14px rgba(0,20,60,0.3)",
-              } : {
+              style={{
                 background: "linear-gradient(90deg, #171009 0%, #332417 25%, #281c10 50%, #332417 75%, #171009 100%)",
                 boxShadow:
                   "inset 4px 0 12px rgba(0,0,0,0.6), inset -4px 0 12px rgba(0,0,0,0.6), " +
@@ -239,17 +234,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
                 <div
                   key={i}
                   className="relative flex items-center justify-center"
-                  style={mode === "light" ? {
-                    width: 30, height: 30,
-                    borderRadius: "50%",
-                    background: "radial-gradient(circle at 32% 28%, #5090d0 0%, #2060a0 40%, #0a2040 100%)",
-                    border: "1.5px solid rgba(100,180,255,0.35)",
-                    boxShadow:
-                      "0 3px 10px rgba(0,20,60,0.7), " +
-                      "0 1px 0 rgba(120,180,255,0.25), " +
-                      "inset 0 1px 3px rgba(120,200,255,0.3), " +
-                      "inset 0 -2px 4px rgba(0,20,60,0.5)",
-                  } : {
+                  style={{
                     width: 30, height: 30,
                     borderRadius: "50%",
                     background: "radial-gradient(circle at 32% 28%, #b89860 0%, #6a5228 40%, #241a0e 100%)",
@@ -262,13 +247,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
                   }}
                 >
                   <div
-                    style={mode === "light" ? {
-                      width: 12, height: 12,
-                      borderRadius: "50%",
-                      background: "radial-gradient(circle at 40% 35%, #3070b0, #0a2040)",
-                      border: "1px solid rgba(0,20,60,0.8)",
-                      boxShadow: "inset 0 1px 5px rgba(0,20,60,1), 0 0 0 1px rgba(100,180,255,0.1)",
-                    } : {
+                    style={{
                       width: 12, height: 12,
                       borderRadius: "50%",
                       background: "radial-gradient(circle at 40% 35%, #444, #111)",

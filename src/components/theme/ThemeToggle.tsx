@@ -3,7 +3,7 @@
 import type { ThemeMode } from "@/types";
 import { useThemeMode } from "./ThemeProvider";
 
-const isNight = (m: ThemeMode) => m === "nostalgia-night" || m === "dark";
+const isNight = (m: ThemeMode) => m === "nostalgia-night";
 
 // Two-option Day / Night switch (the two current themes). Shows the current mode; click flips it.
 export function ThemeToggle() {

@@ -1,6 +1,5 @@
 "use client";
 
-import { useThemeMode } from "@/components/theme/ThemeProvider";
 import type { HeldCollection } from "@/lib/portfolio/myHoldings";
 
 // Right-side collection picker for Your Binder â mirrors the collection page's switcher, but filters
@@ -43,9 +42,6 @@ export function BinderCollectionPicker({
   hiddenIds: Set<string>;
   onToggleHide: (id: string) => void;
 }) {
-  const { mode } = useThemeMode();
-  const isLight = mode === "light";
-
   const visible = collections.filter((c) => !hiddenIds.has(c.id));
   const hidden = collections.filter((c) => hiddenIds.has(c.id));
 
@@ -88,9 +84,9 @@ export function BinderCollectionPicker({
             title="Hide from binder"
             aria-label={`Hide ${name} from binder`}
             className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
-            style={{ background: isLight ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.45)" }}
+            style={{ background: "rgba(0,0,0,0.45)" }}
           >
-            <EyeIcon off={false} color={isLight ? "#6b8db0" : "rgba(255,255,255,0.6)"} />
+            <EyeIcon off={false} color="rgba(255,255,255,0.6)" />
           </button>
         )}
       </div>
@@ -107,7 +103,7 @@ export function BinderCollectionPicker({
       </div>
 
       {hidden.length > 0 && (
-        <div className="mt-2 border-t pt-2" style={{ borderColor: isLight ? "rgba(41,128,200,0.25)" : "rgba(201,162,39,0.18)" }}>
+        <div className="mt-2 border-t pt-2" style={{ borderColor: "rgba(201,162,39,0.18)" }}>
           <div className="text-subtle mb-1.5 text-[10px] font-semibold uppercase tracking-widest">
             Hidden · {hidden.length}
           </div>
@@ -126,9 +122,9 @@ export function BinderCollectionPicker({
                   title="Show in binder"
                   aria-label={`Show ${c.name} in binder`}
                   className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/10"
-                  style={{ border: isLight ? "1px solid rgba(41,128,200,0.3)" : "1px solid rgba(201,162,39,0.25)" }}
+                  style={{ border: "1px solid rgba(201,162,39,0.25)" }}
                 >
-                  <EyeIcon off color={isLight ? "#6b8db0" : "rgba(255,255,255,0.55)"} />
+                  <EyeIcon off color="rgba(255,255,255,0.55)" />
                 </button>
               </div>
             ))}

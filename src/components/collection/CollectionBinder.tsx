@@ -14,7 +14,6 @@ import { WorkingIndicator } from "@/components/status/WorkingIndicator";
 import { FreshnessBadge } from "@/components/common/FreshnessBadge";
 import { tierIdForPercentile } from "@/lib/rarity/tiers";
 import { formatXch, formatUsd, formatXchShort, formatUsdShort } from "@/lib/format";
-import { useThemeMode } from "@/components/theme/ThemeProvider";
 import { computeDealScore } from "@/lib/rarity/enrich";
 import type { CollectionView } from "@/lib/collections/liveCollection";
 import { tangFor, TANG_DISCORD_URL } from "@/lib/tang/tang";
@@ -40,8 +39,6 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
   const [hotTraits, setHotTraits] = useState<{ type: string; value: string; ratio: number }[]>([]);
   const [recentSales, setRecentSales] = useState<SaleFeedItem[]>([]);
   const [soldSale, setSoldSale] = useState<SaleFeedItem | null>(null);
-  const { mode: themeMode } = useThemeMode();
-  const statLight = themeMode === "light";
   const [fullLoaded, setFullLoaded] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [indexing, setIndexing] = useState(view.totalSupply > view.nfts.length);
@@ -384,9 +381,9 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
             </div>
             <div className="text-subtle mt-0.5 text-xs">
               {view.totalSupply.toLocaleString()} items
-              {fullLoaded && capped && <span style={{ color: statLight ? "#047857" : "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
+              {fullLoaded && capped && <span style={{ color: "#fcd34d" }}> · showing rarest {nfts.length.toLocaleString()}</span>}
             </div>
-            {fullLoaded && !warming && <div className="mt-1.5"><FreshnessBadge asOf={valuesAsOf} light={statLight} /></div>}
+            {fullLoaded && !warming && <div className="mt-1.5"><FreshnessBadge asOf={valuesAsOf} /></div>}
           </div>
         </div>
 
@@ -406,19 +403,19 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
               key={st.label}
               className={`tf-colstat${st.hero ? " tf-colstat--hero" : ""} rounded-xl px-4 py-2.5`}
               style={st.hero
-                ? { background: "color-mix(in srgb, var(--gold) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--gold) 35%, transparent)", boxShadow: statLight ? undefined : "inset 0 0 24px rgba(255,224,106,0.07)" }
+                ? { background: "color-mix(in srgb, var(--gold) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--gold) 35%, transparent)", boxShadow: "inset 0 0 24px rgba(255,224,106,0.07)" }
                 : { background: "color-mix(in srgb, var(--card-border) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--card-border) 25%, transparent)" }}
             >
-              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: st.hero ? (statLight ? "#047857" : "var(--gold)") : (statLight ? "#33566e" : "#e8cf94") }}>{st.label}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: st.hero ? "var(--gold)" : "#e8cf94" }}>{st.label}</div>
               <div className={`font-black leading-tight ${st.hero ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"} tabular-nums`} style={{ color: st.hero ? "var(--gold)" : "var(--title)" }}>{st.xch}</div>
-              {st.usd && <div className="mt-0.5 text-[13px] font-semibold" style={{ color: statLight ? "#4a6a8a" : "#d9c896" }}>{st.usd}</div>}
+              {st.usd && <div className="mt-0.5 text-[13px] font-semibold" style={{ color: "#d9c896" }}>{st.usd}</div>}
             </div>
           ))}
         </div>
       </div>
 
 
-      <RecentSalesRail sales={recentSales} light={statLight} onOpen={setSoldSale} />
+      <RecentSalesRail sales={recentSales} onOpen={setSoldSale} />
 
       {soldSale && (
         <SoldShowcase
