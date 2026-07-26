@@ -40,6 +40,10 @@ async function readRosterMap(colId: string): Promise<Map<string, MgListItem> | n
   return value;
 }
 
+// How many collections' artifacts to read concurrently per wave. Enough parallelism to stay fast on a
+// big wallet, small enough that the time budget is re-checked often.
+const STAMP_WAVE = 6;
+
 export async function stampCardsFromArtifacts(
   cards: NftData[],
   collections: Map<string, MgCollection>,
@@ -47,10 +51,7 @@ export async function stampCardsFromArtifacts(
   opts: { budgetMs?: number; maxCols?: number } = {},
 ): Promise<{ coldCols: string[]; asOf: number | null }> {
   const deadline = Date.now() + (opts.budgetMs ?? 3500);
-  // 10, not 40: the budget check below runs inside a Promise.all, so every collection evaluates the deadline
-  // at t=0 and passes - the budget bounds nothing. 40 collections = ~55MB of roster+index reads in a single
-  // SSR. The overflow is reported as coldCols, which the client already enriches progressively.
-  const maxCols = opts.maxCols ?? 10;
+  const maxCols = opts.maxCols ?? 40;
 
   // Group held cards by col1 collection; seeds are authoritative (applySeedOverlay ran first) — skip them.
   const byCol = new Map<string, NftData[]>();
@@ -67,7 +68,7 @@ export async function stampCardsFromArtifacts(
   const coldCols: string[] = [];
   let asOf: number | null = null;
 
-  await Promise.all(colIds.map(async (colId) => {
+  const stampOne = async (colId: string) => {
     if (Date.now() > deadline) { coldCols.push(colId); return; }
     const roster = await readRosterMap(colId);
     if (!roster) { coldCols.push(colId); return; }
@@ -127,7 +128,19 @@ export async function stampCardsFromArtifacts(
         card.fairValue = estimateFairValue({ floorXch: floor, rarityRank: rank, totalSupply: supply, desirabilityWeight: collectible?.weight ?? 0, xchUsdRate }) ?? card.fairValue;
       }
     }
-  }));
+  };
+
+  // WAVES, not one big Promise.all. The deadline check at the top of stampOne used to run inside
+  // Promise.all(colIds.map(...)), so every collection evaluated it at t=0, all of them passed, and the
+  // budget bounded nothing — a 40-collection whale issued ~80 concurrent blob reads in a single SSR.
+  // Running STAMP_WAVE at a time and re-checking the clock BETWEEN waves makes budgetMs mean what it says:
+  // as many collections get stamped as actually fit, and the remainder fall to coldCols, which the client
+  // finishes progressively. Deliberately NOT a hard collection cap — on a fast read a whale gets all 40
+  // stamped server-side, exactly as before. Only a genuinely slow SSR sheds work now.
+  for (let i = 0; i < colIds.length; i += STAMP_WAVE) {
+    if (Date.now() > deadline) { coldCols.push(...colIds.slice(i)); break; }
+    await Promise.all(colIds.slice(i, i + STAMP_WAVE).map(stampOne));
+  }
 
   return { coldCols, asOf };
 }
