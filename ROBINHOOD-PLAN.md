@@ -1,129 +1,152 @@
-# Robinhood Chain — one collection, near-zero data cost
+# Robinhood Chain — full chain support
 
-Supersedes `EXPANSION-PLAN.md` (which proposed an OpenSea adapter across ~25 chains — rejected: our
-scan-and-cache architecture cannot survive an EVM-sized collection universe). This is the narrow version:
-**support specific collections we choose, not a chain.**
-
----
-
-## Why this one is cheap when the other was not
-
-The expensive part of Traitfolio is **discovery**: scanning a whole collection to compute rarity, because a
-rank is only knowable with the full trait table in hand. That is what drives the 30–70s cold scan, the roster
-blobs, the detail cache, and the Upstash bill.
-
-A **seeded** collection skips all of it. `scripts/build-seed.ts` already computes OpenRarity ranks offline and
-commits the result as one JSON — Misfitz runs on it today, 10,000 entries. For a seeded collection there is:
-
-- **no runtime scan** — the roster is a build-time artifact
-- **no per-NFT detail cache** (`tf:d:*` is the single largest Redis consumer for Chia — 83 MB — and a seeded
-  collection uses none of it)
-- **no rarity table blob, no roster blob, no scan checkpoint**
-- **no third-party API on the render path**
-
-The seed ships inside the Vercel bundle. **Marginal data cost of adding a collection this way is effectively
-zero.** The only live data is market state, and that is one small cached blob per collection, refreshed by
-cron — not per view and not per NFT.
+Goal: a complete, usable Traitfolio for **all** Robinhood Chain NFT users, the same way it works for Chia.
+Supersedes the OpenSea-adapter plan (rejected — ~25 chains means an unbounded collection universe) and the
+single-seeded-collection plan (rejected — the owner wants the whole chain, not one project).
 
 ---
 
-## What we can get without asking anyone (verified 2026-07-26)
+## Correcting the earlier "this is a dud" call
 
-Robinhood Chain runs a public **Blockscout** explorer with a free API. Confirmed working against a live
-collection:
+That judgement was about **EVM at large**: Ethereum has hundreds of thousands of NFT collections, our
+architecture must ingest a whole collection to compute a rarity rank, and no amount of caching survives that.
 
-| Need | Source | Verified |
-|---|---|---|
-| Collection list / supply / holders | `GET /api/v2/tokens?type=ERC-721` | ✅ returns data |
-| Roster + **traits** + images | `GET /api/v2/tokens/{addr}/instances` | ✅ returns `metadata.attributes` as `{trait_type,value}` |
-| Ownership for a wallet | `GET /api/v2/addresses/{addr}/nft` | standard endpoint |
-| Transfers | `GET /api/v2/tokens/{addr}/transfers` | standard endpoint |
-| **Sale prices** | ❌ not in transfers | must come from the marketplace contract's events |
+**Robinhood Chain is not that.** Measured 2026-07-26 against its public Blockscout API:
 
-`metadata.attributes` is **the same shape `build-seed.ts` already parses**, so the existing rank pipeline works
-with almost no change.
+- The ERC-721 universe is on the order of **50–200 collections**, not hundreds of thousands. Many are
+  10,000-supply PFP sets — Robinhood Bears, Robinhood Pixels, Robinfoxes, Hood Raccoons, URSAPE, PEPEHOOD,
+  DORIAN PEPENTICE, RoboHoods, MechVoid, Openpoop, Robinhood Distorted, /dev/daemons.
+- Some ERC-721s are **utility, not collectibles** — Uniswap V3 Positions (491,339 supply), Robinhood Gift
+  (16.5k). These must be filtered out or they poison discovery and the rarity model.
 
----
-
-## The one real gap: prices
-
-A transfer event carries no price — it cannot distinguish a 0.1 ETH sale from a gift. Real prices live in the
-marketplace contract's own events.
-
-- **If that contract is verified on Blockscout**, its ABI is public and we decode listings + completed sales
-  straight from chain logs. No API, no scraping, no dependency on anyone's site staying up.
-- **If it is unverified**, we can still detect *that* a sale happened, but not for how much. The collection
-  then ships rank/tier/traits only — no floor, no deal score, no comps.
-
-**Fallback if prices prove unreachable:** ship the collection rank-and-trait only. That is still the core of
-the product, and prices can be added later without rework.
+**Robinhood Chain is smaller than Chia.** Full-chain support is not only affordable, it is *cheaper per
+collection than Chia already is* — for one specific reason below.
 
 ---
 
-## Build plan
+## Why this is cheaper per collection than Chia
 
-**A · Seed the collection — ~1 day**
-Extend `scripts/build-seed.ts` with an EVM input mode: page `/instances` from Blockscout, map
-`metadata.attributes` → traits, keep the existing information-content rank computation untouched. Drop the
-`colId.startsWith("col1")` guard. Output `src/lib/data-sources/seed/<chain>-<contract>.json` + a registry entry.
-*Deliverable: full roster, traits, images and our ranks, as a committed file.*
+On Chia, `listCollectionNfts` does not reliably carry traits, so we fetch **per-NFT details** — the single
+largest Redis consumer we have (34,439 cached details ≈ 83 MB, and it was ~5× worse before the audit).
 
-**B · Render a non-Chia collection — ~1–2 days**
-The collection page currently gates on `isCollectionId()` (Chia bech32). Widen it to **also accept an id
-present in the seed registry** — explicitly a registry lookup, not a loosened regex, so the abuse surface
-closed in the audit stays closed. Seeded collections already bypass MintGarden, so this is a narrow change,
-not the multi-chain refactor.
-*Deliverable: their collection browsable by rarity at a Traitfolio URL.*
+Blockscout's `/api/v2/tokens/{addr}/instances` returns **`metadata.attributes` inline** — verified. One
+paginated scan yields the entire collection with traits, images and token ids.
 
-**C · Wallet lookup — ~1 day**
-Accept a `0x…` address, call Blockscout's address-NFT endpoint filtered to the contract, intersect with the
-seed. One small request per wallet, memoised.
-*Deliverable: "paste your address, see your holdings" for that collection.*
+**That removes the per-NFT detail cache entirely for this chain.** Roster, traits and ranks become one blob
+per collection on R2 (zero egress). No `tf:d:*`, no detail MGETs, no detail storage.
 
-**D · Prices — ~1–3 days, gated on the marketplace contract**
-Identify the marketplace contract, confirm it is verified, decode its listing/sale events via Blockscout's
-logs endpoint. A cron writes **one small blob per collection** to R2 (floor, active listings, recent sales).
-Feed sales into the existing comps model — which needs no changes, since `comps.ts` fits `{rank, price}` and
-has no currency assumptions.
-*Deliverable: floors, values, deal scores.*
+### Indexing the whole chain, costed
 
-**Total: 3–5 days** for A–C, plus 1–3 for prices.
-
----
-
-## Cost model
-
-| Line | Cost |
+| | |
 |---|---|
-| Seed file (roster, traits, ranks, ~10k items) | **$0** — in the repo/bundle |
-| Rarity computation | **$0** — offline, once, at build time |
-| Collection page render | **$0** extra — served from the seed |
-| Ownership lookups | one free Blockscout call per wallet, memoised |
-| Market blob | one small R2 object per collection, cron-refreshed |
-| **Marginal monthly cost** | **≈ $0** |
+| Collections (real, after filtering utility NFTs) | ~100 |
+| Avg supply | ~10,000 |
+| Instances per request | 50 |
+| Requests per collection | ~200 |
+| **Requests for a full chain index** | **~20,000** |
+| Blockscout limit with a free API key | 10 req/s |
+| **Wall-clock for a full index** | **~35 minutes**, once, then incremental |
 
-Contrast with the rejected approach, where each new chain meant indexing an unbounded collection universe
-through a rate-limited API.
+Storage: ~1 MB gzipped roster per collection → **~100 MB on R2 ≈ $0.002/month.** Rarity tables add ~30 MB.
+Bandwidth is R2 egress, which is free.
 
----
-
-## Rules that keep it cheap
-
-1. **Seeded collections only.** A hard registry, one entry per collection we choose. No open-ended chain
-   discovery, ever. This is the rule that makes every other number hold.
-2. **Nothing new in Redis.** Market blobs go to R2 (zero egress). Seeded collections must never populate
-   `tf:d:*`.
-3. **Poll per collection, never per NFT.** One cron, one blob. Rendering must not trigger upstream calls.
-4. **Images: prefer IPFS/HTTP URLs over embedded data URIs.** Some Robinhood collections are fully on-chain
-   with base64 SVG in the metadata — 10,000 of those would make the seed file enormous. If their project is
-   fully on-chain we store a reference and fetch on demand instead of embedding.
+**Marginal cost of the whole chain: cents per month.** The constraint is wall-clock during the first index,
+not money.
 
 ---
 
-## What I need to start
+## What we can and cannot get
 
-1. **The collection's contract address** (or its name — I can find the address on Blockscout).
-2. **The marketplace URL**, only so I can identify which contract it trades through and check whether that
-   contract is verified. Public chain data; nothing needed from its owner.
+| Need | Source | Status |
+|---|---|---|
+| Collection discovery | `GET /api/v2/tokens?type=ERC-721` | ✅ verified working |
+| Roster + traits + images | `GET /api/v2/tokens/{addr}/instances` | ✅ verified — `metadata.attributes` inline |
+| Rarity ranks | our own `estimateRank.ts` | ✅ chain-agnostic already, zero changes |
+| Wallet holdings | `GET /api/v2/addresses/{addr}/nft` | standard endpoint |
+| Transfers | `GET /api/v2/tokens/{addr}/transfers` | available, **but carries no price** |
+| Floor / listings / **sales** | ❌ no aggregator exists | **the real problem — see below** |
 
-Then A–C can be built and reviewed locally before anything ships.
+Rate limits: **3 req/s anonymous, 10 req/s with a free key, 25 req/s whitelisted.** Get a key before Phase 3;
+it triples throughput for nothing.
+
+---
+
+## The one hard problem: prices
+
+Chia has Dexie — one API, all listings and completed sales. **Robinhood Chain has no equivalent.** OpenSea
+supports the chain in its UI but does *not* expose it in the API (`robinhood` is not an accepted `chain`
+value). Prices exist only inside individual marketplace contracts.
+
+That means reconstructing market data from **marketplace contract events**, per marketplace:
+- Identify each marketplace contract trading RHC NFTs.
+- Require it to be **verified** on Blockscout so its ABI is public and its events decodable.
+- Decode listing / sale events via the logs endpoint; a cron writes one small blob per collection to R2.
+
+**Risks, stated plainly:** marketplaces are fragmented and new ones appear; an unverified contract is opaque;
+and volume is thin enough that the comps model may not have enough sales to fit a curve, in which case
+collections fall back to floor-only. This phase is the least predictable part of the project and it is where
+the schedule will slip.
+
+**Degraded mode is still a product.** Without prices we ship the whole chain browsable by rarity, with ranks,
+tiers, traits and wallet holdings — but no values, no deal scores. That is worth shipping while prices are
+solved.
+
+---
+
+## What this requires that the seeded approach didn't
+
+Full-chain support **is** the multi-chain refactor. It cannot be avoided:
+
+**Phase 0 · Foundations — 1 day.** `ChainId` / `CollectionRef` / `AssetRef` / `OwnerRef`; chain-namespace every
+cache key so a chainless key is a compile error; replace the 33 `startsWith("col1")` predicates.
+⚠️ Renames every cache key → full re-warm. **Do it while Upstash is healthy, not before.**
+⚠️ Non-negotiable for correctness: an EOA has the **same `0x…` address on every EVM chain**, and every cache
+layer is catch-guarded, so an unnamespaced key serves wrong NFTs with no error path.
+
+**Phase 1 · Routing + currency — 1–1.5 days.** `/collection/[chain]/[id]` + 301 resolver (SEO exposure is
+near-zero today; that window closes on your first marketing push). `floorXch` → `floorNative`, `formatXch(v)`
+→ `formatNative(v, currency)`.
+
+**Phase 2 · ChainAdapter — 1.5–2 days.** Defined from real call sites, not a whiteboard. `ChiaAdapter` wraps
+existing MintGarden+Dexie unchanged. Pacing/cooldown state moves per-adapter so one chain's rate limit cannot
+stall the other. **Do not revive the deleted `DataSource` interface** (`git show 2dda90a^:src/lib/data-sources/types.ts`).
+
+**Phase 3 · BlockscoutAdapter — 1.5–2 weeks.** Discovery with a utility-NFT filter; bulk roster+traits scan
+with checkpoint/resume on the existing rails; ownership; ERC-165 detection to **skip ERC-1155** (semi-fungible
+breaks rank uniqueness). Rarity and comps need no changes — `comps.ts` fits `{rank, price}` with no currency
+assumptions.
+
+**Phase 4 · Prices — 1–2 weeks, high variance.** As above.
+
+**Phase 5 · Cross-chain surface — 1–2 weeks.** Binder accepts mixed `xch1` / `did:chia` / `0x`. Chain filters,
+badges, sitemap, copy sweep (~24 files say "Chia").
+❗ **Product decision owed:** cross-chain totals must become **USD** — summing XCH and ETH is meaningless.
+Per-NFT and per-collection values stay native. This changes the binder's headline number.
+
+**Total ≈ 5–7 weeks.**
+
+---
+
+## Rules that keep the cost near zero
+
+1. **Never fetch per-NFT details on this chain.** The bulk instances endpoint makes them unnecessary — that
+   discipline is the whole cost advantage. If it is broken, RHC becomes as expensive as Chia.
+2. **Every RHC blob goes to R2, nothing to Redis.**
+3. **Filter utility NFTs at discovery.** Uniswap position NFTs alone are 491k tokens; indexing them would be
+   pure waste and would corrupt rarity.
+4. **Cap the indexed set** — top N collections by holder count, expanded deliberately. The chain is four weeks
+   old; if it grows 100× the economics must be re-checked, not assumed.
+5. **Get a free Blockscout API key** (3 → 10 req/s) before the first full index.
+6. **Move Upstash to pay-as-you-go first.** Storage, not bandwidth, is the binding constraint, and the 250 MB
+   Fixed plan will not survive a second chain.
+
+---
+
+## Honest risk list
+
+- **Single point of failure.** Chia has MintGarden *and* Dexie. RHC would have Blockscout for everything, on a
+  free public instance. If it rate-limits or goes down, the chain goes dark. Worth pricing their PRO API.
+- **Prices may not be solvable cleanly**, and thin volume may starve the comps model regardless.
+- **The chain is four weeks old.** Collection count could grow 10–100×, which changes the indexing budget.
+- **Competition arrives with scale.** Today RHC is underserved, which is the opportunity. That is also exactly
+  why it will not stay underserved.
