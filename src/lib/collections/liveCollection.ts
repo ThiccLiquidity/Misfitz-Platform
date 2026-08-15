@@ -237,7 +237,12 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
     let ckItems: MgListItem[] = [];
     let ckCursor: string | null | undefined = undefined;
     try {
-      const ckRaw = await cacheGetLarge(`slimscan:${id}`, 15 * 60_000);
+      // 6h, not 15min. A partial roster scan is progress worth keeping: the collection's contents do not
+      // change (barring a mint, which listLooksFull self-heals), so a checkpoint from hours ago is still a
+      // valid place to resume. At 15 minutes, a big collection on a site with sparse traffic NEVER converges
+      // — each visit does a 35s slice, the checkpoint expires before the next visit, and the next scan starts
+      // again from page 1. Progress was being made and thrown away.
+      const ckRaw = await cacheGetLarge(`slimscan:${id}`, 6 * 60 * 60_000);
       if (ckRaw) { const ck = JSON.parse(ckRaw) as { items?: MgListItem[]; cursor?: string | null }; ckItems = ck.items ?? []; ckCursor = ck.cursor ?? undefined; }
     } catch { /* fresh scan */ }
 
@@ -257,7 +262,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
         do {
           // Check the budget BEFORE starting a page so a slow page can't overrun the 60s function cap.
           if (cursor && Date.now() > deadline) {
-            await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 30 * 60);
+            await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 12 * 60 * 60); // 12h ex, > the 6h read window
             scanWarming = true; complete = false; break;
           }
           let page: MgPage<MgListItem> | null = null;
@@ -268,7 +273,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
           }
           if (!page) {
             // Fetch failed / timed out — checkpoint any progress so a later poll resumes instead of restarting.
-            if (cursor && items.length > 0) { await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 30 * 60); scanWarming = true; }
+            if (cursor && items.length > 0) { await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 12 * 60 * 60); scanWarming = true; }
             complete = false; break;
           }
           items.push(...(page.items ?? []));
