@@ -40,9 +40,12 @@ async function readRosterMap(colId: string): Promise<Map<string, MgListItem> | n
   return value;
 }
 
-// How many collections' artifacts to read concurrently per wave. Enough parallelism to stay fast on a
-// big wallet, small enough that the time budget is re-checked often.
-const STAMP_WAVE = 6;
+// How many collections' artifacts to read concurrently per wave.
+// 16, not 6: the previous value was chosen when maxCols was 40, then maxCols went to 120 - which turned a
+// single parallel burst into up to TWENTY sequential waves and made the binder SSR noticeably slower for
+// exactly the multi-collection whales the cap was raised for. 16 restores most of the old parallelism
+// while still re-checking the clock often enough for budgetMs to mean something (120 cols = 8 waves).
+const STAMP_WAVE = 16;
 
 export async function stampCardsFromArtifacts(
   cards: NftData[],
