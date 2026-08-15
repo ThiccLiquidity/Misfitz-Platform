@@ -370,9 +370,20 @@ export async function redisHealth(): Promise<{
     pkgLoaded = !!r;
     if (r) {
       const k = "tf:health:ping";
+      // RETRY the read. The original probe wrote then read once, immediately, and required the exact value
+      // back — so any read-after-write lag (a read replica, or simple propagation) reported roundTrip:false
+      // on a database that was working perfectly. That misreads as "Redis is down" and sends you chasing an
+      // outage that isn't happening. Three quick attempts; a real auth/quota failure still throws and is
+      // reported in `error`, which is how you tell a genuine outage from propagation lag.
       await r.set(k, { v: "ok", t: Date.now() }, { ex: 60 });
-      const got = (await r.get(k)) as { v?: string } | null;
-      roundTrip = got?.v === "ok";
+      for (let attempt = 0; attempt < 3 && !roundTrip; attempt++) {
+        if (attempt > 0) await new Promise((res) => setTimeout(res, 120));
+        const got = (await r.get(k)) as { v?: string } | null;
+        roundTrip = got?.v === "ok";
+      }
+      // Commands executed without throwing but the value never came back: NOT an outage. Say so explicitly
+      // rather than leaving a bare false to be misread.
+      if (!roundTrip) error = "write+read succeeded without error but the value did not read back within ~360ms — propagation lag, not an outage (check the Upstash console's command counter to confirm traffic is flowing)";
     }
   } catch (e) { error = (e as Error)?.message ?? String(e); }
   return { configured, urlHost, hasToken: !!REDIS_TOKEN, pkgLoaded, roundTrip, waitUntil: !!_waitUntil, error };
