@@ -18,6 +18,7 @@ import { computeDealScore } from "@/lib/rarity/enrich";
 import type { CollectionView } from "@/lib/collections/liveCollection";
 import { tangFor, TANG_DISCORD_URL } from "@/lib/tang/tang";
 import { PpLogo } from "@/components/tang/PpLogo";
+import { COLLECTION_WIRE_VERSION, expandCollectionWire, type CollectionWireV2 } from "@/lib/collections/collectionWire";
 
 const PAGE = 120; // how many cards we render at a time (the rest stay out of the DOM)
 
@@ -31,6 +32,37 @@ function tokenNum(n: NftData): number {
 // A listing is CAT-inclusive when it asks for any non-XCH asset.
 function isCatListing(n: NftData): boolean {
   return n.listing != null && (n.listingAssets ?? []).some((a) => a !== "XCH");
+}
+
+// Reader for /all. Accepts BOTH shapes:
+//   * compact wire v2 (what we now request with ?v=2)  -> rehydrated to the exact NftData shape
+//   * the legacy full shape                            -> passed straight through
+// That dual read IS the compatibility story. Client and server deploy together, but a tab that was already
+// open keeps running the OLD bundle against the NEW server, and a rollback (or a stale edge entry) points
+// the NEW bundle at the OLD shape. Both directions land in a branch that works.
+type AllPayload = {
+  nfts: NftData[];
+  capped?: boolean;
+  hotTraits?: { type: string; value: string; ratio: number }[];
+  warming?: boolean;
+  valuesAsOf?: number | null;
+  recentSales?: SaleFeedItem[];
+};
+function readAllResponse(raw: unknown): AllPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (r.v === COLLECTION_WIRE_VERSION && r.d && r.c && r.t) {
+    const w = raw as unknown as CollectionWireV2;
+    return { nfts: expandCollectionWire(w), capped: w.capped, hotTraits: w.hotTraits, warming: w.warming, valuesAsOf: w.valuesAsOf, recentSales: w.recentSales };
+  }
+  return {
+    nfts: Array.isArray(r.nfts) ? (r.nfts as NftData[]) : [],
+    capped: r.capped as boolean | undefined,
+    hotTraits: r.hotTraits as AllPayload["hotTraits"],
+    warming: r.warming as boolean | undefined,
+    valuesAsOf: (r.valuesAsOf ?? null) as number | null,
+    recentSales: r.recentSales as SaleFeedItem[] | undefined,
+  };
 }
 
 export function CollectionBinder({ view }: { view: CollectionView }) {
@@ -79,9 +111,10 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     const hotKey = (h: { type: string; value: string; ratio: number }[]) => h.map((x) => `${x.type}|${x.value}`).join(",");
     const load = () => {
       setIndexing(true);
-      fetch(`/api/collection/${view.id}/all`)
+      fetch(`/api/collection/${view.id}/all?v=2`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean; valuesAsOf?: number | null; recentSales?: SaleFeedItem[] } | null) => {
+        .then((raw: unknown) => {
+          const data = readAllResponse(raw);
           if (cancelled) return;
           const nfts = data?.nfts ?? [];
           // Base 2.5s, not 12s. The server is time-boxed to a resumable ~48s slice and is WAITING to be

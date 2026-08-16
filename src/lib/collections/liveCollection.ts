@@ -204,6 +204,11 @@ export interface FullCollection {
   warming?: boolean;
   // When the displayed values were last (re)built (ms epoch), or null. Powers the "values as of X ago" badge.
   valuesAsOf?: number | null;
+  // Collection-level constants the compact wire format hoists out of every card (see collectionWire.ts).
+  // xchUsdRate MUST be the exact rate every card's USD field was computed from — the client re-derives
+  // totalEstimateUsd / listing.priceUsd from it instead of us shipping them 10,000 times.
+  floorXch: number | null;
+  xchUsdRate: number;
 }
 
 async function buildBaseCollection(id: string): Promise<BaseCollection> {
@@ -448,7 +453,8 @@ export async function getAllCollectionCards(id: string, opts: { forceIndex?: boo
   const result = (nfts: NftData[], hotTraits: { type: string; value: string; ratio: number }[] = [], warming = false) => {
     const w = warming || rarityWarming || !!base.warming;
     if (!w) keepAlive(writeValueIndex(id, nfts, { force: opts.forceIndex })); // browse writes the value index; the portfolio reads it. force: an event-driven refit rewrites immediately (bypasses the 10-min gate).
-    return { nfts, total: nfts.length, capped: base.capped, hotTraits, warming: w, valuesAsOf: compsBuiltAt(id) };
+    // floorXch/xchUsdRate ride along so the route can hoist them into the compact wire envelope.
+    return { nfts, total: nfts.length, capped: base.capped, hotTraits, warming: w, valuesAsOf: compsBuiltAt(id), floorXch, xchUsdRate };
   };
   if (!isCompsEnabled()) return result(cards, [], false);
   const comps = await getCompsModel(id).catch(() => null);
