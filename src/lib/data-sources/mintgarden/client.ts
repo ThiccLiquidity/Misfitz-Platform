@@ -336,6 +336,7 @@ export async function listAddressNfts(
   throwOnError = false,
   background = false,
   includeMetadata = true, // /profile only; retries drop it so a metadata-heavy page can't sink a whale's scan
+  timeoutMs?: number,      // caller-supplied per-request cap, so a pager can clamp a page to its REMAINING budget
 ): Promise<MgPage<MgListItem>> {
   const decoded = decodeChiaAddress(address);
   if (!decoded) return EMPTY_PAGE;
@@ -354,10 +355,11 @@ export async function listAddressNfts(
   // include_metadata makes /profile pages several-fold larger; 6s trips on big pages under load and reads
   // as "MintGarden failed". Give /profile 15s (matches listCollectionNfts metadata pages); /address ignores
   // include_metadata (small pages) so it keeps the fast default.
-  const timeoutMs = endpoint === "profile" && includeMetadata ? 15_000 : DEFAULT_TIMEOUT_MS;
+  const defaultTimeout = endpoint === "profile" && includeMetadata ? 15_000 : DEFAULT_TIMEOUT_MS;
+  const effTimeout = Math.max(1_500, Math.min(defaultTimeout, timeoutMs ?? defaultTimeout));
   const page = throwOnError
-    ? await getJson<MgPage<MgListItem>>(url, timeoutMs, background)
-    : await getJsonOrNull<MgPage<MgListItem>>(url, timeoutMs, background);
+    ? await getJson<MgPage<MgListItem>>(url, effTimeout, background)
+    : await getJsonOrNull<MgPage<MgListItem>>(url, effTimeout, background);
   if (!page) return EMPTY_PAGE;
   return { items: page.items ?? [], next: page.next ?? null, previous: page.previous ?? null };
 }

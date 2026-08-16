@@ -10,7 +10,12 @@ import type { MgCollection, MgListItem, MgNftDetail, MgPage } from "./types";
 
 export const MAX_HOLDINGS = 25000; // hard safety rail — covers essentially every real collector (incl. 20k whales)
 const LEGACY_DETAIL_CAP = 2000;    // fetchOwnerNftDetails (legacy/eager path) stays capped — no budget, no resume
-const PAGE_SIZE = 50; // MintGarden address endpoint rejects larger sizes (returns nothing); keep at 50
+// MEASURED, not assumed. The old value was 50 on a comment claiming "the address endpoint rejects larger
+// sizes (returns nothing)". Probing the live endpoint: size=100 is HONOURED and returns 100 items in ~209ms
+// (vs 50 items in ~227ms — same cost per REQUEST); size=200 and size=500 both return HTTP 422. So 100 is the
+// real ceiling, and it halves the number of SEQUENTIAL round trips a wallet costs, which halves both the
+// wall-clock and the exposure to MintGarden's shared rate limit.
+const PAGE_SIZE = 100; // measured ceiling — 200+ is HTTP 422
 
 // Minimal concurrency pool — runs `worker` over `items`, at most `limit` in flight.
 async function mapPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
@@ -185,7 +190,13 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
       // cards' traits backfill via /api/binder enrichment, exactly like xch1 wallets already do. Once metadata
       // has timed out this pass we latch metaBroken so later pages skip it and don't re-pay the 15s timeout.
       const withMeta = attempt === 0 && !metaBroken;
-      try { return await list(address, cur, PAGE_SIZE, "owned", true, false, withMeta); }
+      // CLAMP EACH ATTEMPT TO THE REMAINING BUDGET. The budget was only checked BETWEEN pages, and one
+      // request can take the full 6s client timeout — so three attempts on a single stuck page could burn
+      // ~18s of an 8s budget, and the page render blew past it. `guarantee` (the first page of a resume
+      // pass, which must always move the cursor) keeps a floor so a poll can never make zero progress.
+      const left = budgetMs - (Date.now() - t0);
+      const attemptMs = firstOfPass && budgetMs > 15_000 ? 15_000 : Math.max(1_500, left);
+      try { return await list(address, cur, PAGE_SIZE, "owned", true, false, withMeta, attemptMs); }
       catch {
         if (withMeta) metaBroken = true;
         // Retries are budget-gated EXCEPT the first page of a resume pass with a real budget (the poll): every

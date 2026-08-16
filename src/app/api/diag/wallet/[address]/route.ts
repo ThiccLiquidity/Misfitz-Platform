@@ -6,6 +6,8 @@ import { fetchOwnerListings } from "@/lib/data-sources/mintgarden/owner";
 import { listAddressNfts } from "@/lib/data-sources/mintgarden/client";
 import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
 import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
+import { PWALLET_ENABLED } from "@/lib/portfolio/walletSnapshot";
+import { getCollection } from "@/lib/data-sources/mintgarden/client";
 import { diagLevel } from "@/lib/ops/diagAuth";
 
 // Wallet-side twin of /api/diag/collection/[id].
@@ -90,6 +92,50 @@ export async function GET(req: Request, { params }: { params: { address: string 
     } catch (e) { pageProbe.push({ size: 50, withMetadata: true, error: (e as Error)?.message ?? String(e) }); }
   }
 
+  // FULL PAGE WALK. The scan reported 31s for 544 NFTs while a single page measures ~210ms — so the time is
+  // NOT in the paging arithmetic, it is in specific slow/failing pages (deep cursors, or MintGarden's shared
+  // rate limit answering 429 and each retry costing a 6s client timeout). This walks the wallet page by page
+  // and prints the wall time of EVERY page, so the outlier is named rather than averaged away.
+  let walk: Record<string, unknown> | null = null;
+  if (url.searchParams.get("walk") === "1") {
+    const pages: Record<string, unknown>[] = [];
+    let cursor: string | null | undefined = undefined;
+    let total = 0;
+    const wt0 = Date.now();
+    for (let i = 0; i < 40 && Date.now() - wt0 < 40_000; i++) {
+      const t = Date.now();
+      try {
+        const p = await listAddressNfts(address, cursor, 100, "owned", true, false, false);
+        total += p.items.length;
+        pages.push({ page: i + 1, ms: Date.now() - t, items: p.items.length, running: total });
+        cursor = p.next;
+        if (!cursor) break;
+      } catch (e) {
+        pages.push({ page: i + 1, ms: Date.now() - t, error: (e as Error)?.message ?? String(e) });
+        break;
+      }
+    }
+    const times = pages.map((p) => p.ms as number);
+    walk = {
+      totalMs: Date.now() - wt0, pages: pages.length, items: total, finished: !cursor,
+      slowestMs: Math.max(...times), medianMs: times.sort((a, b) => a - b)[Math.floor(times.length / 2)],
+      detail: pages,
+    };
+  }
+
+  // Collection metadata resolution — 30 cold getCollection calls is the other candidate for the missing time.
+  let colResolve: Record<string, unknown> | null = null;
+  if (url.searchParams.get("walk") === "1") {
+    const t = Date.now();
+    try {
+      const p = await listAddressNfts(address, undefined, 100, "owned", true, false, false);
+      const ids = [...new Set(p.items.map((i) => i.collection_id))].slice(0, 10);
+      const t2 = Date.now();
+      const got = await Promise.all(ids.map((id) => getCollection(id).then(() => true).catch(() => false)));
+      colResolve = { sampled: ids.length, ms: Date.now() - t2, resolved: got.filter(Boolean).length, setupMs: t2 - t };
+    } catch (e) { colResolve = { error: (e as Error)?.message ?? String(e) }; }
+  }
+
   let scan: Record<string, unknown> | null = null;
   let holdings: Record<string, unknown> | null = null;
   if (live) {
@@ -139,10 +185,11 @@ export async function GET(req: Request, { params }: { params: { address: string 
       blobBackend: b.backend,
       blobCounters: { gets: b.gets, puts: b.puts, putFails: b.putFails, lastPutStatus: b.lastPutStatus, misses: b.misses, lastError: b.lastError, lastErrorHoursAgo: hrs(b.lastErrorAt) },
       localTmp: tmpStats(),
+      pwalletEnabled: PWALLET_ENABLED,
       holdings3, holdscan,
-      pageProbe,
+      pageProbe, walk, colResolve,
       scan, holdings,
-      hint: "add &live=1 to run the real scan; add &pageprobe=1 to time MintGarden page sizes (cheap, 5 requests)",
+      hint: "&pageprobe=1 times page sizes; &walk=1 times EVERY page of the wallet (finds the outlier); &live=1 runs the real scan",
     },
     { headers: { "cache-control": "no-store" } },
   );
