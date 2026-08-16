@@ -130,6 +130,10 @@ const MAX_PAGES = 120; // safety cap (~12k NFTs); larger collections show their 
 // is treated as not-full and re-scanned. Net effect: one visit warms it for everyone, borderline
 // permanently, while listings / floors / comps still refresh on their own shorter cycles.
 const SLIMLIST_TTL_MS = 30 * 24 * 60 * 60_000; // 30 days (matches the rarity-scan cache)
+// Backstop against the rescan loop: if a stored roster is rejected for ANY reason we still won't re-page the
+// whole collection more than once per window. Serving a slightly short roster beats ~100 sequential
+// MintGarden pages on every single request (which is what "it builds from scratch every time" looked like).
+const RESCAN_COOLDOWN_MS = 6 * 60 * 60_000;
 
 // Project a roster item down to ONLY the fields cards / rarity / listings actually read, so the persisted
 // roster doesn't carry MintGarden's untyped cruft (creator avatar URLs, timestamps, descriptions, edition
@@ -228,9 +232,18 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
   const slimHit = await cacheGetLarge(`slimlist2:${id}`, SLIMLIST_TTL_MS); // gzip+sharded so a 10k roster actually persists (plain SET is >1MB and silently rejected)
   if (slimHit) {
     try {
-      const parsed = JSON.parse(slimHit) as { items: MgListItem[]; capped: boolean };
-      if (listLooksFull(parsed.items ?? [], Boolean(parsed.capped))) {
-        items = parsed.items ?? [];
+      const parsed = JSON.parse(slimHit) as { items: MgListItem[]; capped: boolean; declaredCount?: number; scannedAt?: number };
+      const list = parsed.items ?? [];
+      // A stored roster is usable when it looks full for the CURRENT declared size (the original rule), OR
+      // when it was a COMPLETE scan taken at this same declared size. The second clause is the important
+      // one: MintGarden routinely lists fewer NFTs than nft_count claims (burned / not yet indexed), so a
+      // finished scan can sit just under the 98% bar forever. Without it the app REJECTS ITS OWN CACHE,
+      // re-pages ~100 sequential pages, produces the identical short list, rejects that too, and repeats on
+      // every single request — no error anywhere, just a site that rebuilds from scratch for all eternity.
+      const sameSupply = typeof parsed.declaredCount === "number" && parsed.declaredCount === declaredCount;
+      const recent = Date.now() - (parsed.scannedAt ?? 0) < RESCAN_COOLDOWN_MS;
+      if (list.length > 0 && (listLooksFull(list, Boolean(parsed.capped)) || sameSupply || recent)) {
+        items = list;
         capped = Boolean(parsed.capped);
       }
     } catch { /* re-page */ }
@@ -272,7 +285,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
         do {
           // Check the budget BEFORE starting a page so a slow page can't overrun the 60s function cap.
           if (cursor && Date.now() > deadline) {
-            await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 12 * 60 * 60); // 12h ex, > the 6h read window
+            await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items: items.map(slimRosterItem), cursor }), 12 * 60 * 60); // 12h ex, > the 6h read window; SLIMMED (it stored full include_metadata items — several times the size, written and re-read every slice)
             scanWarming = true; complete = false; break;
           }
           let page: MgPage<MgListItem> | null = null;
@@ -288,7 +301,7 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
           }
           if (!page) {
             // Fetch failed / timed out — checkpoint any progress so a later poll resumes instead of restarting.
-            if (cursor && items.length > 0) { await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items, cursor }), 12 * 60 * 60); scanWarming = true; }
+            if (cursor && items.length > 0) { await cachePutLargeAsync(`slimscan:${id}`, JSON.stringify({ items: items.map(slimRosterItem), cursor }), 12 * 60 * 60); scanWarming = true; }
             complete = false; break;
           }
           items.push(...(page.items ?? []));
@@ -297,8 +310,12 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
           if (pages >= MAX_PAGES) { capped = Boolean(cursor); break; }
         } while (cursor);
         // Persist a COMPLETE scan, AWAITED so the rarity build reading slimlist2 immediately after finds it.
-        if (complete && items.length > 0 && listLooksFull(items, capped)) {
-          await cachePutLargeAsync(`slimlist2:${id}`, JSON.stringify({ items: items.map(slimRosterItem), capped }));
+        // Persist ANY complete scan (cursor exhausted) — not only one clearing the 98% bar. A complete scan
+        // IS everything MintGarden will hand over; refusing to store it threw the whole ~100-page effort away
+        // and redid it on the next request. declaredCount + scannedAt let the read above distinguish
+        // "complete, but the index is smaller than nft_count" from "genuinely partial, try again later".
+        if (complete && items.length > 0) {
+          await cachePutLargeAsync(`slimlist2:${id}`, JSON.stringify({ items: items.map(slimRosterItem), capped, declaredCount, scannedAt: Date.now() }));
         }
       } finally {
         await releaseLock(`roster:${id}`); // release promptly so the next poll resumes (don't wait out the 120s TTL)
