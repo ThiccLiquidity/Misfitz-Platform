@@ -136,3 +136,29 @@ is why it was removed. Define any chain interface from the real call sites. Full
 - Live app is browse/binder/collection + APIs. Legacy auth stack fully removed. Share-to-X removed
   (collectors save the SOLD card image and post it themselves).
 - A full audit ran 2026-07-26; safe fixes are applied and the open decisions are in `AUDIT-2026-07.md`.
+
+## Diagnose before building (standing owner rule)
+
+Do NOT write code for a production symptom until a diagnostic has NAMED the failure. Run the
+URL, report the measurement, then fix. This rule was set after four confidently-wrong fixes in
+a row, two of which made the site slower.
+
+Secret for `?key=` (OPS_SECRET / REWARDS_OPS_SECRET / CRON_SECRET all work):
+`wd8COkTa00e-9aeUxbkIOhGq04vlOQ4ENMJ6JkRuNK4`
+
+| What | URL |
+|---|---|
+| Per-collection cache state — run this FIRST for any "slow / missing cards / rebuilding" report | `/api/diag/collection/<col1...>?key=<secret>&probe=1` |
+| Redis + blob health, Upstash bytes by prefix | `/api/cache-health?key=<secret>&fresh=1` |
+| Build/runtime status | `/api/status?key=<secret>` |
+
+Misfitz (usual repro): `col1s8fwfqdl3x77h7rn40m0mzhkgp7kajdwu56me36glv0ez8w79heqst90mh`
+
+`&probe=1` round-trips a real ~1.5MB blob through the live backend; `&bytes=2500000` hunts for
+a size cliff. An agent cannot fetch these itself (robots.txt blocks /api/, and the device shell
+has no network) — ask the owner to paste the JSON.
+
+**Instrument at the real size.** `/api/cache-health` wrote an 8-byte probe and stayed green for
+a month while R2 rejected every real payload with 411. Eight bytes prove credentials parsed and
+nothing else. Likewise, a write helper returning `void` is where a silent failure lives:
+`putBlob` returned void, so a 403 on every write was indistinguishable from success.

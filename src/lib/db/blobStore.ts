@@ -34,7 +34,14 @@ function noteErr(where: string, e: unknown): void {
 // ── Cloudflare R2 (S3 API, ZERO egress) ─────────────────────────────────────
 // Signing is done by aws4fetch, loaded via an INDIRECT dynamic import so the package is only required when
 // R2 is actually enabled (keeps it out of the default Redis path + lets typecheck pass before install).
-type AwsClientLike = { fetch(input: string, init?: RequestInit): Promise<Response> };
+// `sign` is used as well as `fetch`: aws4fetch's own fetch() hands undici a Request object, and undici
+// streams a Request body with Transfer-Encoding: chunked and NO Content-Length. R2 answers that with
+// 411 MissingContentLength. Signing first and then issuing the fetch ourselves with the raw bytes lets
+// undici compute Content-Length. Optional at runtime - we feature-detect and fall back to aws.fetch.
+type AwsClientLike = {
+  fetch(input: string, init?: RequestInit): Promise<Response>;
+  sign?(input: string, init?: RequestInit): Promise<Request>;
+};
 
 class R2BlobBackend implements BlobBackend {
   readonly name = "r2";
@@ -101,10 +108,23 @@ class R2BlobBackend implements BlobBackend {
     // R2 has no TTL, so honor it with an actual DELETE rather than leave a fresh object behind.
     const del = exSeconds > 0 && exSeconds <= 5;
     try {
-      const res = await aws.fetch(this.url(key), del
+      // MEASURED FAILURE (411 MissingContentLength, R2, every PUT): aws4fetch.fetch() signs into a Request
+      // and hands that to undici, which streams Request bodies chunked with no Content-Length header. R2
+      // requires one. Sign first, then issue the request ourselves passing the body as a Buffer of KNOWN
+      // length, which is what makes undici emit Content-Length. Same bytes are hashed and sent, so the
+      // signature still matches. Falls back to aws.fetch if `sign` is ever unavailable.
+      const init: RequestInit = del
         ? { method: "DELETE" }
-        : { method: "PUT", body: b64, headers: { "content-type": "text/plain", "x-amz-meta-storedat": String(Date.now()) } });
-      _stats.lastPutStatus = res?.status ?? null;
+        : { method: "PUT", body: b64, headers: { "content-type": "text/plain", "x-amz-meta-storedat": String(Date.now()) } };
+      let res: Response;
+      if (!del && typeof aws.sign === "function") {
+        const signed = await aws.sign(this.url(key), init);
+        const bytes = Buffer.from(b64, "utf8"); // base64 is ASCII, so byteLength === b64.length
+        res = await fetch(signed.url, { method: "PUT", headers: signed.headers, body: bytes });
+      } else {
+        res = await aws.fetch(this.url(key), init);
+      }
+      if (!del) _stats.lastPutStatus = res?.status ?? null; // deletes were overwriting the PUT status here
       if (!res || !res.ok) {
         // THE bug this whole class of outage came from: the result was never inspected. A bucket that
         // rejects every write (read-only token, wrong bucket, wrong account) returned a 403 here and the
