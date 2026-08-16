@@ -80,10 +80,19 @@ export async function tmpPutBlob(key: string, b64: string, exSeconds?: number): 
     // atomic within a filesystem, so a reader sees either the whole old file or the whole new one.
     const tmp = `${dest}.${randomUUID()}.tmp`;
     const header = JSON.stringify({ k: key, t: Date.now(), len: b64.length } satisfies Header);
-    await fs.writeFile(tmp, `${header}\n${b64}`);
-    try { await fs.rename(tmp, dest); } catch { await fs.unlink(tmp).catch(() => {}); }
+    try {
+      await fs.writeFile(tmp, `${header}\n${b64}`);
+      await fs.rename(tmp, dest);
+    } finally {
+      // ALWAYS clean up the temp file, including when writeFile ITSELF threw (ENOSPC mid-write). Cleaning up
+      // only after a failed rename meant that under disk pressure every failed write left a partial .tmp
+      // behind — so a full /tmp got fuller, permanently, and the tier disabled itself for the instance.
+      // (rename removes the source on success, so this unlink is a no-op on the happy path.)
+      await fs.unlink(tmp).catch(() => {});
+    }
     void sweep();
   } catch { /* ENOSPC / EACCES -> no-op; the shared tiers still cover it. A cache may never break the site. */ }
+  finally { void sweep(); } // also sweep after a FAILED write — that is exactly when the disk needs it
 }
 
 let _lastSweep = 0;

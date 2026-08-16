@@ -142,7 +142,10 @@ async function getMyHoldingsFastInner(addresses: string[], opts: OwnerScanOpts =
       if (!serve) {
         const unchanged = await probeWalletUnchanged(addresses, snap).catch(() => null);
         serve = unchanged !== false; // unchanged OR probe-failed -> serve (a stale snapshot beats re-paging churn)
-        if (serve && age > SNAP_REVALIDATE_MS) keepAlive(getMyHoldingsFast(addresses, { fresh: true }));
+        // Bounded. With no budgetMs this inherits PAGE_BUDGET_MS (28s) and then runs its own collection
+        // pass, artifact stamp and snapshot write — enough on its own to hold the invocation open to the
+        // 60s cap even though the user already has their page.
+        if (serve && age > SNAP_REVALIDATE_MS) keepAlive(getMyHoldingsFast(addresses, { fresh: true, budgetMs: 12_000 }));
       }
       if (serve) {
         const r = (await fetchXchUsdRate().catch(() => null)) ?? XCH_USD_FALLBACK;
@@ -208,12 +211,38 @@ async function getMyHoldingsFastInner(addresses: string[], opts: OwnerScanOpts =
   // everything, and the client re-enriches via /api/binder + /api/values anyway. Small wallets finish in one
   // pass (warming=false) and are byte-for-byte unchanged.
   if (!warming) {
-    // Browse-computed values from the per-collection value index so held cards match the collection page.
-    await stampCardsFromIndex(nfts, xchUsdRate);
-    // Roster-first enrichment: traits + our ranks + browse-identical values from each collection's CACHED
-    // artifacts (slimlist2 + vidx). Defensive: never blocks the binder if a read hiccups.
-    try { const r = await stampCardsFromArtifacts(nfts, collections, xchUsdRate, { budgetMs: 3500, maxCols: 40 }); stampAsOf = r.asOf; coldCols = r.coldCols; }
-    catch (e) { console.error("[binder] artifact stamp skipped:", e); }
+    // HARD WALL-CLOCK CEILING ON THE WHOLE STAMP BLOCK.
+    //
+    // Everything in here is an OPTIMISATION: it pre-fills traits, ranks and values from caches so the client
+    // has less to do. If it doesn't finish, the page is still correct — the client fills the gaps via
+    // /api/binder and /api/values, exactly as it does for a warming wallet. So it must never be able to hold
+    // the render. It could, and did: every blob read underneath is a plain fetch, and until now none of them
+    // had a timeout (undici's default body timeout is 300s, five times this page's 60s cap). One stalled
+    // R2/Upstash socket parked an await inside the server component, the render never completed, Vercel
+    // killed the invocation, and the browser received a severed RSC stream — "Connection closed." with no
+    // digest and nothing in the logs, because nothing ever threw.
+    //
+    // The per-call timeouts in blobStore are the real fix; this is the guarantee. Two independent things
+    // have to fail for the binder to hang again.
+    //
+    // Note this block was UNREACHABLE on the binder SSR path until the pager learned to terminate — the old
+    // pager never returned a null cursor, so `warming` was always true. It has effectively never run under a
+    // page render before, which is why it had never been bounded.
+    const STAMP_CEILING_MS = 5_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stamped = (async () => {
+      // Browse-computed values from the per-collection value index so held cards match the collection page.
+      await stampCardsFromIndex(nfts, xchUsdRate);
+      // Roster-first enrichment: traits + our ranks + browse-identical values from each collection's CACHED
+      // artifacts (slimlist2 + vidx). Defensive: never blocks the binder if a read hiccups.
+      const r = await stampCardsFromArtifacts(nfts, collections, xchUsdRate, { budgetMs: 3500, maxCols: 40 });
+      stampAsOf = r.asOf; coldCols = r.coldCols;
+    })().catch((e) => { console.error("[binder] artifact stamp skipped:", e); });
+    await Promise.race([stamped, new Promise<void>((r) => { timer = setTimeout(() => { console.error("[binder] stamp exceeded ceiling — rendering without it"); r(); }, STAMP_CEILING_MS); })]);
+    clearTimeout(timer);
+    // The stamp mutates cards in place, so whatever it finished still counts; the rest keeps going under
+    // keepAlive and warms the caches for the next load.
+    keepAlive(stamped);
   }
   if (process.env.NODE_ENV !== "production") console.log(`[binder-perf] getMyHoldingsFast TOTAL ${Date.now() - t0}ms — ${addresses.length} wallet(s), ${nfts.length} nfts`);
   // NOTE: the eager top-6 getAllCollectionCards pre-warm was REMOVED — it fired full roster scans + comps

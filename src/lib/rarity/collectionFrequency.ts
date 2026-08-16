@@ -36,6 +36,11 @@ export interface CollectionFrequency {
   complete?: boolean; // true only when the WHOLE collection was scanned (all pages + ~all details)
 }
 
+// Shared by the normal and cachedOnly paths: wait up to waitMs for an in-flight build, else the fallback.
+function raceOr(p: Promise<CollectionFrequency | null>, fb: CollectionFrequency | null, waitMs?: number): Promise<CollectionFrequency | null> {
+  return waitMs ? Promise.race([p, new Promise<CollectionFrequency | null>((r) => setTimeout(() => r(fb), waitMs))]) : Promise.resolve(fb);
+}
+
 const TTL = 45 * 60_000;
 const COLD_TTL = 5 * 60_000;
 const MAX_NFTS = 20000; // safety valve only — artists need the WHOLE collection ranked, so cover full sets
@@ -178,12 +183,19 @@ async function loadRosterItems(colId: string): Promise<MgListItem[] | null> {
 // waitMs: wait UP TO this long for the (usually cache-backed) build to resolve, else fall back to the last
 // value/null — lets the wallet read an already-cached rank table (one fast Redis round-trip) without
 // blocking on a cold FULL scan (which races out to null and keeps building in the background).
-export async function getCollectionFrequency(colId: string, opts: { wait?: boolean; waitMs?: number } = {}): Promise<CollectionFrequency | null> {
+export async function getCollectionFrequency(colId: string, opts: { wait?: boolean; waitMs?: number; cachedOnly?: boolean } = {}): Promise<CollectionFrequency | null> {
   if (!colId.startsWith("col1")) return null;
   const hit = _cache.get(colId);
   if (hit && Date.now() < hit.expiresAt && !hit.building) return hit.value;
-  const raced = (p: Promise<CollectionFrequency | null>, fb: CollectionFrequency | null): Promise<CollectionFrequency | null> =>
-    opts.waitMs ? Promise.race([p, new Promise<CollectionFrequency | null>((r) => setTimeout(() => r(fb), opts.waitMs))]) : Promise.resolve(fb);
+  // cachedOnly: never START a build. `waitMs` bounds the CALLER'S WAIT, not the work — a cold collection
+  // still kicks a 45s / ~350-request full scan into keepAlive. That is fine from the collection page (which
+  // is that collection's page) and ruinous from a wallet render holding 30 of them. Read what exists; if
+  // nothing does, return null and let the collection page or the warm cron build it.
+  if (opts.cachedOnly) {
+    if (hit?.building) return opts.wait ? hit.building : raceOr(hit.building, hit.value ?? null, opts.waitMs);
+    return hit?.value ?? null;
+  }
+  const raced = (p: Promise<CollectionFrequency | null>, fb: CollectionFrequency | null): Promise<CollectionFrequency | null> => raceOr(p, fb, opts.waitMs);
   if (hit?.building) return opts.wait ? hit.building : raced(hit.building, hit.value ?? null);
 
   const building = build(colId)

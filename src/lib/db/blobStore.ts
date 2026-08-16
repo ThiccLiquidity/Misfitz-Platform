@@ -25,7 +25,16 @@ export interface BlobBackend {
 // ── Instrumentation ─────────────────────────────────────────────────────────
 // A misconfigured R2 (bad creds) would otherwise catch-and-no-op forever with the app looking fine while
 // Upstash bandwidth never drops. These counters + blobHealth() surface it via /api/cache-health.
-const _stats = { gets: 0, puts: 0, putFails: 0, misses: 0, lastError: null as string | null, lastErrorAt: null as number | null, lastPutStatus: null as number | null };
+const _stats = { gets: 0, puts: 0, putFails: 0, misses: 0, timeouts: 0, lastError: null as string | null, lastErrorAt: null as number | null, lastPutStatus: null as number | null };
+
+// HARD DEADLINES. Neither of these fetches had a timeout or an AbortSignal. Under undici the default
+// headers/body timeout is 300 SECONDS — five times the page's 60s cap — so ONE stalled socket parked an
+// `await` inside a server component forever. The render never completed, Vercel killed the invocation, and
+// the browser got a severed RSC stream: "Connection closed." with no digest and nothing in the logs, because
+// nothing ever threw. The market client already learned this lesson (see dexie.ts, which wraps every fetch
+// in an AbortController for exactly this reason); the blob layer never got it.
+const GET_TIMEOUT_MS = 5_000;
+const PUT_TIMEOUT_MS = 10_000; // multi-MB bodies deserve more room, but still a ceiling
 function noteErr(where: string, e: unknown): void {
   _stats.lastError = `${where}: ${(e as Error)?.message ?? String(e)}`.slice(0, 200);
   _stats.lastErrorAt = Date.now();
@@ -85,8 +94,8 @@ class R2BlobBackend implements BlobBackend {
     if (!aws) return null;
     _stats.gets++;
     let res: Response | null;
-    try { res = await aws.fetch(this.url(key), { method: "GET" }); }
-    catch (e) { noteErr("r2.get", e); return null; }
+    try { res = await aws.fetch(this.url(key), { method: "GET", signal: AbortSignal.timeout(GET_TIMEOUT_MS) }); }
+    catch (e) { if ((e as Error)?.name === "TimeoutError") _stats.timeouts++; noteErr("r2.get", e); return null; }
     if (!res || !res.ok) {
       if (res && res.status !== 404) noteErr("r2.get", `status ${res.status}`);
       await res?.body?.cancel().catch(() => { /* already drained */ }); // don't strand the connection
@@ -97,7 +106,12 @@ class R2BlobBackend implements BlobBackend {
       await res.body?.cancel().catch(() => { /* already drained */ });
       _stats.misses++; return null; // missing/stale -> miss (fresh iff age < ttlMs, mirrors redisGet)
     }
-    return await res.text().catch(() => null);
+    // The BODY also needs a ceiling: a server can send 200 OK and then stall the stream. AbortSignal.timeout
+    // above covers the whole request under undici, but race it explicitly so a slow body can never win.
+    return await Promise.race([
+      res.text(),
+      new Promise<null>((r) => setTimeout(() => { _stats.timeouts++; r(null); }, GET_TIMEOUT_MS)),
+    ]).catch(() => null);
   }
 
   async putBlob(key: string, b64: string, exSeconds: number): Promise<boolean> {
@@ -120,9 +134,9 @@ class R2BlobBackend implements BlobBackend {
       if (!del && typeof aws.sign === "function") {
         const signed = await aws.sign(this.url(key), init);
         const bytes = Buffer.from(b64, "utf8"); // base64 is ASCII, so byteLength === b64.length
-        res = await fetch(signed.url, { method: "PUT", headers: signed.headers, body: bytes });
+        res = await fetch(signed.url, { method: "PUT", headers: signed.headers, body: bytes, signal: AbortSignal.timeout(PUT_TIMEOUT_MS) });
       } else {
-        res = await aws.fetch(this.url(key), init);
+        res = await aws.fetch(this.url(key), { ...init, signal: AbortSignal.timeout(PUT_TIMEOUT_MS) });
       }
       if (!del) _stats.lastPutStatus = res?.status ?? null; // deletes were overwriting the PUT status here
       if (!res || !res.ok) {
@@ -138,7 +152,7 @@ class R2BlobBackend implements BlobBackend {
       }
       await res.body?.cancel().catch(() => { /* already drained */ });
       return true;
-    } catch (e) { _stats.putFails++; noteErr("r2.put", e); return false; } // caller falls back to Redis
+    } catch (e) { _stats.putFails++; if ((e as Error)?.name === "TimeoutError") _stats.timeouts++; noteErr("r2.put", e); return false; } // caller falls back to Redis
   }
 }
 
@@ -188,8 +202,8 @@ function resolveFromEnv(): BlobBackend | null {
 }
 
 // Snapshot of blob-backend activity for /api/cache-health (per-instance since boot).
-export function blobStats(): { backend: string; gets: number; puts: number; putFails: number; misses: number; lastError: string | null; lastErrorAt: number | null; lastPutStatus: number | null } {
-  return { backend: getActiveBlobBackend()?.name ?? "redis", gets: _stats.gets, puts: _stats.puts, putFails: _stats.putFails, misses: _stats.misses, lastError: _stats.lastError, lastErrorAt: _stats.lastErrorAt, lastPutStatus: _stats.lastPutStatus };
+export function blobStats(): { backend: string; gets: number; puts: number; putFails: number; misses: number; timeouts: number; lastError: string | null; lastErrorAt: number | null; lastPutStatus: number | null } {
+  return { backend: getActiveBlobBackend()?.name ?? "redis", gets: _stats.gets, puts: _stats.puts, putFails: _stats.putFails, misses: _stats.misses, timeouts: _stats.timeouts, lastError: _stats.lastError, lastErrorAt: _stats.lastErrorAt, lastPutStatus: _stats.lastPutStatus };
 }
 
 // Tiny round-trip probe so a misconfigured R2 is visible instead of silently no-opping. Redis-default is

@@ -32,25 +32,47 @@ export async function writeValueIndex(colId: string, nfts: NftData[], opts: { fo
   const idx: ValueIndex = { builtAt: now, values };
   try {
     await cachePutLargeAsync(`vidx:${colId}`, JSON.stringify(idx), VIDX_EX_S);
-    _readMemo.set(colId, { idx, at: now }); // visible to the next poll on THIS instance immediately (no 5-min null stall)
+    memoSet(colId, idx, now); // visible to the next poll on THIS instance immediately (no 5-min null stall)
   } catch { /* best effort */ }
 }
 
+// Capped + evicting. This was an unbounded Map that only checked AGE on reuse and never deleted, so every
+// collection any wallet had ever held stayed resident for the life of the instance — each one a whole
+// parsed value index. On the heaviest route in the app that is how an instance walks itself into an OOM.
+const READ_MEMO_CAP = 60;
 const _readMemo = new Map<string, { idx: ValueIndex | null; at: number }>();
+function memoSet(colId: string, idx: ValueIndex | null, at: number): void {
+  _readMemo.delete(colId); // re-insert so Map iteration order is true LRU-by-write
+  _readMemo.set(colId, { idx, at });
+  while (_readMemo.size > READ_MEMO_CAP) {
+    const oldest = _readMemo.keys().next().value;
+    if (oldest === undefined) break;
+    _readMemo.delete(oldest);
+  }
+}
 export async function readValueIndex(colId: string): Promise<ValueIndex | null> {
   const hit = _readMemo.get(colId);
   if (hit && Date.now() - hit.at < (hit.idx ? READ_MEMO_MS : 30_000)) return hit.idx;
   let idx: ValueIndex | null = null;
   try { const raw = await cacheGetLarge(`vidx:${colId}`, VIDX_READ_MS); if (raw) idx = JSON.parse(raw) as ValueIndex; } catch { idx = null; }
-  _readMemo.set(colId, { idx, at: Date.now() });
+  memoSet(colId, idx, Date.now());
   return idx;
 }
 
 // Stamp a whole card list from the per-collection indexes (reads each collection's index once).
+// WAVE = 6, not "all of them". This fired one blob read per DISTINCT HELD COLLECTION simultaneously — 30+
+// on a real wallet — each a gunzip + JSON.parse of a whole-collection value index. That is the identical
+// peak-memory pattern that was bounded in artifactStamp (STAMP_WAVE); this call sits one line earlier in
+// the same SSR block and was missed. Peak memory is what gets a lambda killed.
+const INDEX_WAVE = 6;
+
 export async function stampCardsFromIndex(cards: NftData[], xchUsdRate: number): Promise<void> {
   const cols = [...new Set(cards.map((c) => c.collectionSlug))].filter((c) => c.startsWith("col1"));
   if (cols.length === 0) return;
-  const pairs = await Promise.all(cols.map(async (c) => [c, await readValueIndex(c)] as const));
+  const pairs: (readonly [string, ValueIndex | null])[] = [];
+  for (let i = 0; i < cols.length; i += INDEX_WAVE) {
+    pairs.push(...await Promise.all(cols.slice(i, i + INDEX_WAVE).map(async (c) => [c, await readValueIndex(c)] as const)));
+  }
   const byCol = new Map(pairs);
   for (const card of cards) {
     const e = byCol.get(card.collectionSlug)?.values[card.launcherId];

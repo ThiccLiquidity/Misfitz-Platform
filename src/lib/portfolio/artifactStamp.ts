@@ -32,14 +32,19 @@ const ROSTER_MEMO_MS = 5 * 60_000;             // rosters are ~static; amortize 
 // no use for the other 9,995, and keeping them was the entire cost. (2) The memo is capped by total
 // retained entries and evicts oldest-first, so it can never grow without limit across requests.
 const ROSTER_MEMO_MAX_ENTRIES = 40_000; // total held-card entries retained across all memoized collections
-const _rosterMemo = new Map<string, { value: Map<string, MgListItem> | null; at: number; size: number }>();
+// `ids` = every encoded_id the roster blob actually contained, so coverage can be judged correctly.
+// Without it the coverage test below asks "does the memo hold every id this wallet wants?" — and a wallet
+// holding ONE brand-new mint that is not in a 30-day-old roster can never satisfy that, so the memo missed
+// on EVERY render and re-read + re-gunzipped + re-parsed the whole multi-MB roster forever. (Introduced by
+// the memo rewrite earlier today; before that the memo held the full roster so coverage was trivially true.)
+const _rosterMemo = new Map<string, { value: Map<string, MgListItem> | null; at: number; size: number; ids: Set<string> | null }>();
 let _rosterMemoEntries = 0;
 
-function memoPut(colId: string, value: Map<string, MgListItem> | null): void {
+function memoPut(colId: string, value: Map<string, MgListItem> | null, ids: Set<string> | null): void {
   const size = value?.size ?? 0;
   const prev = _rosterMemo.get(colId);
   if (prev) _rosterMemoEntries -= prev.size;
-  _rosterMemo.set(colId, { value, at: Date.now(), size });
+  _rosterMemo.set(colId, { value, at: Date.now(), size, ids });
   _rosterMemoEntries += size;
   while (_rosterMemoEntries > ROSTER_MEMO_MAX_ENTRIES && _rosterMemo.size > 1) {
     const oldest = _rosterMemo.keys().next().value; // Map preserves insertion order
@@ -58,11 +63,15 @@ async function readRosterMap(colId: string, wanted: Set<string>): Promise<Map<st
   // a different subset). Cheap check; on a miss we simply re-read.
   if (hit && Date.now() - hit.at < ROSTER_MEMO_MS) {
     if (hit.value == null) return null;
+    // Covered when every wanted id is either PRESENT in the memo, or was genuinely ABSENT from the roster
+    // blob (a brand-new mint the 30-day roster predates). Re-reading would not find it either.
     let covers = true;
-    for (const id of wanted) if (!hit.value.has(id)) { covers = false; break; }
+    if (hit.ids) { for (const id of wanted) if (!hit.value.has(id) && hit.ids.has(id)) { covers = false; break; } }
+    else { for (const id of wanted) if (!hit.value.has(id)) { covers = false; break; } }
     if (covers) return hit.value;
   }
   let value: Map<string, MgListItem> | null = null;
+  let ids: Set<string> | null = null;
   try {
     const raw = await cacheGetLarge(`slimlist2:${colId}`, SLIMLIST_TTL_MS);
     if (raw) {
@@ -70,11 +79,16 @@ async function readRosterMap(colId: string, wanted: Set<string>): Promise<Map<st
       // Only a genuine trait source: some cached rosters predate include_metadata (no inline attributes).
       if (items.length > 0 && items.some((it) => (it.metadata?.attributes?.length ?? 0) > 0)) {
         value = new Map();
-        for (const it of items) if (it.encoded_id && wanted.has(it.encoded_id)) value.set(it.encoded_id, it);
+        ids = new Set();
+        for (const it of items) {
+          if (!it.encoded_id) continue;
+          ids.add(it.encoded_id);                                   // strings only — cheap next to the items
+          if (wanted.has(it.encoded_id)) value.set(it.encoded_id, it);
+        }
       }
     }
-  } catch { value = null; }
-  memoPut(colId, value);
+  } catch { value = null; ids = null; }
+  memoPut(colId, value, ids);
   return value;
 }
 
@@ -135,7 +149,13 @@ export async function stampCardsFromArtifacts(
 
     // OUR ranks only when this collection isn't MintGarden-ranked (roster items lack openrarity_rank).
     const needScaled = held.some((c) => { const it = roster.get(c.launcherId); return !!it && it.openrarity_rank == null; });
-    const freq: CollectionFrequency | null = needScaled ? await getCollectionFrequency(colId, { waitMs: 1200 }).catch(() => null) : null;
+    // cachedOnly: a binder render must READ a rank table, never BUILD one. getCollectionFrequency with a
+    // waitMs bounds only OUR WAIT — on a cold collection it still starts a full-collection scan
+    // (RARITY_SCAN_BUDGET_MS = 45s, ~350 MintGarden requests) and hands it to keepAlive/waitUntil. With
+    // STAMP_WAVE collections in flight that is several 45-second scans pinning the invocation open past the
+    // 60s cap, while starving the interactive lane this very render depends on. The collection page and the
+    // warm cron build these; the wallet only consumes them.
+    const freq: CollectionFrequency | null = needScaled ? await getCollectionFrequency(colId, { waitMs: 1200, cachedOnly: true }).catch(() => null) : null;
     const counts = colMeta?.attributes_frequency_counts ?? freq?.freq ?? null;
     const total = (colMeta?.nft_count ?? 0) || (freq?.total ?? 0);
 
