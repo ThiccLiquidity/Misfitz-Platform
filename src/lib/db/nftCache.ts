@@ -17,6 +17,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { getActiveBlobBackend } from "./blobStore";
+import { tmpEligible, tmpGetBlob, tmpPutBlob, noteTmpHit, noteTmpMiss, noteTmpWrite } from "./tmpBlobCache";
 
 interface CacheDb {
   getDetail(id: string): string | null;
@@ -296,6 +297,10 @@ async function putLargeInner(key: string, json: string, exSeconds: number = REDI
   if (!stored) {
     try { await redisPutLargeB64(key, b64, exSeconds); } catch { /* the local blob below still covers this instance */ }
   }
+  // Per-instance /tmp copy so this instance never re-fetches what it just built. (The SQLite line below it
+  // is a no-op in production — its directory is under a read-only process.cwd() on Vercel — and is kept
+  // only because it is real on a persistent host / in local dev.)
+  if (tmpEligible(key)) { noteTmpWrite(); await tmpPutBlob(key, b64, exSeconds); }
   await cache().then((c) => c?.putKv(`z:${key}`, b64)); // per-instance local fallback, always
 }
 // Fire-and-forget (kept alive past function freeze). Use for non-critical large writes.
@@ -308,6 +313,17 @@ export async function cachePutLargeAsync(key: string, json: string, exSeconds?: 
 }
 export async function cacheGetLarge(key: string, ttlMs: number): Promise<string | null> {
   try {
+    // LOCAL FIRST for pure caches. A warm instance that has already seen this blob reads ~2.4MB off its own
+    // /tmp in single-digit ms instead of paying a ~540ms shared round trip — and that read costs no Upstash
+    // bandwidth and no R2 egress at all. Freshness is still checked against the caller's ttlMs, so the
+    // semantics are identical to the shared tiers; only the distance changes. Coordination keys (checkpoints,
+    // rw:*, the comps lock-loser read) are excluded by tmpEligible — see tmpBlobCache.ts.
+    const local = tmpEligible(key) ? await tmpGetBlob(key, ttlMs) : null;
+    if (local != null) {
+      noteTmpHit();
+      return gunzipSync(Buffer.from(local, "base64")).toString("utf8");
+    }
+    if (tmpEligible(key)) noteTmpMiss();
     const backend = getActiveBlobBackend();
     let b64: string | null = null;
     if (backend) {
@@ -318,7 +334,12 @@ export async function cacheGetLarge(key: string, ttlMs: number): Promise<string 
     } else {
       b64 = await redisGetLargeB64(key, ttlMs).catch(() => null);
     }
-    if (b64 != null) return gunzipSync(Buffer.from(b64, "base64")).toString("utf8");
+    if (b64 != null) {
+      // Backfill /tmp so only the FIRST request on this instance pays the network. Kept alive past the
+      // response so the write is not cut off when the function freezes.
+      if (tmpEligible(key)) keepAlive(tmpPutBlob(key, b64));
+      return gunzipSync(Buffer.from(b64, "base64")).toString("utf8");
+    }
     const localB64 = (await cache())?.getKv(`z:${key}`, ttlMs); // per-instance local fallback
     if (localB64) return gunzipSync(Buffer.from(localB64, "base64")).toString("utf8");
     return null;

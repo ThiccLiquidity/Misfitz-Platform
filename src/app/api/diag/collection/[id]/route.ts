@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cacheGetLarge, cachePutLargeAsync } from "@/lib/db/nftCache";
 import { blobStats } from "@/lib/db/blobStore";
+import { tmpStats } from "@/lib/db/tmpBlobCache";
 import { getCollection } from "@/lib/data-sources/mintgarden/client";
 import { isSeeded } from "@/lib/data-sources/seed/registry";
 import { diagLevel } from "@/lib/ops/diagAuth";
@@ -120,6 +121,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       id, name: col?.name ?? null, declaredCount,
       seedEnabled: process.env.TRAITFOLIO_SEED === "1", seeded: isSeeded(id),
       blobBackend: b.backend,
+      localTmp: tmpStats(), // hits here are reads that cost ZERO Upstash bandwidth and zero R2 egress
+
       blobCounters: { gets: b.gets, puts: b.puts, putFails: b.putFails, lastPutStatus: b.lastPutStatus, misses: b.misses, lastError: full ? b.lastError : b.lastError ? "(hidden)" : null, lastErrorHoursAgo: hrs(b.lastErrorAt) },
       roster, checkpoint, rarity, comps,
       bigProbe,
