@@ -337,7 +337,7 @@ export async function cacheGetLarge(key: string, ttlMs: number): Promise<string 
     if (b64 != null) {
       // Backfill /tmp so only the FIRST request on this instance pays the network. Kept alive past the
       // response so the write is not cut off when the function freezes.
-      if (tmpEligible(key)) keepAlive(tmpPutBlob(key, b64));
+      if (tmpEligible(key)) { noteTmpWrite(); keepAlive(tmpPutBlob(key, b64)); } // count it: a backfill IS a local write, and a counter that under-reports is how the last two outages hid
       return gunzipSync(Buffer.from(b64, "base64")).toString("utf8");
     }
     const localB64 = (await cache())?.getKv(`z:${key}`, ttlMs); // per-instance local fallback
