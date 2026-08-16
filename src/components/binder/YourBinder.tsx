@@ -259,17 +259,30 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
       let done = 0;
       const posted = new Set<string>();
       const returned = new Set<string>();
-      for (const ids of chunks) {
-        if (cancelled) return;
-        for (const id of ids) posted.add(id);
-        try {
-          const data = await postChunk(ids);
-          for (const n of data?.nfts ?? []) returned.add(n.launcherId);
-          applyChunk(data, needsValue);
-        } catch { /* keep fast card on failure */ }
-        done += ids.length;
-        if (!cancelled) setProgress(Math.min(1, done / total));
-      }
+      // CONCURRENT, not serial. This loop used to await each chunk before starting the next, so a 300-NFT
+      // wallet was ~13 round trips end to end — the single biggest contributor to a slow binder. The server
+      // side is already bounded (the route caps ids per request, and the MintGarden client caps upstream
+      // concurrency and has its own interactive 429 cooldown), so a small pool trades ~13 serialized trips
+      // for ~3 waves without adding upstream pressure. Results apply as each chunk lands, so cards fill in
+      // progressively rather than in one jump.
+      const POOL = 4;
+      let nextChunk = 0;
+      await Promise.all(Array.from({ length: Math.min(POOL, chunks.length) }, async () => {
+        for (;;) {
+          if (cancelled) return;
+          const myIndex = nextChunk++;
+          if (myIndex >= chunks.length) return;
+          const ids = chunks[myIndex];
+          for (const id of ids) posted.add(id);
+          try {
+            const data = await postChunk(ids);
+            for (const n of data?.nfts ?? []) returned.add(n.launcherId);
+            applyChunk(data, needsValue);
+          } catch { /* keep fast card on failure */ }
+          done += ids.length;
+          if (!cancelled) setProgress(Math.min(1, done / total));
+        }
+      }));
       // ONE bounded second pass for ids MintGarden dropped (429/timeout) so a rate-limit blip can't
       // leave permanent trait holes for the rest of the session. 1.5s lets the fg 429 cooldown clear.
       const missing = [...posted].filter((id) => !returned.has(id));
@@ -391,12 +404,16 @@ export function YourBinder({ holdings }: { holdings: MyHoldings }) {
     <div>
       <WorkingIndicator
         active={warming || enriching}
+        // No honest denominator exists while the wallet is being paged — MintGarden's address endpoint
+        // returns a cursor, never a count — so during that phase the label carries the live number and the
+        // indicator's own creep supplies the motion. Enrichment DOES have a real denominator, so it drives
+        // the bar exactly.
+        progress={warming ? undefined : progress}
         label={
           warming
             ? `Reading wallet · ${nfts.length.toLocaleString()} NFT${nfts.length === 1 ? "" : "s"}${collections.length ? ` · ${collections.length} collection${collections.length === 1 ? "" : "s"}` : ""}`
             : "Adding traits, rarity & prices…"
         }
-        progress={warming ? undefined : progress}
       />
       {holdings.demo && (
         <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400">

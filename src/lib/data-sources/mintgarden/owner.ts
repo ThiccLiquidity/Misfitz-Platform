@@ -66,6 +66,10 @@ const HOLDINGS_TTL = 30 * 60_000; // completed roster: read-fresh for 30 min
 const HOLDINGS_EX_S = 60 * 60;    // ...persisted 1h
 const HOLDSCAN_TTL = 20 * 60_000; // in-progress checkpoint: read-fresh 20 min
 const HOLDSCAN_EX_S = 30 * 60;    // ...persisted 30 min
+// A completed roster whose collection METADATA is still incomplete is persisted with this shorter expiry
+// instead of being withheld: the user gets a fast, non-warming page now, and the unresolved ids get another
+// attempt in minutes rather than the roster being re-paged from scratch on every visit.
+const METADATA_RETRY_EX_S = 10 * 60;
 const PAGE_BUDGET_MS = 28_000;    // per-invocation paging budget — leaves room for metadata + writes under 60s
 
 interface CachedListings { items: MgListItem[]; collections: [string, MgCollection][]; truncated: boolean }
@@ -232,19 +236,30 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
     // collectionsFor is now deadline-bounded, so the old "pre-collections" checkpoint write (a SECOND full
     // multi-MB serialize+gzip+shard of the roster every pass) is gone — the single write below persists this
     // pass's pages AND its resolved collections together.
-    const { map: collections, resolvedNew, missing } = await collectionsFor(items, colMap, Date.now() + COLS_PASS_MS);
+    const { map: collections, missing } = await collectionsFor(items, colMap, Date.now() + COLS_PASS_MS);
 
-    // Finishing also requires collection metadata SETTLED: all resolved, or paging is done and a full pass
-    // dedicated to collections resolved nothing new (those ids are dead upstream — tolerate the misses, exactly
-    // like the old .catch(() => null) did). Otherwise checkpoint + warm so the next poll (which skips paging via
-    // `done`) spends its whole allowance on the remaining collections.
-    const finished = complete && (missing === 0 || (pagingDone && !resolvedNew));
+    // PAGING IS THE ROSTER, and paging is the expensive part — N sequential MintGarden pages, one wallet at
+    // a time, under a lock. Collection METADATA (name, supply) is cosmetic and backfills through /api/binder
+    // and the artifact stamp.
+    //
+    // This condition used to ALSO require metadata settled. So one slow or dead collection id in a
+    // 25-collection wallet meant a fully-paged, correct roster was thrown away unwritten and the whole load
+    // returned warming — and `warming` is not cosmetic: it ALSO skips the artifact stamp (so every card
+    // arrives with no traits/rank and lands in the client's enrichment queue) and skips the wallet snapshot
+    // (so the instant-load path can never be earned by exactly the wallets that need it). Recovery depended
+    // on the 20-minute `holdscan:` checkpoint still being warm on the next visit; visit an hour later and the
+    // whole wallet re-pages from scratch. That is the "portfolio is really slow" report.
+    //
+    // Never discard a completed pagination. When metadata is still incomplete, persist it anyway but with a
+    // SHORT expiry so the stragglers get another attempt soon, instead of holding the user hostage now.
+    const finished = complete;
+    const holdingsEx = missing > 0 ? METADATA_RETRY_EX_S : HOLDINGS_EX_S;
 
     if (finished) {
       if (items.length > 0) {
         const payload: CachedListings = { items, collections: [...collections.entries()], truncated };
         holdMemoPut(key, payload); // a fresh completed scan seeds the memo too
-        await cachePutLargeAsync(`holdings3:${key}`, JSON.stringify(payload), HOLDINGS_EX_S);
+        await cachePutLargeAsync(`holdings3:${key}`, JSON.stringify(payload), holdingsEx);
       }
       const cleared: HoldingsCheckpoint = { cursor: null, items: [], truncated, collections: [] };
       await cachePutLargeAsync(`holdscan:${key}`, JSON.stringify(cleared), 1); // drop the checkpoint

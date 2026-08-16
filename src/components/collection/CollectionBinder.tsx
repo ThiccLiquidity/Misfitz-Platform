@@ -401,7 +401,16 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
     <div className="py-2">
       <WorkingIndicator
         active={indexing || enriching || warming}
-        label={indexing ? "Loading collection…" : enriching ? "Refining rarity & sales…" : "Building sales model…"}
+        label={
+          warming && view.totalSupply > 0
+            ? `Loading collection · ${nfts.length.toLocaleString()} of ${view.totalSupply.toLocaleString()}`
+            : indexing ? "Loading collection…" : enriching ? "Refining rarity & sales…" : "Building sales model…"
+        }
+        // The denominator is free: view.totalSupply is the collection's nft_count and arrives with the SSR
+        // payload, so the longest wait on the site can show a true "N of M" instead of a spinner that looks
+        // the same at 5% and 95%. Only during the roster scan — the later stages have no honest denominator,
+        // and the indicator's creep covers those.
+        progress={warming && view.totalSupply > 0 ? Math.min(1, nfts.length / view.totalSupply) : undefined}
       />
       {/* Collection header */}
       <div className="tf-colhead relative mb-4 overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--card-border)_25%,transparent)] bg-card-bg px-5 py-4">

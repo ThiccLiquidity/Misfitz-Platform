@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, type CSSProperties, type TouchEvent } from "react";
 import type { CollectionData, NftData } from "@/types";
 import { BinderPage } from "./BinderPage";
+import { LoadingBar } from "@/components/status/WorkingIndicator";
 import { BinderPageControls } from "./BinderPageControls";
 import { NftDetailModal } from "@/components/nft/NftDetailModal";
 import { CardSlot } from "@/components/nft/CardSlot";
@@ -333,8 +334,7 @@ export function BinderView({ collection, nfts, hideFullPageLink = false, onNeedM
         >
           {gridSlice.length === 0 ? (
             <div className="col-span-full flex flex-col items-center justify-center gap-3 py-16">
-              <span className="h-8 w-8 animate-spin rounded-full" style={{ border: "3px solid var(--card-border)", borderTopColor: "transparent" }} />
-              <span className="text-subtle text-sm">Loading cards…</span>
+              <LoadingBar label="Loading cards…" />
             </div>
           ) : gridSlice.map((n) => (
             <CardSlot

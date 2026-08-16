@@ -1,4 +1,5 @@
 import { BinderLoadingNote } from "@/components/binder/BinderLoadingNote";
+import { LoadingBar } from "@/components/status/WorkingIndicator";
 
 // Shown automatically by Next while the binder server-renders (i.e. while we read the wallet). Uses
 // theme CSS variables (set on the app shell) so the skeleton is visible in BOTH light and dark — the
@@ -20,15 +21,9 @@ export default function BinderLoading() {
         <h1 className="text-title text-xl font-bold">Your Binder</h1>
       </div>
 
-      <div className="mx-2 mb-4 flex items-center gap-3 rounded-xl px-4 py-5" style={panel}>
-        <div
-          className="h-6 w-6 shrink-0 animate-spin rounded-full"
-          style={{ border: "2px solid var(--card-border)", borderTopColor: "transparent" }}
-        />
-        <div>
-          <div className="text-title text-sm font-semibold">Loading your binder…</div>
-          <BinderLoadingNote />
-        </div>
+      <div className="mx-2 mb-4 flex flex-col gap-2 rounded-xl px-4 py-5" style={panel}>
+        <LoadingBar label="Loading your binder…" />
+        <BinderLoadingNote />
       </div>
 
       {/* Value-header skeleton */}
