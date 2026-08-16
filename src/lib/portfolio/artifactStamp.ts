@@ -20,11 +20,48 @@ import { collectibleNumber } from "@/lib/rarity/collectibleNumbers";
 
 const SLIMLIST_TTL_MS = 30 * 24 * 60 * 60_000; // matches the roster cache
 const ROSTER_MEMO_MS = 5 * 60_000;             // rosters are ~static; amortize the gzip-shard read
-const _rosterMemo = new Map<string, { value: Map<string, MgListItem> | null; at: number }>();
 
-async function readRosterMap(colId: string): Promise<Map<string, MgListItem> | null> {
+// MEMORY. A roster is the WHOLE collection: Misfitz alone is 8.9MB of JSON / 10,000 items. This memo used
+// to retain the full parsed Map for every collection it touched, with no cap, for 5 minutes — while the
+// wave loop below decompressed up to 40 of them CONCURRENTLY. On a 30-collection wallet that is hundreds of
+// megabytes of transient allocation plus an unbounded retained set, inside a lambda with a fixed memory
+// limit. A lambda that exceeds it is KILLED, which reaches the browser as a cut response stream, not as an
+// error the code can catch or log.
+//
+// Two bounds. (1) Only the HELD ids are kept — a wallet holding 5 cards from a 10,000-item collection has
+// no use for the other 9,995, and keeping them was the entire cost. (2) The memo is capped by total
+// retained entries and evicts oldest-first, so it can never grow without limit across requests.
+const ROSTER_MEMO_MAX_ENTRIES = 40_000; // total held-card entries retained across all memoized collections
+const _rosterMemo = new Map<string, { value: Map<string, MgListItem> | null; at: number; size: number }>();
+let _rosterMemoEntries = 0;
+
+function memoPut(colId: string, value: Map<string, MgListItem> | null): void {
+  const size = value?.size ?? 0;
+  const prev = _rosterMemo.get(colId);
+  if (prev) _rosterMemoEntries -= prev.size;
+  _rosterMemo.set(colId, { value, at: Date.now(), size });
+  _rosterMemoEntries += size;
+  while (_rosterMemoEntries > ROSTER_MEMO_MAX_ENTRIES && _rosterMemo.size > 1) {
+    const oldest = _rosterMemo.keys().next().value; // Map preserves insertion order
+    if (oldest === undefined || oldest === colId) break;
+    _rosterMemoEntries -= _rosterMemo.get(oldest)?.size ?? 0;
+    _rosterMemo.delete(oldest);
+  }
+}
+
+// `wanted` = the launcher ids this wallet actually holds in this collection. The full roster is still
+// parsed (it arrives as one blob) but only the matching entries are RETAINED, so the memo holds tens of
+// objects instead of tens of thousands and the parsed array is free to be collected immediately.
+async function readRosterMap(colId: string, wanted: Set<string>): Promise<Map<string, MgListItem> | null> {
   const hit = _rosterMemo.get(colId);
-  if (hit && Date.now() - hit.at < ROSTER_MEMO_MS) return hit.value;
+  // A memo entry is only reusable if it covers every id this caller needs (a previous wallet may have held
+  // a different subset). Cheap check; on a miss we simply re-read.
+  if (hit && Date.now() - hit.at < ROSTER_MEMO_MS) {
+    if (hit.value == null) return null;
+    let covers = true;
+    for (const id of wanted) if (!hit.value.has(id)) { covers = false; break; }
+    if (covers) return hit.value;
+  }
   let value: Map<string, MgListItem> | null = null;
   try {
     const raw = await cacheGetLarge(`slimlist2:${colId}`, SLIMLIST_TTL_MS);
@@ -32,11 +69,12 @@ async function readRosterMap(colId: string): Promise<Map<string, MgListItem> | n
       const items = (JSON.parse(raw) as { items?: MgListItem[] }).items ?? [];
       // Only a genuine trait source: some cached rosters predate include_metadata (no inline attributes).
       if (items.length > 0 && items.some((it) => (it.metadata?.attributes?.length ?? 0) > 0)) {
-        value = new Map(items.filter((it) => !!it.encoded_id).map((it) => [it.encoded_id, it]));
+        value = new Map();
+        for (const it of items) if (it.encoded_id && wanted.has(it.encoded_id)) value.set(it.encoded_id, it);
       }
     }
   } catch { value = null; }
-  _rosterMemo.set(colId, { value, at: Date.now() });
+  memoPut(colId, value);
   return value;
 }
 
@@ -44,7 +82,12 @@ async function readRosterMap(colId: string): Promise<Map<string, MgListItem> | n
 // beyond that as a safety net. The original code fired ALL collections in a single Promise.all and was
 // fast; I serialised it into waves to make budgetMs meaningful, which is correct in principle and cost
 // real latency in practice. Correctness of the budget matters less than the page being quick.
-const STAMP_WAVE = 40;
+// 40 concurrent collections meant up to 40 multi-megabyte rosters being gunzipped and JSON.parsed at the
+// same instant. That is the peak-memory number, and peak memory is what gets a lambda killed. 6 keeps the
+// pipe full (reads are now single-digit ms from the per-instance /tmp tier) while capping the simultaneous
+// decompression. The budget loop below still decides HOW MANY collections get done, so a fast SSR still
+// covers a whale — it just no longer tries to hold the whole wallet in memory at once.
+const STAMP_WAVE = 6;
 
 export async function stampCardsFromArtifacts(
   cards: NftData[],
@@ -80,9 +123,9 @@ export async function stampCardsFromArtifacts(
 
   const stampOne = async (colId: string) => {
     if (Date.now() > deadline) { coldCols.push(colId); return; }
-    const roster = await readRosterMap(colId);
-    if (!roster) { coldCols.push(colId); return; }
     const held = byCol.get(colId)!;
+    const roster = await readRosterMap(colId, new Set(held.map((c) => c.launcherId)));
+    if (!roster) { coldCols.push(colId); return; }
 
     let colMeta = collections.get(colId);
     if (!colMeta) colMeta = (await getCollection(colId).catch(() => null)) ?? undefined;
