@@ -74,6 +74,9 @@ async function tfetch(url: string, init?: RequestInit, timeoutMs = MARKET_FETCH_
   // response HEADERS arrived, so an upstream that sent 200 OK and then stalled the BODY hung with no ceiling
   // until the whole Vercel function was killed. Leaving the abort armed for the full window covers body read
   // too; aborting an already-consumed response is a no-op.
+  // unref so an armed timer can never hold the event loop open (30 paged calls = 30 live timers otherwise);
+  // it stays armed to cover the body read, and aborting an already-consumed response is a no-op.
+  (timer as unknown as { unref?: () => void }).unref?.();
   try {
     return await fetch(url, { cache: "no-store", ...init, signal: controller.signal });
   } catch (e) {

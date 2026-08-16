@@ -84,7 +84,15 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
         .then((data: { nfts?: NftData[]; capped?: boolean; hotTraits?: { type: string; value: string; ratio: number }[]; warming?: boolean; valuesAsOf?: number | null; recentSales?: SaleFeedItem[] } | null) => {
           if (cancelled) return;
           const nfts = data?.nfts ?? [];
-          const reschedule = () => { if (tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); } };
+          // Base 2.5s, not 12s. The server is time-boxed to a resumable ~48s slice and is WAITING to be
+          // asked to continue; the old first delay of 20.4s was pure dead air on every cold open, once per
+          // extra slice. Keep the exponential shape (and `tries = 0` on growth below) so a scan that is
+          // still progressing re-polls in ~4s while a stalled one still backs off to 60s.
+          //
+          // Deliberately NOT a flat fast poll: every warming poll re-downloads the whole ~13MB payload
+          // (no-store while warming), so hammering it would wreck mobile data to save a few seconds.
+          //   tries 1..6 -> 4.3s, 7.2s, 12.3s, 20.9s, 35.5s, 60s
+          const reschedule = () => { if (tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 2_500 * Math.pow(1.7, tries))); } };
           if (nfts.length) {
             if (firstAllLoadRef.current) {
               firstAllLoadRef.current = false;
@@ -96,7 +104,10 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
                 const merged = prev.map((card) => {
                   const fresh = byId.get(card.launcherId);
                   if (!fresh) return card;
-                  const newRank = card.rarityRank ?? fresh.rarityRank ?? null;
+                  // Server truth WINS. This was `card.rarityRank ?? fresh.rarityRank`, so once a card had any
+                  // rank — including a provisional one from enrichment — the real ranks arriving on a later
+                  // poll could never replace it. That made a transient wrong rank permanent for the session.
+                  const newRank = fresh.rarityRank ?? card.rarityRank ?? null;
                   const newTotal = fresh.fairValue?.totalEstimate ?? card.fairValue?.totalEstimate ?? null;
                   const curTotal = card.fairValue?.totalEstimate ?? null;
                   if (newRank === (card.rarityRank ?? null) && newTotal === curTotal && (fresh.valueCurve ?? null) === (card.valueCurve ?? null)) {
@@ -132,7 +143,7 @@ export function CollectionBinder({ view }: { view: CollectionView }) {
           setWarming(stillWarming);
           if (stillWarming) reschedule();
         })
-        .catch(() => { if (!cancelled && tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 12_000 * Math.pow(1.7, tries))); } })
+        .catch(() => { if (!cancelled && tries < 12) { tries += 1; timer = setTimeout(load, Math.min(60_000, 2_500 * Math.pow(1.7, tries))); } }) // same base as reschedule()
         .finally(() => { if (!cancelled) setIndexing(false); });
     };
     load();

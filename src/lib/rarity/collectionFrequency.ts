@@ -12,11 +12,13 @@ import { cacheGetLarge, cachePutLargeAsync, keepAlive, releaseLock, tryLock } fr
 // (5min), and rescans forever, burning upstream budget and never producing ranks. 50s leaves headroom under
 // the 60s cap while letting almost everything finish in a single pass. The lock IS still released in a
 // finally below — that part was a genuine bug fix and stays.
-// Back to 35s. I raised this to 50s to let big scans finish in one pass, but a scan STARTING late in a
-// 60s function is then killed at the wall — the finally never runs, the rarity lock leaks for its full 90s
-// TTL, and nothing is salvaged. The real fix was not a bigger budget: it was refusing to serve the partial
-// result (above), so an unfinished scan simply means "no ranks yet" and the next pass tries again.
-const RARITY_SCAN_BUDGET_MS = 35_000;
+// 45s. This scan has NO checkpoint — `scanned` is function-local and every retry restarts from page 1 —
+// so a budget that cannot finish in one pass means the collection NEVER gets ranks, it just burns ~350
+// upstream requests every 4 minutes forever. Combined with refusing to serve partial tallies (correct, see
+// scaledRankOf) that shows the user permanently unranked cards, which is worse than what it replaced.
+// 45s converges in one pass for the sizes we actually see while leaving headroom under the 60s wall.
+// Proper fix, tracked separately: checkpoint this scan the way the roster scan is checkpointed.
+const RARITY_SCAN_BUDGET_MS = 45_000;
 import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +
@@ -54,7 +56,11 @@ const DISK_TTL = 30 * 24 * 60 * 60_000;
 // Bump when the ranking ALGORITHM changes so old cache files are ignored + rebuilt. v1 used a
 // percentile estimate that tied many NFTs at the same rank (dozens all "rank #1"); v2 sorts every
 // NFT by score for unique 1..N ranks. Without this bump the stale v1 file keeps serving bad ranks.
-const CACHE_VERSION = 4;
+// 5: parseDisk trusts a stored tally's `complete` flag for DISK_TTL (30 days) and never revalidates M
+// against the collection's current supply — so tallies persisted BEFORE the scaledRankOf completeness gate
+// keep serving the gapped rank sequence the gate exists to prevent. Bumping the version invalidates them
+// once; they rebuild from the cached roster in ~350ms.
+const CACHE_VERSION = 5;
 
 type DiskShape = { freq?: CollectionFrequency["freq"]; total?: number; rankById?: Record<string, number>; builtAt?: number; version?: number };
 function parseDisk(raw: string): CollectionFrequency | null {

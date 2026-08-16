@@ -236,7 +236,11 @@ export async function enrichNftsByIds(
     // waitMs: read the already-cached rank table (one fast Redis round-trip) so wallet cards get OUR ranks.
     // A never-scanned collection races out to null and keeps building in the background (shown warming).
     const results = await Promise.all(needFreq.map((c) => getCollectionFrequency(c, { waitMs: 1500 }).catch(() => null)));
-    needFreq.forEach((c, i) => { const r = results[i]; if (r) freqByCol.set(c, r); });
+    // Only COMPLETE tallies. A partial one gets injected below as attributes_frequency_counts and the rank
+    // estimator scales it against the collection's FULL nft_count — so every category grows a huge phantom
+    // "(none)" bucket and every scanned card scores as ultra-rare. That fabricates ranks without ever going
+    // through scaledRankOf, which is why gating scaledRankOf alone did not stop the bad ranks appearing.
+    needFreq.forEach((c, i) => { const r = results[i]; if (r?.complete) freqByCol.set(c, r); });
   }
 
   // Seeded collections: our bundled OpenRarity ranks + traits are authoritative. Fetch the seed(s) once

@@ -263,7 +263,12 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
         let cursor: string | null | undefined = ckItems.length && ckCursor ? ckCursor : undefined;
         let pages = Math.ceil(items.length / FULL_PAGE_SIZE);
         let complete = true;
-        const deadline = Date.now() + 35_000;
+        // 48s, not 35s. maxDuration is 60s and the measured preamble+tail around this loop is ~1.5s, so
+        // 35s left ~23s of the function unused on EVERY slice — and a 10k collection needs ~100 serial
+        // pages, so that headroom was the difference between converging in one request and needing two
+        // (each extra request also costs the client's poll gap). The per-attempt budget below already
+        // clamps so no single page can overrun the deadline.
+        const deadline = Date.now() + 48_000;
         do {
           // Check the budget BEFORE starting a page so a slow page can't overrun the 60s function cap.
           if (cursor && Date.now() > deadline) {
@@ -273,7 +278,12 @@ async function buildBaseCollection(id: string): Promise<BaseCollection> {
           let page: MgPage<MgListItem> | null = null;
           for (let attempt = 0; attempt < 3 && !page && Date.now() < deadline; attempt++) {
             const budget = Math.max(2_000, Math.min(15_000, deadline - Date.now())); // per-attempt: never overrun the deadline
-            page = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, true, true, budget).catch(() => null); // include_metadata
+            // background=FALSE: this scan blocks a user staring at the page. On the background lane it
+            // queued behind bulk work in the same lambda (notably the comps build's 300 paced detail
+            // fetches) and inherited its 1.5s 429 cooldowns — measured at up to +585ms per page, which is
+            // what turned a 2-slice convergence into 3. The cross-instance roster: lock already provides
+            // the storm protection the pacing was there for.
+            page = await listCollectionNfts(id, cursor, FULL_PAGE_SIZE, false, true, budget).catch(() => null); // include_metadata
             if (!page && attempt < 2 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
           }
           if (!page) {
@@ -381,7 +391,10 @@ export async function getAllCollectionCards(id: string, opts: { forceIndex?: boo
   let cards = base.cards;
   let rarityWarming = false;
   if (id.startsWith("col1") && !base.cards.some((c) => c.rarityRank != null)) {
-    const rarity = base.warming ? null : await getCollectionFrequency(id).catch(() => null); // skip rarity while roster still scanning (no competing scan)
+    // waitMs matters: with NO options this returns null synchronously (see raced() in collectionFrequency),
+    // so a ~350ms roster-derived rank build was reported as "not ready", the page stayed warming, and the
+    // client paid a full poll cycle plus another multi-MB download to collect a table that was already done.
+    const rarity = base.warming ? null : await getCollectionFrequency(id, { waitMs: 2_000 }).catch(() => null); // skip rarity while roster still scanning
     // `complete` matters as much as non-empty: a partial tally produces gapped, provisional ranks (see
     // scaledRankOf) and — worse — used to set warming=false, which pinned that gappy payload at the Vercel
     // edge for 30 minutes. Treat an unfinished build as warming so the client polls again for real ranks.
