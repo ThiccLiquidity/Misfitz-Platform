@@ -105,7 +105,12 @@ const _fullCache = new Map<string, { value: BaseCollection; expiresAt: number }>
 // Unbounded, a warm lambda that served a few dozen collections could hold hundreds of MB and OOM mid-request
 // (which surfaces as a bare 500 with nothing useful in the log). Expired entries are swept first, then the
 // nearest-to-expiry is evicted.
-const FULL_CACHE_CAP = 3;
+// 16, not 3. This cache was UNBOUNDED and the site was fast. I capped it at 3 for a THEORETICAL OOM,
+// which meant the 4th collection a user opened evicted the 1st — so every instance rebuilt whole
+// collections (roster + rarity + comps + stamping) instead of serving them from memory. That is a real,
+// measured slowdown traded for a risk that had never actually occurred. Entries still expire after 10min
+// and expired ones are swept first, so 16 bounds the worst case without thrashing normal browsing.
+const FULL_CACHE_CAP = 16;
 function fullCachePut(id: string, value: BaseCollection, ttlMs: number): void {
   const now = Date.now();
   for (const [k, v] of _fullCache) if (v.expiresAt <= now) _fullCache.delete(k);

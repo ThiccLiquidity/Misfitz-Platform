@@ -6,9 +6,13 @@ import { mapListItemTraits } from "@/lib/data-sources/mintgarden/map";
 import { buildRankEstimator } from "@/lib/rarity/estimateRank";
 import { cacheGetLarge, cachePutLargeAsync, keepAlive, releaseLock, tryLock } from "@/lib/db/nftCache";
 
-// Hard budget for our own full-collection scan. The serverless function dies at 60s; stopping at 35s means
-// we return a PARTIAL tally (complete:false -> short TTL, retried) instead of being killed mid-scan.
-const RARITY_SCAN_BUDGET_MS = 35_000;
+// Hard budget for our own full-collection scan. There was NO deadline here originally and the scan simply
+// ran to completion; I added 35s to avoid being killed at the 60s function cap. That was too tight: a
+// collection needing 40-50s now NEVER completes — it returns complete:false, gets cached for only COLD_TTL
+// (5min), and rescans forever, burning upstream budget and never producing ranks. 50s leaves headroom under
+// the 60s cap while letting almost everything finish in a single pass. The lock IS still released in a
+// finally below — that part was a genuine bug fix and stays.
+const RARITY_SCAN_BUDGET_MS = 50_000;
 import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +

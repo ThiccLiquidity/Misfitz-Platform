@@ -40,12 +40,11 @@ async function readRosterMap(colId: string): Promise<Map<string, MgListItem> | n
   return value;
 }
 
-// How many collections' artifacts to read concurrently per wave.
-// 16, not 6: the previous value was chosen when maxCols was 40, then maxCols went to 120 - which turned a
-// single parallel burst into up to TWENTY sequential waves and made the binder SSR noticeably slower for
-// exactly the multi-collection whales the cap was raised for. 16 restores most of the old parallelism
-// while still re-checking the clock often enough for budgetMs to mean something (120 cols = 8 waves).
-const STAMP_WAVE = 16;
+// 40 = the original behaviour (one parallel burst) for a normal wallet, with the wave loop only engaging
+// beyond that as a safety net. The original code fired ALL collections in a single Promise.all and was
+// fast; I serialised it into waves to make budgetMs meaningful, which is correct in principle and cost
+// real latency in practice. Correctness of the budget matters less than the page being quick.
+const STAMP_WAVE = 40;
 
 export async function stampCardsFromArtifacts(
   cards: NftData[],
@@ -59,7 +58,10 @@ export async function stampCardsFromArtifacts(
   // broken and bounded nothing, which silently capped serious collectors (100+ collections is a real
   // wallet shape here) at 40 stamped collections no matter how fast the reads were. Sorted most-held
   // first, so if the budget does run out, the collections holding the most cards are the ones covered.
-  const maxCols = opts.maxCols ?? 120;
+  // Back to 40 (the long-standing value). Raising it to 120 tripled the artifact reads done during binder
+  // SSR to serve very large collectors — a real improvement for them, but it was shipped without measuring
+  // what it did to everyone else's page load. Restore first, revisit with a measurement second.
+  const maxCols = opts.maxCols ?? 40;
 
   // Group held cards by col1 collection; seeds are authoritative (applySeedOverlay ran first) — skip them.
   const byCol = new Map<string, NftData[]>();

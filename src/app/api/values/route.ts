@@ -37,10 +37,7 @@ export async function POST(req: Request) {
   const cols = body.cols && typeof body.cols === "object" ? (body.cols as Record<string, unknown>) : {};
   // Shape-validate before anything dispatches work: a bare startsWith("col1") let "col1" + any junk
   // through, and each miss kicked a full background collection scan via keepAlive.
-  // 120: a 100+ collection whale used to need multiple poll rounds just to get every collection LOOKED at
-  // (the client drains ids as values arrive, so it converged eventually - it was slow, not lossy). Each
-  // entry is one cheap index lookup, and the ids array per collection is already capped at 600 below.
-  const colIds = Object.keys(cols).filter(isCollectionId).slice(0, 120);
+  const colIds = Object.keys(cols).filter(isCollectionId).slice(0, 60); // back to 60: 120 doubled the per-request work
 
   const values: Record<string, ValueEntry> = {};
   const pending: string[] = [];
