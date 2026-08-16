@@ -3,6 +3,7 @@ import { cacheGetLarge } from "@/lib/db/nftCache";
 import { blobStats } from "@/lib/db/blobStore";
 import { tmpStats } from "@/lib/db/tmpBlobCache";
 import { fetchOwnerListings } from "@/lib/data-sources/mintgarden/owner";
+import { listAddressNfts } from "@/lib/data-sources/mintgarden/client";
 import { getMyHoldingsFast } from "@/lib/portfolio/myHoldings";
 import { isValidChiaOwnerId } from "@/lib/wallet/ownerId";
 import { diagLevel } from "@/lib/ops/diagAuth";
@@ -63,6 +64,32 @@ export async function GET(req: Request, { params }: { params: { address: string 
   // pwallet: is keyed by a hash of the address set, so it can't be peeked from one address alone —
   // reported via the live run's timing instead.
 
+  // PAGE-SIZE PROBE. owner.ts pins PAGE_SIZE=50 on the comment "MintGarden address endpoint rejects larger
+  // sizes (returns nothing)". That assumption decides how many SEQUENTIAL round trips a wallet costs — at
+  // ~2.8s per page a 544-NFT wallet is 11 pages and ~31s, which is why it never finishes inside any budget.
+  // If a bigger size is honoured the whole scan collapses by that factor, so the claim is worth MEASURING
+  // rather than inheriting. Reports items returned + wall time per size; `items < size` with a `next` cursor
+  // means the size was silently clamped.
+  let pageProbe: Record<string, unknown>[] | null = null;
+  if (url.searchParams.get("pageprobe") === "1") {
+    pageProbe = [];
+    for (const size of [50, 100, 200, 500]) {
+      const t = Date.now();
+      try {
+        const p = await listAddressNfts(address, undefined, size, "owned", true, false, false);
+        pageProbe.push({ size, ms: Date.now() - t, items: p.items.length, hasNext: Boolean(p.next), honoured: p.items.length > 50 || !p.next });
+      } catch (e) {
+        pageProbe.push({ size, ms: Date.now() - t, error: (e as Error)?.message ?? String(e) });
+      }
+    }
+    // Same first page WITH inline metadata, to price what include_metadata actually costs on /address.
+    const t = Date.now();
+    try {
+      const p = await listAddressNfts(address, undefined, 50, "owned", true, false, true);
+      pageProbe.push({ size: 50, withMetadata: true, ms: Date.now() - t, items: p.items.length });
+    } catch (e) { pageProbe.push({ size: 50, withMetadata: true, error: (e as Error)?.message ?? String(e) }); }
+  }
+
   let scan: Record<string, unknown> | null = null;
   let holdings: Record<string, unknown> | null = null;
   if (live) {
@@ -113,8 +140,9 @@ export async function GET(req: Request, { params }: { params: { address: string 
       blobCounters: { gets: b.gets, puts: b.puts, putFails: b.putFails, lastPutStatus: b.lastPutStatus, misses: b.misses, lastError: b.lastError, lastErrorHoursAgo: hrs(b.lastErrorAt) },
       localTmp: tmpStats(),
       holdings3, holdscan,
+      pageProbe,
       scan, holdings,
-      hint: live ? "scan.warming=false means the roster persisted; holdings.cardsWithRank≈0 means the artifact stamp was skipped" : "add &live=1 to actually run the wallet scan and surface the real error",
+      hint: "add &live=1 to run the real scan; add &pageprobe=1 to time MintGarden page sizes (cheap, 5 requests)",
     },
     { headers: { "cache-control": "no-store" } },
   );
