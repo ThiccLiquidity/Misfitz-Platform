@@ -15,13 +15,17 @@ export interface BlobBackend {
   getBlob(key: string, ttlMs: number): Promise<string | null>;
   // Store the base64-gzip payload. exSeconds is a HINT (Redis honours it as an EX; R2 relies on a bucket
   // lifecycle rule for GC + the storedAt freshness check on read).
-  putBlob(key: string, b64: string, exSeconds: number): Promise<void>;
+  // MUST return true only when the object is actually stored. This used to return void, so a backend that
+  // answered "403 AccessDenied" to every write looked identical to one that worked — the app cached nothing
+  // and rebuilt every collection from scratch on every request, with no error anywhere. The caller uses the
+  // false to fall back to Redis, so a broken object store costs bandwidth instead of costing correctness.
+  putBlob(key: string, b64: string, exSeconds: number): Promise<boolean>;
 }
 
 // ── Instrumentation ─────────────────────────────────────────────────────────
 // A misconfigured R2 (bad creds) would otherwise catch-and-no-op forever with the app looking fine while
 // Upstash bandwidth never drops. These counters + blobHealth() surface it via /api/cache-health.
-const _stats = { gets: 0, puts: 0, misses: 0, lastError: null as string | null, lastErrorAt: null as number | null };
+const _stats = { gets: 0, puts: 0, putFails: 0, misses: 0, lastError: null as string | null, lastErrorAt: null as number | null, lastPutStatus: null as number | null };
 function noteErr(where: string, e: unknown): void {
   _stats.lastError = `${where}: ${(e as Error)?.message ?? String(e)}`.slice(0, 200);
   _stats.lastErrorAt = Date.now();
@@ -52,8 +56,12 @@ class R2BlobBackend implements BlobBackend {
           // specifier is invisible to the bundler -> R2 would silently never engage in prod). aws4fetch is a
           // declared dependency, always installed in prod; typed structurally as AwsClientLike.
           // @ts-ignore optional at typecheck time (absent in some sandboxes); present at build/runtime
-          const mod = (await import("aws4fetch")) as { AwsClient: new (o: { accessKeyId: string; secretAccessKey: string; service?: string; region?: string }) => AwsClientLike };
-          this.client = new mod.AwsClient({ accessKeyId: this.accessKeyId, secretAccessKey: this.secretAccessKey, service: "s3", region: "auto" });
+          const mod = (await import("aws4fetch")) as { AwsClient: new (o: { accessKeyId: string; secretAccessKey: string; service?: string; region?: string; retries?: number; initRetryMs?: number }) => AwsClientLike };
+          // retries/initRetryMs are NOT optional in practice: aws4fetch defaults to retries:10 with a
+          // Math.random()*50*2**i backoff, i.e. ~25s expected and ~51s worst case burned inside a 60s
+          // function on a single 429/503 - and completely invisible here, because a retry that eventually
+          // succeeds records nothing. Two quick retries, then let the caller fall back.
+          this.client = new mod.AwsClient({ accessKeyId: this.accessKeyId, secretAccessKey: this.secretAccessKey, service: "s3", region: "auto", retries: 2, initRetryMs: 100 });
           return this.client;
         } catch { return null; }
       })();
@@ -72,24 +80,45 @@ class R2BlobBackend implements BlobBackend {
     let res: Response | null;
     try { res = await aws.fetch(this.url(key), { method: "GET" }); }
     catch (e) { noteErr("r2.get", e); return null; }
-    if (!res || !res.ok) { if (res && res.status !== 404) noteErr("r2.get", `status ${res.status}`); _stats.misses++; return null; }
+    if (!res || !res.ok) {
+      if (res && res.status !== 404) noteErr("r2.get", `status ${res.status}`);
+      await res?.body?.cancel().catch(() => { /* already drained */ }); // don't strand the connection
+      _stats.misses++; return null;
+    }
     const storedAt = Number(res.headers.get("x-amz-meta-storedat") ?? "0");
-    if (!(storedAt > 0) || Date.now() - storedAt >= ttlMs) { _stats.misses++; return null; } // missing/stale -> miss (fresh iff age < ttlMs, mirrors redisGet)
+    if (!(storedAt > 0) || Date.now() - storedAt >= ttlMs) {
+      await res.body?.cancel().catch(() => { /* already drained */ });
+      _stats.misses++; return null; // missing/stale -> miss (fresh iff age < ttlMs, mirrors redisGet)
+    }
     return await res.text().catch(() => null);
   }
 
-  async putBlob(key: string, b64: string, exSeconds: number): Promise<void> {
+  async putBlob(key: string, b64: string, exSeconds: number): Promise<boolean> {
     const aws = await this.aws();
-    if (!aws) return;
+    if (!aws) return false;
     _stats.puts++;
     // Callers use a tiny exSeconds as a "delete via TTL" idiom (e.g. clearing a wallet-scan checkpoint).
     // R2 has no TTL, so honor it with an actual DELETE rather than leave a fresh object behind.
     const del = exSeconds > 0 && exSeconds <= 5;
     try {
-      await aws.fetch(this.url(key), del
+      const res = await aws.fetch(this.url(key), del
         ? { method: "DELETE" }
         : { method: "PUT", body: b64, headers: { "content-type": "text/plain", "x-amz-meta-storedat": String(Date.now()) } });
-    } catch (e) { noteErr("r2.put", e); } // best-effort; local + network still cover it
+      _stats.lastPutStatus = res?.status ?? null;
+      if (!res || !res.ok) {
+        // THE bug this whole class of outage came from: the result was never inspected. A bucket that
+        // rejects every write (read-only token, wrong bucket, wrong account) returned a 403 here and the
+        // app treated it as stored. Nothing large ever persisted, /api/cache-health stayed green because
+        // its probe is 8 bytes, and every collection re-scanned from page 1 on every request for weeks.
+        // S3 error bodies are small XML; keep a slice of it so the cause is named, not guessed.
+        const body = res ? await res.text().catch(() => "") : "";
+        _stats.putFails++;
+        noteErr("r2.put", `status ${res?.status ?? "none"} ${body.replace(/\s+/g, " ").slice(0, 160)}`);
+        return false;
+      }
+      await res.body?.cancel().catch(() => { /* already drained */ });
+      return true;
+    } catch (e) { _stats.putFails++; noteErr("r2.put", e); return false; } // caller falls back to Redis
   }
 }
 
@@ -103,9 +132,10 @@ export class MemoryBlobBackend implements BlobBackend {
     if (Date.now() - e.at >= ttlMs) return null; // fresh iff age < ttlMs (mirrors redisGet; ttl 0 => stale)
     return e.b64;
   }
-  async putBlob(key: string, b64: string, exSeconds?: number): Promise<void> {
-    if (exSeconds != null && exSeconds > 0 && exSeconds <= 5) { this.store.delete(key); return; }
+  async putBlob(key: string, b64: string, exSeconds?: number): Promise<boolean> {
+    if (exSeconds != null && exSeconds > 0 && exSeconds <= 5) { this.store.delete(key); return true; }
     this.store.set(key, { b64, at: Date.now() });
+    return true;
   }
 }
 
@@ -138,8 +168,8 @@ function resolveFromEnv(): BlobBackend | null {
 }
 
 // Snapshot of blob-backend activity for /api/cache-health (per-instance since boot).
-export function blobStats(): { backend: string; gets: number; puts: number; misses: number; lastError: string | null; lastErrorAt: number | null } {
-  return { backend: getActiveBlobBackend()?.name ?? "redis", gets: _stats.gets, puts: _stats.puts, misses: _stats.misses, lastError: _stats.lastError, lastErrorAt: _stats.lastErrorAt };
+export function blobStats(): { backend: string; gets: number; puts: number; putFails: number; misses: number; lastError: string | null; lastErrorAt: number | null; lastPutStatus: number | null } {
+  return { backend: getActiveBlobBackend()?.name ?? "redis", gets: _stats.gets, puts: _stats.puts, putFails: _stats.putFails, misses: _stats.misses, lastError: _stats.lastError, lastErrorAt: _stats.lastErrorAt, lastPutStatus: _stats.lastPutStatus };
 }
 
 // Tiny round-trip probe so a misconfigured R2 is visible instead of silently no-opping. Redis-default is
@@ -148,9 +178,15 @@ export async function blobHealth(): Promise<{ backend: string; ok: boolean; erro
   const b = getActiveBlobBackend();
   if (!b) return { backend: "redis", ok: true, error: null };
   try {
+    // ~256KB, not 8 bytes. The old probe stored "health" and therefore only ever proved that credentials
+    // parsed - a bucket can accept 8 bytes and still reject the multi-megabyte payload that actually
+    // matters, which is exactly what happened. Big enough to exercise a real write, small enough that a
+    // 60s-memoised probe costs nothing meaningful.
     const k = "__tf_health__";
-    await b.putBlob(k, "aGVhbHRo", 60);           // "health" (base64)
-    const v = await b.getBlob(k, 60_000);
-    return { backend: b.name, ok: v === "aGVhbHRo", error: v === "aGVhbHRo" ? null : (_stats.lastError ?? "roundtrip mismatch") };
+    const payload = "aGVhbHRo".repeat(32_000);    // 256,000 chars
+    const stored = await b.putBlob(k, payload, 300);
+    const v = await b.getBlob(k, 300_000);
+    const ok = stored && v === payload;
+    return { backend: b.name, ok, error: ok ? null : (_stats.lastError ?? (stored ? `roundtrip mismatch (${v == null ? "read back empty" : `${v.length} of ${payload.length} chars`})` : "write rejected")) };
   } catch (e) { return { backend: b.name, ok: false, error: (e as Error)?.message ?? String(e) }; }
 }

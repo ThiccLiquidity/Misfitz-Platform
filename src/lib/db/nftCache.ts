@@ -284,10 +284,18 @@ async function redisGetLargeB64(key: string, ttlMs: number): Promise<string | nu
 async function putLargeInner(key: string, json: string, exSeconds: number = REDIS_GC_TTL_S): Promise<void> {
   const b64 = gzipSync(Buffer.from(json, "utf8")).toString("base64");
   const backend = getActiveBlobBackend(); // R2 when configured, else null -> Redis
-  try {
-    if (backend) await backend.putBlob(key, b64, exSeconds);
-    else await redisPutLargeB64(key, b64, exSeconds);
-  } catch { /* shared write optional; the local blob below still covers this instance */ }
+  let stored = false;
+  try { stored = backend ? await backend.putBlob(key, b64, exSeconds) : false; } catch { stored = false; }
+  // OFFLOAD -- BUT NEVER AT THE COST OF CACHING AT ALL.
+  // This used to write to exactly ONE tier: with R2 configured, Redis was skipped entirely. So when R2
+  // rejected every write (and said nothing, because putBlob returned void), NOTHING persisted anywhere:
+  // every roster, rarity table and comps model was rebuilt from scratch on every request, for weeks, with
+  // no error surfaced. R2 remains the primary -- it is the whole point, zero egress keeps Upstash bandwidth
+  // down -- but Redis is now an automatic safety net, written only when R2 did not CONFIRM the write. A
+  // broken object store now costs bandwidth instead of costing the cache.
+  if (!stored) {
+    try { await redisPutLargeB64(key, b64, exSeconds); } catch { /* the local blob below still covers this instance */ }
+  }
   await cache().then((c) => c?.putKv(`z:${key}`, b64)); // per-instance local fallback, always
 }
 // Fire-and-forget (kept alive past function freeze). Use for non-critical large writes.
@@ -304,7 +312,8 @@ export async function cacheGetLarge(key: string, ttlMs: number): Promise<string 
     let b64: string | null = null;
     if (backend) {
       b64 = await backend.getBlob(key, ttlMs).catch(() => null);
-      // Migration fallback: a blob written before R2 was enabled still lives in Redis until it expires.
+      // Second tier, not just a migration path: putLargeInner writes to Redis whenever R2 does not confirm
+      // the write, so anything R2 lost (or never accepted) is still readable here.
       if (b64 == null) b64 = await redisGetLargeB64(key, ttlMs).catch(() => null);
     } else {
       b64 = await redisGetLargeB64(key, ttlMs).catch(() => null);

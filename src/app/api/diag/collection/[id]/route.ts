@@ -120,7 +120,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       id, name: col?.name ?? null, declaredCount,
       seedEnabled: process.env.TRAITFOLIO_SEED === "1", seeded: isSeeded(id),
       blobBackend: b.backend,
-      blobCounters: { gets: b.gets, puts: b.puts, misses: b.misses, lastError: full ? b.lastError : b.lastError ? "(hidden)" : null, lastErrorHoursAgo: hrs(b.lastErrorAt) },
+      blobCounters: { gets: b.gets, puts: b.puts, putFails: b.putFails, lastPutStatus: b.lastPutStatus, misses: b.misses, lastError: full ? b.lastError : b.lastError ? "(hidden)" : null, lastErrorHoursAgo: hrs(b.lastErrorAt) },
       roster, checkpoint, rarity, comps,
       bigProbe,
       hint: full ? "add &probe=1 (and optionally &bytes=2500000) to round-trip a realistic blob" : "add ?key=<OPS_SECRET> for full detail + the large-blob probe",
