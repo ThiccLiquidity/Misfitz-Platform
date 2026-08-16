@@ -382,7 +382,10 @@ export async function getAllCollectionCards(id: string, opts: { forceIndex?: boo
   let rarityWarming = false;
   if (id.startsWith("col1") && !base.cards.some((c) => c.rarityRank != null)) {
     const rarity = base.warming ? null : await getCollectionFrequency(id).catch(() => null); // skip rarity while roster still scanning (no competing scan)
-    if (rarity && Object.keys(rarity.rankById).length > 0) {
+    // `complete` matters as much as non-empty: a partial tally produces gapped, provisional ranks (see
+    // scaledRankOf) and — worse — used to set warming=false, which pinned that gappy payload at the Vercel
+    // edge for 30 minutes. Treat an unfinished build as warming so the client polls again for real ranks.
+    if (rarity && rarity.complete && Object.keys(rarity.rankById).length > 0) {
       // Our ranks run 1..M over the NFTs we could actually rank (traited + successfully fetched). The
       // tier bands divide rank by the card's display supply, so if M < supply — big collections capped
       // at 2000, traitless NFTs, or fetch gaps — the largest rank would only reach percentile M/supply

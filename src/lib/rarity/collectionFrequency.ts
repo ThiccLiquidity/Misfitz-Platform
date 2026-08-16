@@ -12,7 +12,11 @@ import { cacheGetLarge, cachePutLargeAsync, keepAlive, releaseLock, tryLock } fr
 // (5min), and rescans forever, burning upstream budget and never producing ranks. 50s leaves headroom under
 // the 60s cap while letting almost everything finish in a single pass. The lock IS still released in a
 // finally below — that part was a genuine bug fix and stays.
-const RARITY_SCAN_BUDGET_MS = 50_000;
+// Back to 35s. I raised this to 50s to let big scans finish in one pass, but a scan STARTING late in a
+// 60s function is then killed at the wall — the finally never runs, the rarity lock leaks for its full 90s
+// TTL, and nothing is salvaged. The real fix was not a bigger budget: it was refusing to serve the partial
+// result (above), so an unfinished scan simply means "no ranks yet" and the next pass tries again.
+const RARITY_SCAN_BUDGET_MS = 35_000;
 import type { Trait } from "@/types";
 
 // Compute OUR OWN trait-frequency table for a collection MintGarden hasn't ranked (openrarity_rank +
@@ -192,5 +196,18 @@ export function scaledRankOf(rarity: CollectionFrequency, id: string, supply: nu
   if (r == null) return null;
   const M = Object.keys(rarity.rankById).length;
   if (M <= 0 || supply <= 0) return null;
+
+  // NEVER scale a tally that is still being built. Scaling maps our 1..M ordering onto 1..supply, which is
+  // correct and intentional when M is a deliberate sample (a big collection capped at MAX_NFTS) — but when
+  // M is just "however far the scan got", the arithmetic manufactures gaps in the rank sequence:
+  //
+  //   M = supply/2  ->  round(((1-0.5)/M)*supply) = 1,  round(((2-0.5)/M)*supply) = 3,  then 5, 7, 9 ...
+  //
+  // Rank #2 cannot exist. That is precisely the reported symptom — "#1 and #3 render, #2 is missing" — and
+  // the ranks change again once the scan finishes, so the earlier ones were never real. A card with no rank
+  // is honest and the caller renders it unranked; a card with a fabricated rank is a lie that also gets
+  // edge-cached. Complete-but-capped tallies still scale, which is the case this was designed for.
+  if (!rarity.complete) return null;
+
   return Math.max(1, Math.min(supply, Math.round(((r - 0.5) / M) * supply)));
 }
