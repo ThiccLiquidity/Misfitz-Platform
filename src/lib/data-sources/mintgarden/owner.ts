@@ -16,6 +16,9 @@ const LEGACY_DETAIL_CAP = 2000;    // fetchOwnerNftDetails (legacy/eager path) s
 // real ceiling, and it halves the number of SEQUENTIAL round trips a wallet costs, which halves both the
 // wall-clock and the exposure to MintGarden's shared rate limit.
 const PAGE_SIZE = 100; // measured ceiling — 200+ is HTTP 422
+// Hard rail on page COUNT, independent of item count: a cursor that never terminates (see the end-of-list
+// note in the pager) must not be able to burn a whole invocation.
+const MAX_PAGES = Math.ceil(MAX_HOLDINGS / PAGE_SIZE) + 20;
 
 // Minimal concurrency pool — runs `worker` over `items`, at most `limit` in flight.
 async function mapPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
@@ -215,19 +218,40 @@ export async function fetchOwnerListings(address: string, opts: OwnerScanOpts = 
     let hitBudget = false;
     let pageErr = false;
     let pagesFetched = 0;
+    let barrenPages = 0; // consecutive pages that added no NEW ids
     if (!pagingDone) do {
       if (Date.now() - t0 > budgetMs) { hitBudget = true; break; }
       const page = await fetchPage(cursor, pagesFetched === 0);
       if (!page) { pageErr = true; break; } // transient after retries — stop, keep progress, resume next poll
       pagesFetched += 1;
+      const seenBefore = seen.size;
       for (const item of page.items) {
         if (items.length >= MAX_HOLDINGS) { truncated = true; break; }
         if (seen.has(item.encoded_id)) continue;
         seen.add(item.encoded_id);
         if (isDisplayableNft({ is_blocked: item.is_blocked, blocked_content: item.collection_blocked_content })) items.push(item);
       }
+
+      // ── END OF LIST ──────────────────────────────────────────────────────────────────────────────
+      // MintGarden's /address pager NEVER returns a null cursor. Measured on a real 544-NFT wallet:
+      //   page 1-5: 100 items   page 6: 44 items   pages 7..40: ZERO items, `next` STILL set
+      // The loop's only exit was `while (cursor && ...)`, so past the real end it spun on empty pages
+      // until the time budget expired. That made `complete` false on EVERY pass, which meant the roster
+      // was NEVER persisted, which meant every single binder load re-paged the whole wallet from zero —
+      // and the render died against the function cap while doing it. This was not slowness; the scan
+      // simply had no terminating condition.
+      //
+      // An empty page IS the end for this endpoint. Belt and braces, a page that returns items but no
+      // NEW ids means the cursor is looping — two of those in a row also ends it. Both set cursor to
+      // null so `complete` below reads true and the roster finally gets written.
+      if ((page.items?.length ?? 0) === 0) { cursor = null; break; }
+      barrenPages = seen.size > seenBefore ? 0 : barrenPages + 1;
+      if (barrenPages >= 2) { cursor = null; break; }
+
       cursor = page.next;
-    } while (cursor && items.length < MAX_HOLDINGS);
+    } while (cursor && items.length < MAX_HOLDINGS && pagesFetched < MAX_PAGES);
+    // Hard rail: even with the checks above, never let a pathological cursor page forever.
+    if (pagesFetched >= MAX_PAGES && cursor) truncated = true;
 
     // COMPLETE only if we reached a genuine end (or the cap) WITHOUT budget/error stopping us early.
     let complete = pagingDone || (!hitBudget && !pageErr && (!cursor || items.length >= MAX_HOLDINGS));
