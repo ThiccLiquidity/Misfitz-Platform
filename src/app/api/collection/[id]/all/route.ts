@@ -25,8 +25,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     // `sales:{col}` blob can still be warming when this first serves, and the long s-maxage then froze a
     // sale-less payload (the "recent sales don't show up like they used to" regression). Serve empties with
     // a short edge window so the next open reconverges once the sales blob is warm.
-    const cache = r.warming || force
+    // A "warming" payload used to be no-store, which meant EVERY poll from EVERY viewer was a full origin
+    // invocation re-running the 5-7 large-blob reads — and re-sending the whole ~13MB body. On a cold Misfitz
+    // open with a 12-poll backoff that is the single biggest cause of "slow AF on mobile" AND of the Upstash
+    // bandwidth spikes. A 15s edge window is shorter than the fastest client poll (4.3s x growth resets), so
+    // the warmed data still appears on the next poll, but N concurrent viewers now collapse onto one build.
+    const cache = force
       ? "no-store"
+      : r.warming
+      ? "public, max-age=0, s-maxage=15, stale-while-revalidate=60"
       : recentSales.length === 0
         ? "public, max-age=30, s-maxage=120, stale-while-revalidate=600"
         : "public, max-age=60, s-maxage=1800, stale-while-revalidate=86400"; // 30min edge — big cut to cold-origin roster/rarity/comps blob reads; values still converge via /api/values

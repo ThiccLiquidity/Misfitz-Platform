@@ -215,5 +215,10 @@ export function scaledRankOf(rarity: CollectionFrequency, id: string, supply: nu
   // edge-cached. Complete-but-capped tallies still scale, which is the case this was designed for.
   if (!rarity.complete) return null;
 
-  return Math.max(1, Math.min(supply, Math.round(((r - 0.5) / M) * supply)));
+  // INTEGER arithmetic. The float form `((r - 0.5) / M) * supply` is NOT the identity when M === supply:
+  // ((2 - 0.5) / 10000) * 10000 === 1.4999999999999998 in IEEE-754, which rounds DOWN to 1 — so rank 1 is
+  // emitted twice and rank 2 is emitted never. Over a 10k collection with a COMPLETE tally that dropped 573
+  // ranks, producing exactly the reported "#1 and #3 render, #2 is missing". Multiplying before dividing
+  // keeps every intermediate an exact integer, so M === supply is a true identity (10000/10000 distinct).
+  return Math.max(1, Math.min(supply, Math.round(((2 * r - 1) * supply) / (2 * M))));
 }

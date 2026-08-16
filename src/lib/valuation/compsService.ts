@@ -164,7 +164,8 @@ async function build(colId: string, opts: { fresh?: boolean } = {}): Promise<Com
     const S = supply;
     rankOf = (r) => {
       const raw = freqData.rankById[r.id];
-      return raw == null ? null : Math.max(1, Math.min(S, Math.round(((raw - 0.5) / M) * S)));
+      // Integer form — see scaledRankOf: the float version collapses two ranks onto one when M === S.
+      return raw == null ? null : Math.max(1, Math.min(S, Math.round(((2 * raw - 1) * S) / (2 * M))));
     };
   }
 
